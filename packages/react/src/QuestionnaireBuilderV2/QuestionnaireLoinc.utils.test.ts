@@ -2,17 +2,20 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { QuestionnaireItem } from '@medplum/fhirtypes';
 import {
+  evaluateEnableWhen,
   fromFhirAnswerOptions,
   fromFhirQuestionnaireItem,
+  hasFollowUpItems,
   toFhirQuestionnaireItem,
 } from './QuestionnaireBuilderV2.utils';
-import type { LoincFormDefinition } from './QuestionnaireLoinc.utils';
+import type { LFormsItem, LoincFormDefinition } from './QuestionnaireLoinc.utils';
 import {
   groupLoincAnswerLists,
   parseLoincQuestionSearch,
   toFhirAnswerOptionsFromLoincAnswerList,
   toFhirItemFromLoincPanel,
   toFhirItemFromLoincQuestion,
+  toFhirItemsFromLForms,
   toFhirItemType,
   toFhirQuestionnaireFromLoincForm,
 } from './QuestionnaireLoinc.utils';
@@ -214,6 +217,186 @@ describe('QuestionnaireLoinc.utils', () => {
       const roundTrip = toFhirQuestionnaireItem(formItem);
       expect(roundTrip.item?.[0]).toMatchObject({ type: 'display', text: 'Over the last 2 weeks' });
       expect(roundTrip.answerOption?.map((o) => o.extension?.[0]?.valueDecimal)).toStrictEqual([0, 1]);
+    });
+
+    test("a question's children become its follow-up items", () => {
+      const [question] = toFhirItemsFromLForms([
+        {
+          question: 'Do you smoke?',
+          questionCode: '72166-2',
+          dataType: 'CNE',
+          codingInstructions: 'Tobacco of any kind',
+          answers: [{ code: 'LA33-6', text: 'Yes' }],
+          items: [{ question: 'Cigarettes per day', questionCode: '64218-1', dataType: 'INT' }],
+        },
+      ]);
+      // Help text first, then the follow-up item
+      expect(question.item?.map((item) => item.type)).toStrictEqual(['display', 'integer']);
+
+      const formItem = fromFhirQuestionnaireItem(question, null, 0);
+      expect(formItem.help).toBe('Tobacco of any kind');
+      expect(hasFollowUpItems(formItem)).toBe(true);
+      expect(formItem.item.map((item: any) => item.text)).toStrictEqual(['Cigarettes per day']);
+
+      const roundTrip = toFhirQuestionnaireItem(formItem);
+      expect(roundTrip.item?.map((item) => item.linkId)).toStrictEqual(question.item?.map((item) => item.linkId));
+      expect(roundTrip.item?.[1]).toMatchObject({ type: 'integer', code: [{ code: '64218-1' }] });
+    });
+  });
+
+  describe('LForms skip logic', () => {
+    const smoke: LFormsItem = {
+      linkId: '/x/72166-2',
+      question: 'Do you smoke?',
+      questionCode: '72166-2',
+      dataType: 'CNE',
+      answers: [
+        { code: 'LA33-6', text: 'Yes' },
+        { code: 'LA32-8', text: 'No' },
+      ],
+    };
+    const age: LFormsItem = { linkId: '/x/age', question: 'Age', questionCode: '30525-0', dataType: 'INT' };
+
+    function convertWith(item: LFormsItem): QuestionnaireItem[] {
+      return toFhirItemsFromLForms([smoke, age, item]);
+    }
+
+    test('show when an answer is given becomes enableWhen on the new linkId', () => {
+      const [smokeItem, , item] = convertWith({
+        question: 'Cigarettes per day',
+        dataType: 'INT',
+        skipLogic: { action: 'show', conditions: [{ source: '/x/72166-2', trigger: { value: { code: 'LA33-6' } } }] },
+      });
+      expect(item.enableWhen).toStrictEqual([
+        {
+          question: smokeItem.linkId,
+          operator: '=',
+          answerCoding: { system: 'http://loinc.org', code: 'LA33-6', display: 'Yes' },
+        },
+      ]);
+      expect(item.enableBehavior).toBeUndefined();
+    });
+
+    test('the source can be a question code, and older triggers name the code directly', () => {
+      const [smokeItem, , item] = convertWith({
+        question: 'Cigarettes per day',
+        dataType: 'INT',
+        skipLogic: { conditions: [{ source: '72166-2', trigger: { code: 'LA33-6' } }] },
+      });
+      expect(item.enableWhen?.[0]).toMatchObject({
+        question: smokeItem.linkId,
+        operator: '=',
+        answerCoding: { code: 'LA33-6' },
+      });
+    });
+
+    test('hide logic is negated', () => {
+      const [smokeItem, , item] = convertWith({
+        question: 'Why not?',
+        dataType: 'ST',
+        skipLogic: { action: 'hide', conditions: [{ source: '/x/72166-2', trigger: { value: { code: 'LA33-6' } } }] },
+      });
+      expect(item.enableWhen?.[0]).toMatchObject({ question: smokeItem.linkId, operator: '!=' });
+
+      const [, , hidden] = convertWith({
+        question: 'Hidden while unanswered',
+        dataType: 'ST',
+        skipLogic: { action: 'hide', conditions: [{ source: '/x/age', trigger: { exists: false } }] },
+      });
+      expect(hidden.enableWhen).toMatchObject([{ operator: 'exists', answerBoolean: true }]);
+    });
+
+    test('a range needs all of its bounds; hiding it needs any bound broken', () => {
+      const range = { conditions: [{ source: '/x/age', trigger: { minInclusive: 18, maxExclusive: '65' } }] };
+      const [, ageItem, shown] = convertWith({
+        question: 'Adult',
+        dataType: 'ST',
+        skipLogic: { action: 'show', ...range },
+      });
+      expect(shown.enableWhen).toStrictEqual([
+        { question: ageItem.linkId, operator: '>=', answerInteger: 18 },
+        { question: ageItem.linkId, operator: '<', answerInteger: 65 },
+      ]);
+      expect(shown.enableBehavior).toBe('all');
+
+      const [, , hidden] = convertWith({
+        question: 'Minor or senior',
+        dataType: 'ST',
+        skipLogic: { action: 'hide', ...range },
+      });
+      expect(hidden.enableWhen?.map((condition) => condition.operator)).toStrictEqual(['<', '>=']);
+      expect(hidden.enableBehavior).toBe('any');
+    });
+
+    test('ANY and ALL logic become the enable behavior', () => {
+      const conditions = [
+        { source: '/x/72166-2', trigger: { value: { code: 'LA33-6' } } },
+        { source: '/x/age', trigger: { exists: true } },
+      ];
+      const [, , any] = convertWith({ question: 'Any', dataType: 'ST', skipLogic: { logic: 'ANY', conditions } });
+      expect(any.enableBehavior).toBe('any');
+      const [, , all] = convertWith({ question: 'All', dataType: 'ST', skipLogic: { logic: 'ALL', conditions } });
+      expect(all.enableBehavior).toBe('all');
+      const [, , hideAll] = convertWith({
+        question: 'Hide all',
+        dataType: 'ST',
+        skipLogic: { action: 'hide', logic: 'ALL', conditions },
+      });
+      expect(hideAll.enableBehavior).toBe('any');
+      expect(hideAll.enableWhen?.map((condition) => condition.operator)).toStrictEqual(['!=', 'exists']);
+    });
+
+    test('logic that cannot be expressed, or refers to an unknown item, is dropped', () => {
+      const [, , unknown] = convertWith({
+        question: 'Unknown source',
+        dataType: 'ST',
+        skipLogic: { conditions: [{ source: '/x/missing', trigger: { exists: true } }] },
+      });
+      expect(unknown.enableWhen).toBeUndefined();
+
+      // (smoker) OR (18 <= age < 65): the range's bounds must hold together, which ANY cannot say.
+      const [, , anyRange] = convertWith({
+        question: 'Any with a range',
+        dataType: 'ST',
+        skipLogic: {
+          logic: 'ANY',
+          conditions: [
+            { source: '/x/72166-2', trigger: { value: { code: 'LA33-6' } } },
+            { source: '/x/age', trigger: { minInclusive: 18, maxExclusive: 65 } },
+          ],
+        },
+      });
+      expect(anyRange.enableWhen).toBeUndefined();
+
+      const [, , wrongType] = convertWith({
+        question: 'Wrong type',
+        dataType: 'ST',
+        skipLogic: { conditions: [{ source: '/x/age', trigger: { value: 'old' } }] },
+      });
+      expect(wrongType.enableWhen).toBeUndefined();
+    });
+
+    test('a follow-up item shown for one answer of its question works in the builder', () => {
+      const [question] = toFhirItemsFromLForms([
+        {
+          ...smoke,
+          items: [
+            {
+              question: 'Cigarettes per day',
+              dataType: 'INT',
+              skipLogic: { conditions: [{ source: '/x/72166-2', trigger: { value: { code: 'LA33-6' } } }] },
+            },
+          ],
+        },
+      ]);
+      const questionnaire = { resourceType: 'Questionnaire' as const, status: 'active' as const, item: [question] };
+      const values = { ...questionnaire, item: [fromFhirQuestionnaireItem(question, questionnaire, 0)] };
+      const followUp = values.item[0].answer[0].item[0];
+
+      values.item[0].answer[0].value = { system: 'http://loinc.org', code: 'LA33-6', display: 'Yes' };
+      expect(evaluateEnableWhen(values, followUp)).toBe(true);
+      values.item[0].answer[0].value = { system: 'http://loinc.org', code: 'LA32-8', display: 'No' };
+      expect(evaluateEnableWhen(values, followUp)).toBe(false);
     });
   });
 

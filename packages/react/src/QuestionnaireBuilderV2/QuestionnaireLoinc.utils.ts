@@ -1,7 +1,13 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
 import { generateId, HTTP_HL7_ORG, LOINC, UCUM } from '@medplum/core';
-import type { Extension, Questionnaire, QuestionnaireItem, QuestionnaireItemAnswerOption } from '@medplum/fhirtypes';
+import type {
+  Extension,
+  Questionnaire,
+  QuestionnaireItem,
+  QuestionnaireItemAnswerOption,
+  QuestionnaireItemEnableWhen,
+} from '@medplum/fhirtypes';
 
 // TODO: Prefer the official LOINC FHIR server (https://fhir.loinc.org), called through a Medplum Bot that holds the
 // LOINC account credentials in Project Secrets, and fall back to NLM Clinical Tables. Clinical Tables is used for now
@@ -92,7 +98,33 @@ export interface LFormsItem {
   readonly questionCardinality?: { readonly min?: string; readonly max?: string };
   readonly answerCardinality?: { readonly min?: string; readonly max?: string };
   readonly codingInstructions?: string;
+  readonly skipLogic?: LFormsSkipLogic;
   readonly items?: LFormsItem[];
+}
+
+/** When an LForms item is shown or hidden, based on the answers to other items. */
+export interface LFormsSkipLogic {
+  readonly action?: 'show' | 'hide';
+  readonly logic?: 'ANY' | 'ALL';
+  readonly conditions?: LFormsSkipLogicCondition[];
+}
+
+export interface LFormsSkipLogicCondition {
+  /** The LForms linkId, or the question code, of the item whose answer is checked. */
+  readonly source?: string;
+  readonly trigger?: LFormsSkipLogicTrigger;
+}
+
+export interface LFormsSkipLogicTrigger {
+  readonly value?: any;
+  readonly notEqual?: any;
+  readonly exists?: boolean;
+  readonly minInclusive?: number | string;
+  readonly maxInclusive?: number | string;
+  readonly minExclusive?: number | string;
+  readonly maxExclusive?: number | string;
+  /** Older LForms versions: the answer code, instead of `value`. */
+  readonly code?: string;
 }
 
 export interface LFormsAnswer {
@@ -154,11 +186,27 @@ export function toFhirQuestionnaireFromLoincForm(definition: LoincFormDefinition
 
 /**
  * Converts LForms items into FHIR QuestionnaireItems. Every item gets a new linkId, so the same panel can be added
- * more than once without linkId collisions.
+ * more than once without linkId collisions. Skip logic becomes enableWhen conditions on the new linkIds.
  * @param items - The LForms items.
  * @returns The FHIR QuestionnaireItems.
  */
 export function toFhirItemsFromLForms(items: LFormsItem[]): QuestionnaireItem[] {
+  const converted: ConvertedLFormsItem[] = [];
+  const fhirItems = convertLFormsItems(items, converted);
+  for (const { lformsItem, fhirItem } of converted) {
+    if (lformsItem.skipLogic) {
+      Object.assign(fhirItem, toFhirEnableWhenFromSkipLogic(lformsItem.skipLogic, converted));
+    }
+  }
+  return fhirItems;
+}
+
+interface ConvertedLFormsItem {
+  readonly lformsItem: LFormsItem;
+  readonly fhirItem: QuestionnaireItem;
+}
+
+function convertLFormsItems(items: LFormsItem[], converted: ConvertedLFormsItem[]): QuestionnaireItem[] {
   return items.map((lformsItem) => {
     const type = toFhirItemType(lformsItem.dataType);
     const linkId = generateId();
@@ -168,10 +216,10 @@ export function toFhirItemsFromLForms(items: LFormsItem[]): QuestionnaireItem[] 
       : [];
     const childItems = [
       ...toFhirHelpItems(linkId, lformsItem.codingInstructions),
-      ...toFhirItemsFromLForms(lformsItem.items ?? []),
+      ...convertLFormsItems(lformsItem.items ?? [], converted),
     ];
 
-    return {
+    const fhirItem: QuestionnaireItem = {
       linkId,
       text: lformsItem.question,
       type,
@@ -190,7 +238,157 @@ export function toFhirItemsFromLForms(items: LFormsItem[]): QuestionnaireItem[] 
       ...(unitExtensions.length > 0 && { extension: unitExtensions }),
       ...(childItems.length > 0 && { item: childItems }),
     };
+    converted.push({ lformsItem, fhirItem });
+    return fhirItem;
   });
+}
+
+const NEGATED_OPERATORS: Record<string, QuestionnaireItemEnableWhen['operator']> = {
+  '=': '!=',
+  '!=': '=',
+  '>': '<=',
+  '>=': '<',
+  '<': '>=',
+  '<=': '>',
+};
+
+/**
+ * Converts LForms skip logic into enableWhen conditions. `hide` logic is negated, since enableWhen says when an item
+ * is shown. Logic that enableWhen cannot express, or that refers to an unknown item, is dropped as a whole: the item
+ * is then always shown, rather than hidden when it should not be.
+ * @param skipLogic - The LForms skip logic.
+ * @param converted - All converted items of the form, to find the conditions' source items.
+ * @returns The enableWhen conditions and behavior, or nothing.
+ */
+function toFhirEnableWhenFromSkipLogic(
+  skipLogic: LFormsSkipLogic,
+  converted: ConvertedLFormsItem[]
+): Pick<QuestionnaireItem, 'enableWhen' | 'enableBehavior'> {
+  const conditions = skipLogic.conditions ?? [];
+  // A single condition may need several enableWhen (e.g. a range), which must all hold for it.
+  const all = conditions.length === 1 || skipLogic.logic === 'ALL';
+  const hide = skipLogic.action === 'hide';
+  const enableWhen: QuestionnaireItemEnableWhen[] = [];
+
+  for (const condition of conditions) {
+    const source = findLFormsSource(converted, condition.source);
+    const parts = source && toFhirEnableWhenFromTrigger(source, condition.trigger);
+    // Several parts of one condition hold together; ANY logic between conditions cannot express that.
+    if (!parts?.length || (parts.length > 1 && !all)) {
+      return {};
+    }
+    enableWhen.push(...(hide ? parts.map(negateEnableWhen) : parts));
+  }
+
+  if (enableWhen.length === 0) {
+    return {};
+  }
+  // Not (A and B) is (not A or not B), and the other way round.
+  const enableBehavior = all === hide ? 'any' : 'all';
+  return { enableWhen, ...(enableWhen.length > 1 && { enableBehavior }) };
+}
+
+function findLFormsSource(converted: ConvertedLFormsItem[], source: string | undefined): QuestionnaireItem | undefined {
+  if (!source) {
+    return undefined;
+  }
+  return (
+    converted.find(({ lformsItem }) => lformsItem.linkId === source)?.fhirItem ??
+    converted.find(({ lformsItem }) => lformsItem.questionCode === source)?.fhirItem
+  );
+}
+
+function toFhirEnableWhenFromTrigger(
+  source: QuestionnaireItem,
+  trigger: LFormsSkipLogicTrigger | undefined
+): QuestionnaireItemEnableWhen[] | undefined {
+  if (!trigger) {
+    return undefined;
+  }
+  const question = source.linkId;
+
+  if (trigger.exists !== undefined) {
+    return [{ question, operator: 'exists', answerBoolean: trigger.exists }];
+  }
+
+  const value = trigger.value ?? (trigger.code ? { code: trigger.code } : undefined);
+  const equality: [QuestionnaireItemEnableWhen['operator'], any][] = [];
+  if (value !== undefined) {
+    equality.push(['=', value]);
+  }
+  if (trigger.notEqual !== undefined) {
+    equality.push(['!=', trigger.notEqual]);
+  }
+  const range: [QuestionnaireItemEnableWhen['operator'], any][] = (
+    [
+      ['>=', trigger.minInclusive],
+      ['>', trigger.minExclusive],
+      ['<=', trigger.maxInclusive],
+      ['<', trigger.maxExclusive],
+    ] as [QuestionnaireItemEnableWhen['operator'], any][]
+  ).filter(([, bound]) => bound !== undefined && bound !== null && bound !== '');
+
+  const parts = [...equality, ...range].map(([operator, answer]) => {
+    const answerValue = toFhirEnableWhenAnswer(source, answer);
+    return answerValue && { question, operator, ...answerValue };
+  });
+  if (parts.length === 0 || parts.some((part) => !part)) {
+    return undefined;
+  }
+  return parts as QuestionnaireItemEnableWhen[];
+}
+
+/**
+ * Types a skip logic trigger value as an enableWhen answer, by the type of the item it is compared with.
+ * @param source - The FHIR item whose answer is compared.
+ * @param value - The trigger value.
+ * @returns The enableWhen answer[x], or undefined when the value does not fit the item.
+ */
+function toFhirEnableWhenAnswer(
+  source: QuestionnaireItem,
+  value: any
+): Partial<QuestionnaireItemEnableWhen> | undefined {
+  switch (source.type) {
+    case 'choice':
+    case 'open-choice': {
+      const code = typeof value === 'object' ? value?.code : value;
+      if (!code) {
+        return undefined;
+      }
+      // Answers compare by code; the option carries its system and display.
+      const option = source.answerOption?.find((answerOption) => answerOption.valueCoding?.code === code);
+      return {
+        answerCoding: option?.valueCoding ?? { system: toFhirCodeSystem(value?.system), code, display: value?.text },
+      };
+    }
+    case 'boolean':
+      return typeof value === 'boolean' ? { answerBoolean: value } : undefined;
+    case 'integer':
+      return Number.isInteger(Number(value)) ? { answerInteger: Number(value) } : undefined;
+    case 'decimal':
+      return Number.isFinite(Number(value)) ? { answerDecimal: Number(value) } : undefined;
+    case 'quantity':
+      return Number.isFinite(Number(value)) ? { answerQuantity: { value: Number(value) } } : undefined;
+    case 'date':
+      return typeof value === 'string' ? { answerDate: value } : undefined;
+    case 'dateTime':
+      return typeof value === 'string' ? { answerDateTime: value } : undefined;
+    case 'time':
+      return typeof value === 'string' ? { answerTime: value } : undefined;
+    case 'string':
+    case 'text':
+    case 'url':
+      return typeof value === 'string' ? { answerString: value } : undefined;
+    default:
+      return undefined;
+  }
+}
+
+function negateEnableWhen(condition: QuestionnaireItemEnableWhen): QuestionnaireItemEnableWhen {
+  if (condition.operator === 'exists') {
+    return { ...condition, answerBoolean: !condition.answerBoolean };
+  }
+  return { ...condition, operator: NEGATED_OPERATORS[condition.operator] };
 }
 
 /**

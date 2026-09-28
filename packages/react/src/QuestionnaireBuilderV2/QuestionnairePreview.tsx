@@ -8,6 +8,7 @@ import {
   Checkbox,
   Divider,
   Group,
+  Input,
   MultiSelect,
   NativeSelect,
   Popover,
@@ -15,6 +16,7 @@ import {
   Slider,
   Stack,
   Switch,
+  Table,
   Text,
   Textarea,
   TextInput,
@@ -39,10 +41,13 @@ import {
   evaluateEnableWhen,
   findRootItem,
   getPageItems,
+  getRequiredGroupError,
   getValueByPath,
   isEmptyAnswerValue,
   isHorizontalChoiceLayout,
-  rebuildFollowUpAnswers,
+  isQuestionItem,
+  isReadOnlyFormItem,
+  rebuildAnswerItems,
   validateAnswerValue,
   validateFormAnswers,
 } from './QuestionnaireBuilderV2.utils';
@@ -67,7 +72,8 @@ export interface QuestionnairePreviewProps {
 export function QuestionnairePreview(props: QuestionnairePreviewProps): JSX.Element {
   const { items, selectedItem, addAnswer, ignoreValidation, submitButtonText, excludeButtons, onSubmit } = props;
   const form = useQuestionnaireFormContext();
-  const pageItems = getPageItems(items);
+  // With pages, only pages are shown, and of those only the pages that are not hidden and whose conditions are met.
+  const pageItems = getPageItems(items)?.filter((page) => !page.hidden && evaluateEnableWhen(form.getValues(), page));
   const selectedLinkId = selectedItem?.linkId;
   const [activePage, setActivePage] = useState(0);
   const [prevSelectedLinkId, setPrevSelectedLinkId] = useState(selectedLinkId);
@@ -82,7 +88,7 @@ export function QuestionnairePreview(props: QuestionnairePreviewProps): JSX.Elem
     }
   }
 
-  const currentPage = pageItems ? Math.min(activePage, pageItems.length - 1) : 0;
+  const currentPage = pageItems ? Math.max(0, Math.min(activePage, pageItems.length - 1)) : 0;
 
   /**
    * Validates the given items, shows their errors and reports whether they are valid.
@@ -149,7 +155,12 @@ export function QuestionnairePreview(props: QuestionnairePreviewProps): JSX.Elem
         </Card.Section>
         <Card.Section inheritPadding py="md">
           <Form onSubmit={handleSubmit}>
-            {pageItems ? (
+            {pageItems?.length === 0 && (
+              <Text c="dimmed" ta="center">
+                No pages are shown.
+              </Text>
+            )}
+            {pageItems && pageItems.length > 0 && (
               <>
                 <QuestionnaireFormStepper
                   excludeButtons
@@ -157,7 +168,7 @@ export function QuestionnairePreview(props: QuestionnairePreviewProps): JSX.Elem
                     {
                       pages: pageItems.map((page, index) => ({
                         linkId: page.linkId,
-                        title: page.text ?? `Page ${index + 1}`,
+                        title: [page.prefix, page.text].filter(Boolean).join(' ') || `Page ${index + 1}`,
                         group: page as unknown as QuestionnaireItem & { type: 'group' },
                       })),
                       activePage: currentPage,
@@ -183,7 +194,8 @@ export function QuestionnairePreview(props: QuestionnairePreviewProps): JSX.Elem
                   </Group>
                 )}
               </>
-            ) : (
+            )}
+            {!pageItems && (
               <Stack gap="md">
                 {items.map((item: ExtendedQuestionnaireItem, index: number) => (
                   <PreviewItem
@@ -229,6 +241,25 @@ function PreviewPage(props: PreviewPageProps): JSX.Element {
 
   return (
     <Stack gap="md" mt="md">
+      <RequiredGroupError item={page} />
+      {/* The stepper shows the page title; the page's guidance goes above its items. */}
+      {(page.help || page.supportLink) && (
+        <Stack gap={4}>
+          {page.help && (
+            <Text size="sm" c="dimmed">
+              {page.help}
+            </Text>
+          )}
+          {page.supportLink && (
+            <Anchor href={page.supportLink} target="_blank" rel="noopener noreferrer" size="sm">
+              <Group gap={4}>
+                More information
+                <IconExternalLink size={14} />
+              </Group>
+            </Anchor>
+          )}
+        </Stack>
+      )}
       {repetitions
         .filter(Array.isArray)
         .map((answerGroup, repetitionIndex) =>
@@ -290,12 +321,19 @@ function PreviewItem(props: PreviewItemProps): JSX.Element | null {
   }
 
   const followUpProps = { selectedItem, addAnswer, ignoreValidation };
+  const readOnly = isReadOnlyFormItem(form.getValues(), item);
 
   if (isChoiceType(original.type) && original.repeats) {
     return (
       <PreviewSelectedItem item={item} selectedItem={selectedItem} index={index}>
         <Stack gap="md">
-          <PreviewRepeatingChoice item={item} original={original} answerIndex={0} addAnswer={addAnswer} />
+          <PreviewRepeatingChoice
+            item={item}
+            original={original}
+            answerIndex={0}
+            addAnswer={addAnswer}
+            readOnly={readOnly}
+          />
           {/* Each selected option has its own follow-up items. */}
           {(item.answer ?? []).map((answer, answerIndex) => (
             <PreviewFollowUpItems
@@ -320,6 +358,7 @@ function PreviewItem(props: PreviewItemProps): JSX.Element | null {
             answerIndex,
             addAnswer,
             ignoreValidation,
+            readOnly,
           };
           return (
             <Fragment key={`${item.linkId}-${answerIndex}`}>
@@ -335,7 +374,9 @@ function PreviewItem(props: PreviewItemProps): JSX.Element | null {
 
 function PreviewAnswer(props: PreviewAnswerProps): JSX.Element | null {
   const type = props.original.type;
-  if (['string', 'integer', 'decimal', 'quantity', 'url'].includes(type)) {
+  if (isChoiceType(type) && props.original.repeats) {
+    return <PreviewRepeatingChoice {...props} />;
+  } else if (['string', 'integer', 'decimal', 'quantity', 'url'].includes(type)) {
     return <PreviewInput {...props} />;
   } else if (type === 'boolean') {
     return <PreviewBoolean {...props} />;
@@ -420,6 +461,10 @@ function PreviewGroup(props: PreviewGroupProps): JSX.Element {
     return getValueByPath(form.getValues(), item.path);
   };
 
+  if (isGroupTable(original)) {
+    return <PreviewGroupTable {...props} />;
+  }
+
   return (
     <PreviewSelectedItem item={item} selectedItem={selectedItem} index={index}>
       {item.item?.length === 0 && (
@@ -463,8 +508,142 @@ function PreviewGroup(props: PreviewGroupProps): JSX.Element {
           </Fragment>
         )
       )}
+      <RequiredGroupError item={item} />
     </PreviewSelectedItem>
   );
+}
+
+/**
+ * A group table (`gtable` item control) has only questions: each question is a column, each repetition a row.
+ * @param group - The group's definition.
+ * @returns True if the group is rendered as a table.
+ */
+function isGroupTable(group: ExtendedQuestionnaireItem): boolean {
+  return group.itemControl?.code === 'gtable' && (group.item ?? []).length > 0 && group.item.every(isQuestionItem);
+}
+
+/**
+ * A group rendered as a table: its questions are the columns and each repetition is a row.
+ * @param props - The PreviewGroup props.
+ * @returns The PreviewGroupTable React node.
+ */
+function PreviewGroupTable(props: PreviewGroupProps): JSX.Element {
+  const { item, original, selectedItem, index, addAnswer, ignoreValidation } = props;
+  const form = useQuestionnaireFormContext();
+  const values = form.getValues();
+  const readOnly = isReadOnlyFormItem(values, item);
+  const columns = original.item.filter((column) => !column.hidden);
+  const rows = ((item.answer ?? []) as unknown as ExtendedQuestionnaireItem[][]).filter(Array.isArray);
+  const canRemove = original.repeats && !readOnly && rows.length > (+original.minOccurs || 1);
+  const canAdd = original.repeats && !readOnly && (!original.maxOccurs || rows.length < +original.maxOccurs);
+
+  return (
+    <PreviewSelectedItem item={item} selectedItem={selectedItem} index={index}>
+      <PreviewQuestion item={item} original={original} index={index} addAnswer={addAnswer} showRepeatControls={false} />
+      <Table withTableBorder withColumnBorders mt="xs">
+        <Table.Thead>
+          <Table.Tr>
+            {columns.map((column) => (
+              <Table.Th key={column.linkId}>
+                {[column.prefix, column.text].filter(Boolean).join(' ')}
+                {column.required && (
+                  <Text component="span" c="red">
+                    {' '}
+                    *
+                  </Text>
+                )}
+              </Table.Th>
+            ))}
+            {canRemove && <Table.Th w={48} />}
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {rows.map((row, rowIndex) => (
+            <Table.Tr key={`${item.answerPath}-${rowIndex}`}>
+              {columns.map((column) => {
+                const cell = row.find((cellItem) => cellItem.linkId === column.linkId);
+                return (
+                  <Table.Td key={column.linkId}>
+                    {cell && evaluateEnableWhen(values, cell) && (
+                      <PreviewAnswer
+                        item={cell}
+                        original={column}
+                        answerIndex={0}
+                        addAnswer={addAnswer}
+                        ignoreValidation={ignoreValidation}
+                        readOnly={isReadOnlyFormItem(values, cell)}
+                        inline
+                      />
+                    )}
+                  </Table.Td>
+                );
+              })}
+              {canRemove && (
+                <Table.Td>
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    aria-label="Remove row"
+                    onClick={() => removeFormAnswer(form, item, rowIndex, original)}
+                  >
+                    <IconTrash size={16} />
+                  </ActionIcon>
+                </Table.Td>
+              )}
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+      {canAdd && (
+        <Button
+          variant="default"
+          size="xs"
+          mt="xs"
+          leftSection={<IconPlus size={16} />}
+          onClick={() => addAnswer(item, original)}
+        >
+          Add row
+        </Button>
+      )}
+      <RequiredGroupError item={item} />
+    </PreviewSelectedItem>
+  );
+}
+
+/**
+ * Shows a required group's error once validation has found it, until the group is answered.
+ * @param props - The group (or its answer copy).
+ * @param props.item - The group.
+ * @returns The error, or null.
+ */
+function RequiredGroupError(props: { readonly item: ExtendedQuestionnaireItem }): JSX.Element | null {
+  const form = useQuestionnaireFormContext();
+  const values = form.getValues();
+  const message = form.errors[`${props.item.answerPath}.answer`] && getRequiredGroupError(values, props.item);
+  return message ? <Input.Error mt="xs">{message}</Input.Error> : null;
+}
+
+/**
+ * Removes one answer of an item (for a group, one repetition), and recomputes the items answered under the others.
+ * @param form - The questionnaire form.
+ * @param item - The item (or answer copy).
+ * @param index - The index of the answer to remove.
+ * @param original - The item's definition.
+ */
+function removeFormAnswer(
+  form: QuestionnaireForm,
+  item: ExtendedQuestionnaireItem,
+  index: number,
+  original: ExtendedQuestionnaireItem
+): void {
+  const path = item.answerPath;
+  if (!path) {
+    return;
+  }
+  const answers = [...(getValueByPath(form.getValues(), `${path}.answer`) ?? [])];
+  answers.splice(index, 1);
+  form.setFieldValue(`${path}.answer`, answers);
+  rebuildAnswerItems(form, original);
 }
 
 interface PreviewSelectedItemProps {
@@ -495,11 +674,14 @@ interface PreviewQuestionProps {
   readonly index?: number;
   readonly groupIndex?: number;
   readonly addAnswer: AddAnswer;
+  /** Shows the add and remove answer buttons of a repeating item; a group table has its own. */
+  readonly showRepeatControls?: boolean;
 }
 
 function PreviewQuestion(props: PreviewQuestionProps): JSX.Element {
-  const { item, original, index = 0, groupIndex = 0, addAnswer } = props;
+  const { item, original, index = 0, groupIndex = 0, addAnswer, showRepeatControls = true } = props;
   const form = useQuestionnaireFormContext();
+  const readOnly = isReadOnlyFormItem(form.getValues(), item);
 
   const title = original.prefix ? `${original.prefix} ${original.text}` : original.text;
   const repeatIndex = original.type === 'group' ? groupIndex : index;
@@ -508,18 +690,6 @@ function PreviewQuestion(props: PreviewQuestionProps): JSX.Element {
   const isLastRepeat = repeatIndex + 1 === item.answer?.length;
   const canRemove = item.answer?.length > original.minOccurs;
   const canAdd = isLastRepeat && (!original.maxOccurs || item.answer?.length < +original.maxOccurs);
-
-  const removeAnswer = (item: ExtendedQuestionnaireItem, index: number): void => {
-    const path = item.answerPath;
-
-    if (path) {
-      const answerArray = getValueByPath(form.getValues(), `${path}.answer`) || [];
-      const newArray = [...answerArray];
-      newArray.splice(index, 1);
-      form.setFieldValue(`${path}.answer`, newArray);
-      rebuildFollowUpAnswers(form, original);
-    }
-  };
 
   const required = original.required && (
     <Text component="span" c="red">
@@ -569,7 +739,7 @@ function PreviewQuestion(props: PreviewQuestionProps): JSX.Element {
         </Popover>
       )}
 
-      {original.repeats && !original.readOnly && original.type !== 'choice' && original.type !== 'open-choice' && (
+      {showRepeatControls && original.repeats && !readOnly && !isChoiceType(original.type) && (
         <Group gap="xs">
           {canRemove && (
             <ActionIcon
@@ -577,7 +747,7 @@ function PreviewQuestion(props: PreviewQuestionProps): JSX.Element {
               color="red"
               size="sm"
               aria-label="Remove answer"
-              onClick={() => removeAnswer(item, repeatIndex)}
+              onClick={() => removeFormAnswer(form, item, repeatIndex, original)}
             >
               <IconTrash size={16} />
             </ActionIcon>
@@ -600,6 +770,22 @@ interface PreviewAnswerProps {
   readonly answerIndex: number;
   readonly addAnswer: AddAnswer;
   readonly ignoreValidation?: boolean;
+  readonly readOnly?: boolean;
+  /** Renders the input without its question label, e.g. in a group table cell. */
+  readonly inline?: boolean;
+}
+
+/**
+ * The question label of an answer input, or none for an inline input.
+ * @param props - The preview answer props.
+ * @returns The label and the input's accessible name.
+ */
+function getAnswerLabel(props: PreviewAnswerProps): { label?: JSX.Element; 'aria-label'?: string } {
+  const { item, original, answerIndex, addAnswer, inline } = props;
+  if (inline) {
+    return { 'aria-label': original.text };
+  }
+  return { label: <PreviewQuestion item={item} original={original} index={answerIndex} addAnswer={addAnswer} /> };
 }
 
 /**
@@ -629,7 +815,7 @@ function getFieldPath(item: ExtendedQuestionnaireItem, answerIndex: number): str
 }
 
 function PreviewInput(props: PreviewAnswerProps): JSX.Element {
-  const { item, original, answerIndex, addAnswer, ignoreValidation } = props;
+  const { item, original, answerIndex, ignoreValidation, readOnly } = props;
   const form = useQuestionnaireFormContext();
   const fieldPath = getFieldPath(item, answerIndex);
   const value = getValueByPath(form.getValues(), fieldPath);
@@ -639,13 +825,15 @@ function PreviewInput(props: PreviewAnswerProps): JSX.Element {
   const maxValue = Number(original.maxValue ?? 100);
   const sliderStepValue = Number(original.sliderStepValue ?? 1);
   const unit = original.unit;
-  const label = <PreviewQuestion item={item} original={original} index={answerIndex} addAnswer={addAnswer} />;
+  const labelProps = getAnswerLabel(props);
 
   if (isSlider) {
     return (
       <Stack gap="xs">
-        {label}
+        {labelProps.label}
         <Slider
+          aria-label={labelProps['aria-label']}
+          disabled={readOnly}
           value={Number(value) || minValue}
           min={minValue}
           max={maxValue}
@@ -659,7 +847,8 @@ function PreviewInput(props: PreviewAnswerProps): JSX.Element {
   if (type === 'quantity' || (type === 'integer' && unit) || (type === 'decimal' && unit)) {
     return (
       <TextInput
-        label={label}
+        {...labelProps}
+        disabled={readOnly}
         type="number"
         step="any"
         value={value ?? ''}
@@ -671,7 +860,8 @@ function PreviewInput(props: PreviewAnswerProps): JSX.Element {
 
   return (
     <TextInput
-      label={label}
+      {...labelProps}
+      disabled={readOnly}
       type={type === 'integer' || type === 'decimal' ? 'number' : 'text'}
       step={type === 'decimal' ? 'any' : undefined}
       placeholder={original.entryFormat}
@@ -684,13 +874,14 @@ function PreviewInput(props: PreviewAnswerProps): JSX.Element {
 }
 
 function PreviewTextarea(props: PreviewAnswerProps): JSX.Element {
-  const { item, original, answerIndex, addAnswer, ignoreValidation } = props;
+  const { item, original, answerIndex, ignoreValidation, readOnly } = props;
   const form = useQuestionnaireFormContext();
   const fieldPath = getFieldPath(item, answerIndex);
 
   return (
     <Textarea
-      label={<PreviewQuestion item={item} original={original} index={answerIndex} addAnswer={addAnswer} />}
+      {...getAnswerLabel(props)}
+      disabled={readOnly}
       placeholder={original.entryFormat}
       rows={6}
       maxLength={!ignoreValidation && original.maxLength ? original.maxLength : undefined}
@@ -702,14 +893,17 @@ function PreviewTextarea(props: PreviewAnswerProps): JSX.Element {
 }
 
 function PreviewBoolean(props: PreviewAnswerProps): JSX.Element {
-  const { item, original, answerIndex, addAnswer } = props;
+  const { item, answerIndex, readOnly } = props;
   const form = useQuestionnaireFormContext();
   const fieldPath = getFieldPath(item, answerIndex);
+  const labelProps = getAnswerLabel(props);
 
   return (
     <Group justify="space-between">
-      <PreviewQuestion item={item} original={original} index={answerIndex} addAnswer={addAnswer} />
+      {labelProps.label}
       <Switch
+        aria-label={labelProps['aria-label']}
+        disabled={readOnly}
         checked={Boolean(getValueByPath(form.getValues(), fieldPath))}
         onChange={(e) => form.setFieldValue(fieldPath, e.currentTarget.checked)}
       />
@@ -718,14 +912,15 @@ function PreviewBoolean(props: PreviewAnswerProps): JSX.Element {
 }
 
 function PreviewDateTime(props: PreviewAnswerProps): JSX.Element {
-  const { item, original, answerIndex, addAnswer, ignoreValidation } = props;
+  const { item, original, answerIndex, ignoreValidation, readOnly } = props;
   const form = useQuestionnaireFormContext();
   const fieldPath = getFieldPath(item, answerIndex);
   const inputType = original.type === 'dateTime' ? 'datetime-local' : original.type;
 
   return (
     <TextInput
-      label={<PreviewQuestion item={item} original={original} index={answerIndex} addAnswer={addAnswer} />}
+      {...getAnswerLabel(props)}
+      disabled={readOnly}
       type={inputType}
       value={getValueByPath(form.getValues(), fieldPath) ?? ''}
       error={form.errors[fieldPath]}
@@ -740,18 +935,19 @@ function PreviewDateTime(props: PreviewAnswerProps): JSX.Element {
  * @returns The PreviewChoice React node.
  */
 function PreviewChoice(props: PreviewAnswerProps): JSX.Element {
-  const { item, original, answerIndex, addAnswer } = props;
+  const { item, original, answerIndex, readOnly } = props;
   const form = useQuestionnaireFormContext();
   const fieldPath = getFieldPath(item, answerIndex);
   const value = getValueByPath(form.getValues(), fieldPath);
   const answerOption: ExtendedQuestionnaireItemAnswerOption[] = original.answerOption ?? [];
   const isHorizontal = isHorizontalChoiceLayout(original);
-  const label = <PreviewQuestion item={item} original={original} index={answerIndex} addAnswer={addAnswer} />;
+  const labelProps = getAnswerLabel(props);
 
   if (original.itemControl?.code === 'drop-down') {
     return (
       <NativeSelect
-        label={label}
+        {...labelProps}
+        disabled={readOnly}
         data={[{ value: '', label: 'Select an option' }, ...toOptionData(answerOption)]}
         value={value?.code ?? ''}
         error={form.errors[fieldPath]}
@@ -761,12 +957,17 @@ function PreviewChoice(props: PreviewAnswerProps): JSX.Element {
   }
 
   const radios = answerOption.map((option) => (
-    <Radio key={`${item.linkId}-${option.value.code}`} value={option.value.code} label={option.value.display} />
+    <Radio
+      key={`${item.linkId}-${option.value.code}`}
+      value={option.value.code}
+      label={option.value.display}
+      disabled={readOnly}
+    />
   ));
 
   return (
     <Radio.Group
-      label={label}
+      {...labelProps}
       value={value?.code ?? null}
       error={form.errors[fieldPath]}
       onChange={(code) => form.setFieldValue(fieldPath, findOption(answerOption, code))}
@@ -785,13 +986,13 @@ function PreviewChoice(props: PreviewAnswerProps): JSX.Element {
  * @returns The PreviewRepeatingChoice React node.
  */
 function PreviewRepeatingChoice(props: PreviewAnswerProps): JSX.Element {
-  const { item, original, addAnswer } = props;
+  const { item, original, readOnly } = props;
   const form = useQuestionnaireFormContext();
   const answersPath = `${item.answerPath}.answer`;
   const answers: { value: any }[] = getValueByPath(form.getValues(), answersPath) ?? [];
   const answerOption: ExtendedQuestionnaireItemAnswerOption[] = original.answerOption ?? [];
   const selectedCodes = answers.map((answer) => answer.value?.code).filter((code): code is string => Boolean(code));
-  const label = <PreviewQuestion item={item} original={original} index={0} addAnswer={addAnswer} />;
+  const labelProps = getAnswerLabel({ ...props, answerIndex: 0 });
 
   const setSelectedCodes = (codes: string[]): void => {
     // Options that stay selected keep their answers, including their follow-up items.
@@ -803,13 +1004,14 @@ function PreviewRepeatingChoice(props: PreviewAnswerProps): JSX.Element {
         )
         .filter((answer) => answer.value)
     );
-    rebuildFollowUpAnswers(form, original);
+    rebuildAnswerItems(form, original);
   };
 
   if (original.itemControl?.code === 'drop-down') {
     return (
       <MultiSelect
-        label={label}
+        {...labelProps}
+        disabled={readOnly}
         placeholder="Select items"
         data={toOptionData(answerOption)}
         value={selectedCodes}
@@ -820,13 +1022,14 @@ function PreviewRepeatingChoice(props: PreviewAnswerProps): JSX.Element {
   }
 
   return (
-    <Checkbox.Group label={label} value={selectedCodes} error={form.errors[answersPath]} onChange={setSelectedCodes}>
+    <Checkbox.Group {...labelProps} value={selectedCodes} error={form.errors[answersPath]} onChange={setSelectedCodes}>
       <Stack gap="xs" mt="xs">
         {answerOption.map((option) => (
           <Checkbox
             key={`${item.linkId}-${option.value.code}`}
             value={option.value.code}
             label={option.value.display}
+            disabled={readOnly}
           />
         ))}
       </Stack>

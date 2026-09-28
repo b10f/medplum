@@ -12,12 +12,14 @@ import {
   getFormItemDropTarget,
   getLocalAnswerOptionSystem,
   getPageItems,
+  getRequiredGroupError,
   getValueByPath,
   hasFollowUpItems,
   isHelpItem,
   isHorizontalChoiceLayout,
   isManualAnswerOption,
   isPageItem,
+  isReadOnlyFormItem,
   moveFormItem,
   PAGE_ITEM_CONTROL,
   rebuildFormItems,
@@ -972,6 +974,125 @@ describe('QuestionnaireBuilderV2.utils', () => {
       const moved = moveFormItem(values, 'other', { parentLinkId: 'smoke', index: 1 });
       expect(moved[0].item.map((item: any) => item.linkId)).toStrictEqual(['how-many', 'other']);
       expect(moved[0].item[1].path).toBe('item.0.item.1');
+    });
+  });
+
+  describe('groups', () => {
+    const pageExtension = {
+      url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl',
+      valueCodeableConcept: { coding: [{ system: 'http://hl7.org/fhir/questionnaire-item-control', code: 'page' }] },
+    };
+
+    function createValues(): Record<string, any> {
+      return toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          {
+            linkId: 'page',
+            type: 'group',
+            extension: [pageExtension],
+            item: [
+              {
+                linkId: 'contact',
+                type: 'group',
+                text: 'Contact details',
+                item: [
+                  { linkId: 'address', type: 'group', item: [{ linkId: 'street', type: 'string' }] },
+                  { linkId: 'email', type: 'string' },
+                ],
+              },
+              { linkId: 'note', type: 'display', text: 'A note' },
+            ],
+          },
+        ],
+      });
+    }
+
+    // The answer copies the preview renders: page repetition 0 -> contact repetition 0 -> ...
+    const contactCopy = (values: Record<string, any>): any => values.item[0].answer[0][0];
+    const streetCopy = (values: Record<string, any>): any => contactCopy(values).answer[0][0].answer[0][0];
+    const emailCopy = (values: Record<string, any>): any => contactCopy(values).answer[0][1];
+
+    test('conditions are read from the definition, so an edit applies to answer copies right away', () => {
+      const values = createValues();
+      expect(evaluateEnableWhen(values, emailCopy(values))).toBe(true);
+      values.item[0].item[0].item[1].enableWhen = [
+        { question: values.item[0].item[0].item[0].item[0], operator: 'exists', answer: true },
+      ];
+      expect(emailCopy(values).enableWhen).toStrictEqual([]);
+      expect(evaluateEnableWhen(values, emailCopy(values))).toBe(false);
+      streetCopy(values).answer[0].value = 'Main St';
+      expect(evaluateEnableWhen(values, emailCopy(values))).toBe(true);
+    });
+
+    test('an item in a read-only group is read only', () => {
+      const values = createValues();
+      expect(isReadOnlyFormItem(values, streetCopy(values))).toBe(false);
+      values.item[0].item[0].readOnly = true;
+      expect(isReadOnlyFormItem(values, streetCopy(values))).toBe(true);
+      expect(isReadOnlyFormItem(values, contactCopy(values))).toBe(true);
+      expect(isReadOnlyFormItem(values, values.item[0])).toBe(false);
+    });
+
+    test('a required group needs at least one answered question', () => {
+      const values = createValues();
+      expect(getRequiredGroupError(values, contactCopy(values))).toBeUndefined();
+
+      values.item[0].item[0].required = true;
+      expect(getRequiredGroupError(values, contactCopy(values))).toBe('Answer at least one question in this group');
+      expect(validateFormAnswers(values)).toStrictEqual({
+        'item.0.answer.0.0.answer': 'Answer at least one question in this group',
+      });
+
+      // An answer in a nested group counts
+      streetCopy(values).answer[0].value = 'Main St';
+      expect(getRequiredGroupError(values, contactCopy(values))).toBeUndefined();
+      expect(validateFormAnswers(values)).toStrictEqual({});
+
+      // Unless the question is hidden: it is not in the response
+      values.item[0].item[0].item[0].item[0].hidden = true;
+      expect(getRequiredGroupError(values, contactCopy(values))).toBeDefined();
+    });
+
+    test('a required page needs an answered question; display text does not count', () => {
+      const values = createValues();
+      values.item[0].required = true;
+      expect(getRequiredGroupError(values, values.item[0])).toBe('Answer at least one question on this page');
+      emailCopy(values).answer[0].value = 'a@example.com';
+      expect(getRequiredGroupError(values, values.item[0])).toBeUndefined();
+    });
+
+    test('a required repeating group needs minOccurs answered repetitions', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          {
+            linkId: 'meds',
+            type: 'group',
+            required: true,
+            repeats: true,
+            extension: [{ url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-minOccurs', valueInteger: 2 }],
+            item: [{ linkId: 'name', type: 'string' }],
+          },
+        ],
+      });
+      expect(values.item[0].answer).toHaveLength(2);
+      values.item[0].answer[0][0].answer[0].value = 'Aspirin';
+      expect(getRequiredGroupError(values, values.item[0])).toBe(
+        'Answer at least one question in this group in 2 repetitions'
+      );
+      values.item[0].answer[1][0].answer[0].value = 'Ibuprofen';
+      expect(getRequiredGroupError(values, values.item[0])).toBeUndefined();
+    });
+
+    test('read-only groups and questions are not required of the respondent', () => {
+      const values = createValues();
+      values.item[0].item[0].required = true;
+      values.item[0].item[0].item[1].required = true;
+      values.item[0].item[0].readOnly = true;
+      expect(validateFormAnswers(values)).toStrictEqual({});
     });
   });
 

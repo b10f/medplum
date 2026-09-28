@@ -1380,8 +1380,11 @@ function fromQuestionnaireItemAnswerOption(answerOption: QuestionnaireItemAnswer
  * @returns True if the item should be shown.
  */
 export function evaluateEnableWhen(values: Record<string, any>, item: ExtendedQuestionnaireItem): boolean {
-  const enableWhen = (item.enableWhen || []).filter((condition) => condition?.question && condition.operator);
-  const enableBehavior = item.enableBehavior ?? 'all';
+  // The conditions are read from the item's definition: an answer copy (e.g. in a group repetition) is not updated
+  // when its definition is edited.
+  const definition: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
+  const enableWhen = (definition.enableWhen || []).filter((condition) => condition?.question && condition.operator);
+  const enableBehavior = definition.enableBehavior ?? 'all';
 
   if (enableWhen.length === 0) {
     return true;
@@ -1581,20 +1584,71 @@ export function addFormAnswer(
   const initialValue = (initialArray?.[index] as { value?: any } | undefined)?.value ?? '';
 
   form.setFieldValue(`${path}.answer`, [...answerArray, { value: initialValue }]);
-  rebuildFollowUpAnswers(form, original ?? item);
+  rebuildAnswerItems(form, original ?? item);
 }
 
 /**
- * After a question's answers were added, removed or replaced, gives each answer its own copies of the question's
- * follow-up items (with their paths), keeping what was answered in them.
+ * After an item's answers were added, removed or replaced, recomputes the items answered under them (a group's
+ * repetitions, a question's follow-up items) with their paths, keeping what was answered in them.
  * @param form - The questionnaire form.
- * @param question - The question's definition.
+ * @param item - The item (or answer copy) whose answers changed.
  */
-export function rebuildFollowUpAnswers(form: QuestionnaireForm, question: ExtendedQuestionnaireItem): void {
-  const definition: ExtendedQuestionnaireItem = getValueByPath(form.getValues(), question.path) ?? question;
-  if (hasFollowUpItems(definition)) {
+export function rebuildAnswerItems(form: QuestionnaireForm, item: ExtendedQuestionnaireItem): void {
+  const definition: ExtendedQuestionnaireItem = getValueByPath(form.getValues(), item.path) ?? item;
+  if (definition.type === 'group' || hasFollowUpItems(definition)) {
     form.setFieldValue('item', rebuildFormItems(form.getValues()));
   }
+}
+
+/**
+ * Returns true if an item cannot be answered by the respondent: it, or a group or question it belongs to, is read only.
+ * Read from the definitions, so it reflects the latest edits.
+ * @param values - The current builder form values.
+ * @param item - The builder form item (or answer copy).
+ * @returns True if the item is read only.
+ */
+export function isReadOnlyFormItem(values: Record<string, any>, item: ExtendedQuestionnaireItem): boolean {
+  const segments = (item.path ?? '').split('.');
+  for (let length = 2; length <= segments.length; length += 2) {
+    if (getValueByPath(values, segments.slice(0, length).join('.'))?.readOnly) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Checks a required group (FHIR: it must be present in the response, so it needs at least one answered question;
+ * a repeating group needs that in at least `minOccurs` repetitions).
+ * @param values - The current form values.
+ * @param item - The group (or its answer copy).
+ * @returns The error message, or undefined when the group is not required or is answered.
+ */
+export function getRequiredGroupError(
+  values: Record<string, any>,
+  item: ExtendedQuestionnaireItem
+): string | undefined {
+  const definition: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
+  if (definition.type !== 'group' || !definition.required || isReadOnlyFormItem(values, item)) {
+    return undefined;
+  }
+
+  const minOccurs = definition.repeats ? Math.max(1, +definition.minOccurs || 1) : 1;
+  const answered = ((item.answer ?? []) as unknown as ExtendedQuestionnaireItem[][])
+    .filter(Array.isArray)
+    .filter((repetition) => toSubmittedResponseItems(values, repetition).some(hasResponseAnswer)).length;
+  if (answered >= minOccurs) {
+    return undefined;
+  }
+
+  const scope = isPageItem(definition) ? 'on this page' : 'in this group';
+  return minOccurs > 1
+    ? `Answer at least one question ${scope} in ${minOccurs} repetitions`
+    : `Answer at least one question ${scope}`;
+}
+
+function hasResponseAnswer(item: QuestionnaireResponseItem): boolean {
+  return !!item.answer?.length || (item.item ?? []).some(hasResponseAnswer);
 }
 
 /**
@@ -1680,6 +1734,10 @@ export function validateFormAnswers(
     }
 
     if (original.type === 'group') {
+      const groupError = getRequiredGroupError(values, item);
+      if (groupError) {
+        errors[`${item.answerPath}.answer`] = groupError;
+      }
       for (const answerGroup of (item.answer ?? []) as unknown as ExtendedQuestionnaireItem[][]) {
         if (Array.isArray(answerGroup)) {
           answerGroup.forEach(visit);
@@ -1691,7 +1749,9 @@ export function validateFormAnswers(
     const answersPath = `${item.answerPath}.answer`;
     const answers = item.answer ?? [];
 
-    if (original.required && answers.every((answer) => isEmptyAnswerValue(answer.value))) {
+    // A read-only question cannot be answered by the respondent, so it cannot be required of them.
+    const readOnly = isReadOnlyFormItem(values, item);
+    if (original.required && !readOnly && answers.every((answer) => isEmptyAnswerValue(answer.value))) {
       const isRepeatingChoice = (original.type === 'choice' || original.type === 'open-choice') && original.repeats;
       errors[isRepeatingChoice ? answersPath : `${answersPath}.0.value`] = 'This field is required';
       return;

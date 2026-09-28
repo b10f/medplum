@@ -21,6 +21,7 @@ import {
   getLocalAnswerOptionSystem,
   getValueByPath,
   isManualAnswerOption,
+  isPageItem,
   PAGE_ITEM_CONTROL,
 } from './QuestionnaireBuilderV2.utils';
 import type { QuestionnaireForm } from './QuestionnaireFormContext';
@@ -148,6 +149,8 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
   const path = selectedItem.path;
   const type = getValueByPath(form.getValues(), `${path}.type`);
   const isGroup = type === 'group';
+  // A page is a group whose item control makes it a page: the control is fixed, and a page does not repeat.
+  const isPage = isPageItem(getValueByPath(form.getValues(), path));
   const isDisplay = type === 'display';
   const isChoice = type === 'choice' || type === 'open-choice';
   const repeats = getValueByPath(form.getValues(), `${path}.repeats`);
@@ -423,7 +426,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
       <Stack gap="md">
         <Divider />
         <Text size="xl" fw={500}>
-          {getTitle(selectedItem, type)}
+          {isPage ? 'Page' : getTitle(selectedItem, type)}
         </Text>
         <Divider />
 
@@ -487,7 +490,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
           </>
         )}
 
-        {questionnaireItemControl && ['group', 'choice', 'open-choice', 'integer'].includes(type) && (
+        {questionnaireItemControl && !isPage && ['group', 'choice', 'open-choice', 'integer'].includes(type) && (
           <>
             <FormSelect
               form={form}
@@ -497,7 +500,8 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
               data={toSelectData(itemControlOptions)}
               loading={loading}
               disabled={disabled}
-              value={itemControl?.code ?? null}
+              // A group without an item control is rendered as a list.
+              value={itemControl?.code ?? (isGroup ? 'list' : null)}
               onChange={(code) => {
                 const coding = itemControlOptions.find((option: Coding) => option.code === code);
                 form.setFieldValue(
@@ -534,9 +538,10 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
           </>
         )}
 
-        {isChoice && answerOptions.length === 0 ? (
+        {!isGroup && isChoice && answerOptions.length === 0 && (
           <Alert color="blue">No answer options added. Add at least one option for choice questions.</Alert>
-        ) : (
+        )}
+        {!isGroup && !(isChoice && answerOptions.length === 0) && (
           <Card withBorder>
             <Card.Section withBorder inheritPadding py="xs">
               <Text fw={500}>Answer Options</Text>
@@ -682,7 +687,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
           <>
             <FormSwitch form={form} label="Required" context={`${path}.required`} disabled={disabled} />
 
-            {selectedItem.parent?.itemControl?.code !== 'gtable' && type !== 'boolean' && (
+            {!isPage && selectedItem.parent?.itemControl?.code !== 'gtable' && type !== 'boolean' && (
               <FormSwitch
                 form={form}
                 label="Repeats"
@@ -692,7 +697,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
               />
             )}
 
-            {repeats && (
+            {repeats && !isPage && (
               <>
                 {isRequired && (
                   <FormTextInput

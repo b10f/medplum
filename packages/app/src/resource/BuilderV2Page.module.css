@@ -1,0 +1,4 @@
+.panel {
+  height: calc(100dvh - var(--app-shell-header-offset, 0rem) - 164px);
+  min-height: 400px;
+}

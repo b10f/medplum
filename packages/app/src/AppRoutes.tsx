@@ -39,6 +39,7 @@ import { AuditEventPage } from './resource/AuditEventPage';
 import { BlamePage } from './resource/BlamePage';
 import { BotEditor } from './resource/BotEditor';
 import { BuilderPage } from './resource/BuilderPage';
+import { BuilderV2Page } from './resource/BuilderV2Page';
 import { ChecklistPage } from './resource/ChecklistPage';
 import { CommunicationPayloadPage } from './resource/CommunicationPayloadPage';
 import { DeletePage } from './resource/DeletePage';
@@ -49,7 +50,9 @@ import { FormCreatePage } from './resource/FormCreatePage';
 import { HistoryPage } from './resource/HistoryPage';
 import { JsonCreatePage } from './resource/JsonCreatePage';
 import { JsonPage } from './resource/JsonPage';
+import { LoincCreatePage } from './resource/LoincCreatePage';
 import { PreviewPage } from './resource/PreviewPage';
+import { PreviewV2Page } from './resource/PreviewV2Page';
 import { ProfilesPage } from './resource/ProfilesPage';
 import { QuestionnaireBotsPage } from './resource/QuestionnaireBotsPage';
 import { QuestionnaireResponsePage } from './resource/QuestionnaireResponsePage';
@@ -115,6 +118,7 @@ export function AppRoutes(): JSX.Element {
           <Route path="form" element={<FormCreatePage />} />
           <Route path="json" element={<JsonCreatePage />} />
           <Route path="profiles" element={<FormCreatePage />} />
+          <Route path="loinc" element={<LoincCreatePage />} />
         </Route>
         <Route path="/:resourceType/:id" element={<ResourcePage />}>
           <Route index element={<TimelinePage />} />
@@ -124,6 +128,7 @@ export function AppRoutes(): JSX.Element {
           <Route path="blame" element={<BlamePage />} />
           <Route path="bots" element={<QuestionnaireBotsPage />} />
           <Route path="builder" element={<BuilderPage />} />
+          <Route path="builder-v2" element={<BuilderV2Page />} />
           <Route path="checklist" element={<ChecklistPage />} />
           <Route path="delete" element={<DeletePage />} />
           <Route path="details" element={<DetailsPage />} />
@@ -141,6 +146,7 @@ export function AppRoutes(): JSX.Element {
           </Route>
           <Route path="json" element={<JsonPage />} />
           <Route path="preview" element={<PreviewPage />} />
+          <Route path="preview-v2" element={<PreviewV2Page />} />
           <Route path="responses" element={<QuestionnaireResponsePage />} />
           <Route path="report" element={<ReportPage />} />
           <Route path="ranges" element={<ReferenceRangesPage />} />

@@ -4,6 +4,7 @@ import { Button, Paper, ScrollArea, Title } from '@mantine/core';
 import { showNotification } from '@mantine/notifications';
 import { getReferenceString, isGone, normalizeErrorString } from '@medplum/core';
 import type { OperationOutcome, Resource, ResourceType, ServiceRequest } from '@medplum/fhirtypes';
+import type { TabDefinition } from '@medplum/react';
 import {
   Document,
   InfoBarSkeleton,
@@ -23,8 +24,8 @@ import { SpecimenHeader } from '../components/SpecimenHeader';
 import { getPatient, getSpecimen } from '../utils';
 import { cleanResource } from './utils';
 
-function getTabs(resourceType: string): string[] {
-  const result = ['Timeline'];
+function getTabs(resourceType: string): TabDefinition[] {
+  const result: (string | TabDefinition)[] = ['Timeline'];
 
   if (resourceType === 'Bot') {
     result.push('Editor', 'Subscriptions');
@@ -35,7 +36,14 @@ function getTabs(resourceType: string): string[] {
   }
 
   if (resourceType === 'Questionnaire') {
-    result.push('Preview', 'Builder', 'Bots', 'Responses');
+    result.push(
+      'Preview',
+      { label: 'Preview v2', value: 'preview-v2' },
+      'Builder',
+      { label: 'Builder v2', value: 'builder-v2' },
+      'Bots',
+      'Responses'
+    );
   }
 
   if (resourceType === 'ValueSet') {
@@ -72,7 +80,7 @@ function getTabs(resourceType: string): string[] {
     result.push('Accounts', 'Export');
   }
 
-  return result;
+  return result.map((t) => (typeof t === 'string' ? { label: t, value: t.toLowerCase() } : t));
 }
 
 export function ResourcePage(): JSX.Element | null {

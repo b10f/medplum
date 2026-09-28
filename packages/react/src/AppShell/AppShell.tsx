@@ -10,6 +10,7 @@ import { Loading } from '../Loading/Loading';
 import type { AppShellAnnouncement } from './AnnouncementBanners';
 import { AnnouncementBanners } from './AnnouncementBanners';
 import classes from './AppShell.module.css';
+import { AppShellContext } from './AppShellContext';
 import { Header } from './Header';
 import type { NavbarMenu } from './Navbar';
 import { Navbar } from './Navbar';
@@ -174,14 +175,16 @@ export function AppShell(props: AppShellProps): JSX.Element {
   }
 
   return (
-    <MantineAppShell header={headerProp} navbar={navbarProp} padding={0}>
-      {headerComponent}
-      {navbarComponent}
-      <MantineAppShell.Main className={classes.main}>
-        <ErrorBoundary>
-          <Suspense fallback={<Loading />}>{props.children}</Suspense>
-        </ErrorBoundary>
-      </MantineAppShell.Main>
-    </MantineAppShell>
+    <AppShellContext.Provider value={{ navbarOpen, setNavbarOpen: setNavbarOpenWrapper }}>
+      <MantineAppShell header={headerProp} navbar={navbarProp} padding={0}>
+        {headerComponent}
+        {navbarComponent}
+        <MantineAppShell.Main className={classes.main}>
+          <ErrorBoundary>
+            <Suspense fallback={<Loading />}>{props.children}</Suspense>
+          </ErrorBoundary>
+        </MantineAppShell.Main>
+      </MantineAppShell>
+    </AppShellContext.Provider>
   );
 }

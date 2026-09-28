@@ -30,6 +30,7 @@ const options = {
   },
   external: [
     '@mantine/core',
+    '@mantine/form',
     '@mantine/hooks',
     '@mantine/notifications',
     '@mantine/spotlight',

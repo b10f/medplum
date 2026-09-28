@@ -1773,8 +1773,9 @@ export function validateFormAnswers(
 }
 
 /**
- * Converts the answers in the builder form values into a FHIR QuestionnaireResponse. Hidden items, items disabled by
- * enableWhen, unanswered questions and, in a questionnaire with pages, top-level items outside a page are left out.
+ * Converts the answers in the builder form values into a FHIR QuestionnaireResponse. Display items, hidden items, items
+ * disabled by enableWhen, unanswered questions and, in a questionnaire with pages, top-level items outside a page are
+ * left out.
  * Each group repetition is a separate item with the group's linkId; follow-up items are answered under their answer.
  * @param values - The current form values (the questionnaire with its answers).
  * @returns The QuestionnaireResponse.
@@ -1805,11 +1806,12 @@ function toSubmittedResponseItems(
       return [];
     }
 
-    const base = { linkId: item.linkId, ...(original.text && { text: original.text }) };
-
+    // Display text is not answered, so it has no response item.
     if (original.type === 'display') {
-      return [base];
+      return [];
     }
+
+    const base = { linkId: item.linkId, ...(original.text && { text: original.text }) };
 
     if (original.type === 'group') {
       return ((item.answer ?? []) as unknown as ExtendedQuestionnaireItem[][])

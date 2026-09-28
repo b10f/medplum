@@ -546,6 +546,30 @@ describe('QuestionnaireBuilderV2.utils', () => {
       ]);
     });
 
+    test('display items are not in the response, and do not make a group present', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          { linkId: 'intro', type: 'display', text: 'Welcome' },
+          {
+            linkId: 'group',
+            type: 'group',
+            item: [
+              { linkId: 'note', type: 'display', text: 'A note' },
+              { linkId: 'q', type: 'string' },
+            ],
+          },
+        ],
+      });
+      expect(toFhirQuestionnaireResponse(values).item).toStrictEqual([]);
+
+      values.item[1].answer[0][1].answer[0].value = 'answer';
+      expect(toFhirQuestionnaireResponse(values).item).toStrictEqual([
+        { linkId: 'group', item: [{ linkId: 'q', answer: [{ valueString: 'answer' }] }] },
+      ]);
+    });
+
     test('unanswered questions are left out and numbers are typed', () => {
       const values = prefill();
       values.item[0].answer = [{ value: '  ' }];

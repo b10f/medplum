@@ -25,9 +25,11 @@ import {
   IconChevronRight,
   IconCornerDownRight,
   IconEyeOff,
-  IconFile,
-  IconFolder,
+  IconFiles,
+  IconFileText,
+  IconFolders,
   IconGripVertical,
+  IconHelp,
 } from '@tabler/icons-react';
 import cx from 'clsx';
 import type { CSSProperties, JSX, MouseEvent } from 'react';
@@ -267,7 +269,7 @@ function TreeNodeContent(props: TreeNodeContentProps): JSX.Element {
         <span className={classes.chevron} />
       )}
       {isFollowUp && <IconCornerDownRight size={14} className={classes.followUpIcon} aria-label="Follow-up item" />}
-      {isGroup ? <IconFolder size={16} /> : <IconFile size={16} />}
+      <ItemTypeIcon item={item} />
       <span className={cx(classes.label, notShown && classes.notShown)}>{title}</span>
       {notShown && (
         <Tooltip label="Not shown: outside a page. Drag it into a page to show it." withArrow>
@@ -277,4 +279,24 @@ function TreeNodeContent(props: TreeNodeContentProps): JSX.Element {
       {actions}
     </Group>
   );
+}
+
+/**
+ * The item's icon, the same as in the add item menu.
+ * @param props - The item.
+ * @param props.item - The builder form item.
+ * @returns The icon.
+ */
+function ItemTypeIcon(props: { readonly item: ExtendedQuestionnaireItem }): JSX.Element {
+  const { item } = props;
+  if (isPageItem(item)) {
+    return <IconFiles size={16} />;
+  }
+  if (item.type === 'group') {
+    return <IconFolders size={16} />;
+  }
+  if (item.type === 'display') {
+    return <IconFileText size={16} />;
+  }
+  return <IconHelp size={16} />;
 }

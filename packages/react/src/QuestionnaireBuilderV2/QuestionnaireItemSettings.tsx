@@ -541,7 +541,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
         {!isGroup && isChoice && answerOptions.length === 0 && (
           <Alert color="blue">No answer options added. Add at least one option for choice questions.</Alert>
         )}
-        {!isGroup && !(isChoice && answerOptions.length === 0) && (
+        {!isGroup && !isDisplay && !(isChoice && answerOptions.length === 0) && (
           <Card withBorder>
             <Card.Section withBorder inheritPadding py="xs">
               <Text fw={500}>Answer Options</Text>

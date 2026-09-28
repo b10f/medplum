@@ -29,6 +29,9 @@ const options = {
     'import.meta.env.GOOGLE_CLIENT_ID': `"${process.env.GOOGLE_CLIENT_ID}"`,
   },
   external: [
+    '@dnd-kit/core',
+    '@dnd-kit/sortable',
+    '@dnd-kit/utilities',
     '@mantine/core',
     '@mantine/form',
     '@mantine/hooks',

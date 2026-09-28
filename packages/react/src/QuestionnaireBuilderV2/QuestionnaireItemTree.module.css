@@ -9,9 +9,29 @@
   background-color: var(--mantine-color-lime-1);
 }
 
+.dragHandle {
+  display: flex;
+  align-items: center;
+  cursor: grab;
+  color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-1));
+}
+
+.placeholder {
+  opacity: 0.5;
+  outline: 1px dashed var(--mantine-color-blue-5);
+}
+
+.overlay {
+  cursor: grabbing;
+  border-radius: var(--mantine-radius-sm);
+  background-color: light-dark(var(--mantine-color-white), var(--mantine-color-dark-5));
+  box-shadow: var(--mantine-shadow-sm);
+}
+
 .chevron {
   display: flex;
   align-items: center;
+  width: 14px;
 }
 
 .label {
@@ -20,4 +40,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.notShown {
+  color: var(--mantine-color-dimmed);
+}
+
+.notShownIcon {
+  flex-shrink: 0;
+  color: var(--mantine-color-orange-6);
 }

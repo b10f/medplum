@@ -175,6 +175,140 @@ export function rebuildFormItems(values: Record<string, any>): ExtendedQuestionn
   );
 }
 
+/** A builder form item as a row of the item tree, which is rendered (and sorted) as one flat list. */
+export interface FlattenedFormItem {
+  readonly item: ExtendedQuestionnaireItem;
+  readonly parentLinkId: string | undefined;
+  readonly depth: number;
+  /** The item's index among its siblings. */
+  readonly index: number;
+  readonly siblings: ExtendedQuestionnaireItem[];
+}
+
+/** Where a dragged item lands: its depth in the tree, its new parent group and its index among that group's items. */
+export interface FormItemDropTarget {
+  readonly depth: number;
+  readonly parentLinkId: string | undefined;
+  readonly index: number;
+}
+
+/**
+ * Flattens builder form items into tree rows, in display order. Children are included only for expanded groups.
+ * @param items - The builder form items.
+ * @param expanded - The expanded state of the groups, by linkId.
+ * @param collapsedLinkId - An item whose children are left out, e.g. the one being dragged.
+ * @param parentLinkId - The linkId of the items' parent group (for recursion).
+ * @param depth - The items' depth (for recursion).
+ * @returns The tree rows.
+ */
+export function flattenFormItems(
+  items: ExtendedQuestionnaireItem[],
+  expanded: Record<string, boolean>,
+  collapsedLinkId?: string,
+  parentLinkId?: string,
+  depth = 0
+): FlattenedFormItem[] {
+  return items.flatMap((item, index) => {
+    const row: FlattenedFormItem = { item, parentLinkId, depth, index, siblings: items };
+    if (item.type !== 'group' || !expanded[item.linkId] || item.linkId === collapsedLinkId) {
+      return [row];
+    }
+    return [row, ...flattenFormItems(item.item ?? [], expanded, collapsedLinkId, item.linkId, depth + 1)];
+  });
+}
+
+/**
+ * Projects where a dragged tree row lands. The row it is dragged over sets the position; the horizontal drag offset
+ * sets the depth, within what the neighbouring rows allow: only groups take children, and pages stay top level.
+ * @param rows - The tree rows, without the dragged item's children.
+ * @param activeLinkId - The linkId of the dragged item.
+ * @param overLinkId - The linkId of the row it is dragged over.
+ * @param offsetX - The horizontal drag offset, in pixels.
+ * @param indentWidth - The indent of one tree level, in pixels.
+ * @returns The drop target, or undefined when either row is not in the tree.
+ */
+export function getFormItemDropTarget(
+  rows: FlattenedFormItem[],
+  activeLinkId: string,
+  overLinkId: string,
+  offsetX: number,
+  indentWidth: number
+): FormItemDropTarget | undefined {
+  const activeIndex = rows.findIndex((row) => row.item.linkId === activeLinkId);
+  const overIndex = rows.findIndex((row) => row.item.linkId === overLinkId);
+  if (activeIndex < 0 || overIndex < 0) {
+    return undefined;
+  }
+
+  const active = rows[activeIndex];
+  const reordered = [...rows];
+  reordered.splice(overIndex, 0, ...reordered.splice(activeIndex, 1));
+  const previous = reordered[overIndex - 1] as FlattenedFormItem | undefined;
+  const next = reordered[overIndex + 1] as FlattenedFormItem | undefined;
+
+  let maxDepth = 0;
+  if (previous && !isPageItem(active.item)) {
+    maxDepth = previous.item.type === 'group' ? previous.depth + 1 : previous.depth;
+  }
+  const minDepth = Math.min(next?.depth ?? 0, maxDepth);
+  const projectedDepth = active.depth + Math.round(offsetX / indentWidth);
+  const depth = Math.min(Math.max(projectedDepth, minDepth), maxDepth);
+
+  let parentLinkId: string | undefined;
+  if (depth > 0 && previous) {
+    if (depth === previous.depth) {
+      parentLinkId = previous.parentLinkId;
+    } else if (depth > previous.depth) {
+      parentLinkId = previous.item.linkId;
+    } else {
+      parentLinkId = reordered
+        .slice(0, overIndex)
+        .reverse()
+        .find((row) => row.depth === depth)?.parentLinkId;
+    }
+  }
+
+  const index = reordered.slice(0, overIndex).filter((row) => row.parentLinkId === parentLinkId).length;
+  return { depth, parentLinkId, index };
+}
+
+/**
+ * Moves a builder form item to a new parent group and position, which can be anywhere in the tree.
+ * @param values - The current builder form values.
+ * @param linkId - The linkId of the item to move.
+ * @param target - The new parent group and index among its items.
+ * @returns The rebuilt builder form items.
+ */
+export function moveFormItem(
+  values: Record<string, any>,
+  linkId: string,
+  target: Pick<FormItemDropTarget, 'parentLinkId' | 'index'>
+): ExtendedQuestionnaireItem[] {
+  const moved = findFormItemByLinkId(values.item ?? [], linkId);
+  if (!moved || (target.parentLinkId && findFormItemByLinkId(moved.item ?? [], target.parentLinkId))) {
+    return values.item ?? [];
+  }
+
+  const remove = (items: ExtendedQuestionnaireItem[]): ExtendedQuestionnaireItem[] =>
+    items
+      .filter((item) => item.linkId !== linkId)
+      .map((item) => (item.item?.length ? { ...item, item: remove(item.item) } : item));
+
+  const insert = (
+    items: ExtendedQuestionnaireItem[],
+    parentLinkId: string | undefined
+  ): ExtendedQuestionnaireItem[] => {
+    if (parentLinkId === target.parentLinkId) {
+      return [...items.slice(0, target.index), moved, ...items.slice(target.index)];
+    }
+    return items.map((item) =>
+      item.type === 'group' ? { ...item, item: insert(item.item ?? [], item.linkId) } : item
+    );
+  };
+
+  return rebuildFormItems({ ...values, item: insert(remove(values.item ?? []), undefined) });
+}
+
 /**
  * Converts the preview answers of builder form items into response items in the shape
  * fromFhirQuestionnaireItem reads back: one answer per value, and one response item per group repetition.

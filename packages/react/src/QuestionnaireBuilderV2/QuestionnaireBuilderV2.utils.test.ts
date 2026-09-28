@@ -5,14 +5,17 @@ import {
   createManualAnswerOption,
   evaluateEnableWhen,
   findFormItemByLinkId,
+  flattenFormItems,
   fromFhirQuestionnaireItem,
   getAnswerOptionProblems,
+  getFormItemDropTarget,
   getLocalAnswerOptionSystem,
   getPageItems,
   getValueByPath,
   isHorizontalChoiceLayout,
   isManualAnswerOption,
   isPageItem,
+  moveFormItem,
   PAGE_ITEM_CONTROL,
   rebuildFormItems,
   toFhirAnswerOptionsFromValueSet,
@@ -740,6 +743,136 @@ describe('QuestionnaireBuilderV2.utils', () => {
         false
       );
       expect(isManualAnswerOption({ value: { code: 'LA33-6', system: 'http://loinc.org' } } as any, local)).toBe(false);
+    });
+  });
+
+  describe('drag and drop', () => {
+    const pageExtension = {
+      url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl',
+      valueCodeableConcept: { coding: [{ system: 'http://hl7.org/fhir/questionnaire-item-control', code: 'page' }] },
+    };
+    const INDENT = 24;
+
+    function createValues(): Record<string, any> {
+      return toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          { linkId: 'orphan', type: 'string', text: 'Orphan' },
+          {
+            linkId: 'p1',
+            type: 'group',
+            extension: [pageExtension],
+            item: [
+              { linkId: 'q1', type: 'string' },
+              { linkId: 'g1', type: 'group', item: [{ linkId: 'q2', type: 'string' }] },
+            ],
+          },
+          { linkId: 'p2', type: 'group', extension: [pageExtension], item: [{ linkId: 'q3', type: 'string' }] },
+        ],
+      });
+    }
+
+    const allExpanded = { p1: true, g1: true, p2: true };
+    const toLinkIds = (items: any[]): any[] =>
+      items.map((item) => (item.item?.length ? [item.linkId, toLinkIds(item.item)] : item.linkId));
+
+    test('flattenFormItems lists expanded groups only, without the collapsed item', () => {
+      const values = createValues();
+      const rows = flattenFormItems(values.item, allExpanded);
+      expect(rows.map((row) => `${row.item.linkId}@${row.depth}:${row.parentLinkId ?? ''}`)).toStrictEqual([
+        'orphan@0:',
+        'p1@0:',
+        'q1@1:p1',
+        'g1@1:p1',
+        'q2@2:g1',
+        'p2@0:',
+        'q3@1:p2',
+      ]);
+      expect(flattenFormItems(values.item, { p1: true }, 'p1').map((row) => row.item.linkId)).toStrictEqual([
+        'orphan',
+        'p1',
+        'p2',
+      ]);
+    });
+
+    test('getFormItemDropTarget moves a top-level question into a page', () => {
+      const rows = flattenFormItems(createValues().item, allExpanded);
+      // Dragged down, a row lands below the row it is over: right under the page header, or after q1.
+      expect(getFormItemDropTarget(rows, 'orphan', 'p1', 0, INDENT)).toStrictEqual({
+        depth: 1,
+        parentLinkId: 'p1',
+        index: 0,
+      });
+      expect(getFormItemDropTarget(rows, 'orphan', 'q1', 0, INDENT)).toStrictEqual({
+        depth: 1,
+        parentLinkId: 'p1',
+        index: 1,
+      });
+    });
+
+    test('getFormItemDropTarget uses the horizontal offset for the depth', () => {
+      const rows = flattenFormItems(createValues().item, allExpanded);
+      // Below q2, the last item of g1 and of p1: into g1, p1 or the top level.
+      expect(getFormItemDropTarget(rows, 'q1', 'q2', 0, INDENT)).toStrictEqual({
+        depth: 1,
+        parentLinkId: 'p1',
+        index: 1,
+      });
+      expect(getFormItemDropTarget(rows, 'q1', 'q2', INDENT, INDENT)).toStrictEqual({
+        depth: 2,
+        parentLinkId: 'g1',
+        index: 1,
+      });
+      expect(getFormItemDropTarget(rows, 'q1', 'q2', -INDENT, INDENT)).toStrictEqual({
+        depth: 0,
+        parentLinkId: undefined,
+        index: 2,
+      });
+      // Only groups take children.
+      expect(getFormItemDropTarget(rows, 'q1', 'q2', INDENT * 5, INDENT)?.depth).toBe(2);
+      // Dragged up above q2, the first item of g1, it can only go into g1.
+      expect(getFormItemDropTarget(rows, 'q3', 'q2', -INDENT * 5, INDENT)).toStrictEqual({
+        depth: 2,
+        parentLinkId: 'g1',
+        index: 0,
+      });
+    });
+
+    test('getFormItemDropTarget keeps pages top level', () => {
+      const rows = flattenFormItems(createValues().item, allExpanded, 'p2');
+      expect(getFormItemDropTarget(rows, 'p2', 'q1', INDENT * 3, INDENT)).toStrictEqual({
+        depth: 0,
+        parentLinkId: undefined,
+        index: 2,
+      });
+      expect(getFormItemDropTarget(rows, 'p2', 'orphan', INDENT * 3, INDENT)).toStrictEqual({
+        depth: 0,
+        parentLinkId: undefined,
+        index: 0,
+      });
+    });
+
+    test('moveFormItem moves an item across groups and rebuilds paths', () => {
+      const values = createValues();
+      const moved = moveFormItem(values, 'orphan', { parentLinkId: 'g1', index: 1 });
+      expect(toLinkIds(moved)).toStrictEqual([
+        ['p1', ['q1', ['g1', ['q2', 'orphan']]]],
+        ['p2', ['q3']],
+      ]);
+      const orphan = findFormItemByLinkId(moved, 'orphan');
+      expect(orphan?.path).toBe('item.0.item.1.item.1');
+      expect(orphan?.parent?.linkId).toBe('g1');
+    });
+
+    test('moveFormItem reorders within the same group', () => {
+      const moved = moveFormItem(createValues(), 'g1', { parentLinkId: 'p1', index: 0 });
+      expect(toLinkIds(moved)).toStrictEqual(['orphan', ['p1', [['g1', ['q2']], 'q1']], ['p2', ['q3']]]);
+    });
+
+    test('moveFormItem does not move a group into itself', () => {
+      const values = createValues();
+      expect(moveFormItem(values, 'p1', { parentLinkId: 'g1', index: 0 })).toBe(values.item);
     });
   });
 });

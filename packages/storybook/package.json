@@ -48,6 +48,9 @@
     "preview": "vite preview --outDir storybook-static --port 6007"
   },
   "devDependencies": {
+    "@dnd-kit/core": "6.3.1",
+    "@dnd-kit/sortable": "10.0.0",
+    "@dnd-kit/utilities": "3.2.2",
     "@mantine/core": "8.3.18",
     "@mantine/form": "8.3.18",
     "@mantine/notifications": "8.3.18",

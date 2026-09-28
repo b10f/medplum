@@ -30,13 +30,19 @@ import { Fragment, useEffect, useState } from 'react';
 import { Form } from '../Form/Form';
 import { SubmitButton } from '../Form/SubmitButton';
 import { QuestionnaireFormStepper } from '../QuestionnaireForm/QuestionnaireFormStepper';
-import type { ExtendedQuestionnaireItem, ExtendedQuestionnaireItemAnswerOption } from './QuestionnaireBuilderV2.utils';
+import type {
+  ExtendedQuestionnaireItem,
+  ExtendedQuestionnaireItemAnswer,
+  ExtendedQuestionnaireItemAnswerOption,
+} from './QuestionnaireBuilderV2.utils';
 import {
   evaluateEnableWhen,
   findRootItem,
   getPageItems,
   getValueByPath,
+  isEmptyAnswerValue,
   isHorizontalChoiceLayout,
+  rebuildFollowUpAnswers,
   validateAnswerValue,
   validateFormAnswers,
 } from './QuestionnaireBuilderV2.utils';
@@ -283,10 +289,23 @@ function PreviewItem(props: PreviewItemProps): JSX.Element | null {
     );
   }
 
+  const followUpProps = { selectedItem, addAnswer, ignoreValidation };
+
   if (isChoiceType(original.type) && original.repeats) {
     return (
       <PreviewSelectedItem item={item} selectedItem={selectedItem} index={index}>
-        <PreviewRepeatingChoice item={item} original={original} answerIndex={0} addAnswer={addAnswer} />
+        <Stack gap="md">
+          <PreviewRepeatingChoice item={item} original={original} answerIndex={0} addAnswer={addAnswer} />
+          {/* Each selected option has its own follow-up items. */}
+          {(item.answer ?? []).map((answer, answerIndex) => (
+            <PreviewFollowUpItems
+              key={`${item.linkId}-${answer.value?.code ?? answerIndex}`}
+              answer={answer}
+              label={answer.value?.display}
+              {...followUpProps}
+            />
+          ))}
+        </Stack>
       </PreviewSelectedItem>
     );
   }
@@ -294,7 +313,7 @@ function PreviewItem(props: PreviewItemProps): JSX.Element | null {
   return (
     <PreviewSelectedItem item={item} selectedItem={selectedItem} index={index}>
       <Stack gap="md">
-        {item.answer.map((_answer, answerIndex: number) => {
+        {item.answer.map((answer, answerIndex: number) => {
           const answerProps: PreviewAnswerProps = {
             item,
             original,
@@ -302,23 +321,85 @@ function PreviewItem(props: PreviewItemProps): JSX.Element | null {
             addAnswer,
             ignoreValidation,
           };
-          const key = `${item.linkId}-${answerIndex}`;
-
-          if (['string', 'integer', 'decimal', 'quantity', 'url'].includes(original.type)) {
-            return <PreviewInput key={key} {...answerProps} />;
-          } else if (original.type === 'boolean') {
-            return <PreviewBoolean key={key} {...answerProps} />;
-          } else if (original.type === 'text') {
-            return <PreviewTextarea key={key} {...answerProps} />;
-          } else if (['date', 'dateTime', 'time'].includes(original.type)) {
-            return <PreviewDateTime key={key} {...answerProps} />;
-          } else if (isChoiceType(original.type)) {
-            return <PreviewChoice key={key} {...answerProps} />;
-          }
-          return null;
+          return (
+            <Fragment key={`${item.linkId}-${answerIndex}`}>
+              <PreviewAnswer {...answerProps} />
+              <PreviewFollowUpItems answer={answer} {...followUpProps} />
+            </Fragment>
+          );
         })}
       </Stack>
     </PreviewSelectedItem>
+  );
+}
+
+function PreviewAnswer(props: PreviewAnswerProps): JSX.Element | null {
+  const type = props.original.type;
+  if (['string', 'integer', 'decimal', 'quantity', 'url'].includes(type)) {
+    return <PreviewInput {...props} />;
+  } else if (type === 'boolean') {
+    return <PreviewBoolean {...props} />;
+  } else if (type === 'text') {
+    return <PreviewTextarea {...props} />;
+  } else if (['date', 'dateTime', 'time'].includes(type)) {
+    return <PreviewDateTime {...props} />;
+  } else if (isChoiceType(type)) {
+    return <PreviewChoice {...props} />;
+  }
+  return null;
+}
+
+interface PreviewFollowUpItemsProps {
+  readonly answer: ExtendedQuestionnaireItemAnswer;
+  /** Names the answer the items belong to, when a question has several answers. */
+  readonly label?: string;
+  readonly selectedItem: ExtendedQuestionnaireItem | undefined;
+  readonly addAnswer: AddAnswer;
+  readonly ignoreValidation?: boolean;
+}
+
+/**
+ * The follow-up items of one answer of a question, shown once the question is answered.
+ * @param props - The PreviewFollowUpItems props.
+ * @returns The PreviewFollowUpItems React node, or null when none are shown.
+ */
+function PreviewFollowUpItems(props: PreviewFollowUpItemsProps): JSX.Element | null {
+  const { answer, label, selectedItem, addAnswer, ignoreValidation } = props;
+  const form = useQuestionnaireFormContext();
+  const values = form.getValues();
+
+  if (isEmptyAnswerValue(answer.value)) {
+    return null;
+  }
+
+  const shownItems = (answer.item ?? []).filter((child) => {
+    const original: ExtendedQuestionnaireItem | undefined = getValueByPath(values, child.path);
+    return original && !original.hidden && evaluateEnableWhen(values, child);
+  });
+
+  if (shownItems.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={classes.groupAnswers}>
+      {label && (
+        <Text size="sm" c="dimmed" mb="xs">
+          {label}
+        </Text>
+      )}
+      {shownItems.map((child, childIndex) => (
+        <PreviewItem
+          key={`${child.answerPath}-${childIndex}`}
+          item={child}
+          original={getValueByPath(values, child.path)}
+          selectedItem={selectedItem}
+          index={childIndex}
+          addAnswer={addAnswer}
+          ignoreValidation={ignoreValidation}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -436,6 +517,7 @@ function PreviewQuestion(props: PreviewQuestionProps): JSX.Element {
       const newArray = [...answerArray];
       newArray.splice(index, 1);
       form.setFieldValue(`${path}.answer`, newArray);
+      rebuildFollowUpAnswers(form, original);
     }
   };
 
@@ -712,10 +794,16 @@ function PreviewRepeatingChoice(props: PreviewAnswerProps): JSX.Element {
   const label = <PreviewQuestion item={item} original={original} index={0} addAnswer={addAnswer} />;
 
   const setSelectedCodes = (codes: string[]): void => {
+    // Options that stay selected keep their answers, including their follow-up items.
     form.setFieldValue(
       answersPath,
-      codes.map((code) => ({ value: findOption(answerOption, code) })).filter((answer) => answer.value)
+      codes
+        .map(
+          (code) => answers.find((answer) => answer.value?.code === code) ?? { value: findOption(answerOption, code) }
+        )
+        .filter((answer) => answer.value)
     );
+    rebuildFollowUpAnswers(form, original);
   };
 
   if (original.itemControl?.code === 'drop-down') {

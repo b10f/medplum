@@ -17,8 +17,10 @@ import { useCallback, useState } from 'react';
 import { killEvent } from '../utils/dom';
 import type { ExtendedQuestionnaireItem } from './QuestionnaireBuilderV2.utils';
 import {
+  createFollowUpEnableWhen,
   fromFhirQuestionnaireItem,
   getValueByPath,
+  isQuestionItem,
   PAGE_ITEM_CONTROL,
   rebuildFormItems,
   toFhirQuestionnaireItem,
@@ -27,6 +29,7 @@ import { useQuestionnaireFormContext } from './QuestionnaireFormContext';
 import { QuestionnaireLoincSearchDrawer } from './QuestionnaireLoincSearch';
 
 export interface QuestionnaireGroupMenuProps {
+  /** The group, or the question to add follow-up items to; the questionnaire itself when undefined. */
   readonly item?: ExtendedQuestionnaireItem;
   readonly onAddItem?: (item: ExtendedQuestionnaireItem) => void;
   readonly variant?: 'icon' | 'action';
@@ -37,6 +40,7 @@ export function QuestionnaireGroupMenu(props: QuestionnaireGroupMenuProps): JSX.
   const form = useQuestionnaireFormContext();
   const [loincSearchType, setLoincSearchType] = useState<'question' | 'panel'>('question');
   const [loincSearchOpened, setLoincSearchOpened] = useState(false);
+  const isFollowUp = isQuestionItem(item);
 
   const addItem = useCallback(
     (
@@ -54,15 +58,15 @@ export function QuestionnaireGroupMenu(props: QuestionnaireGroupMenuProps): JSX.
       const extendedQuestionnaireItem = fhirItem ?? toFhirQuestionnaireItem(newItem);
       const currentItems = getValueByPath(form.getValues(), path) || [];
 
-      const updated = [
-        ...currentItems,
-        fromFhirQuestionnaireItem(extendedQuestionnaireItem, null, currentItems.length),
-      ];
+      const added = fromFhirQuestionnaireItem(extendedQuestionnaireItem, null, currentItems.length);
+      if (context && isQuestionItem(context)) {
+        added.enableWhen = [createFollowUpEnableWhen(context)];
+      }
 
-      form.setFieldValue(path, updated);
+      form.setFieldValue(path, [...currentItems, added]);
 
-      if (context?.type === 'group') {
-        // to rebuild the parent item reference chain
+      if (context) {
+        // to rebuild the parent item reference chain, and give each answer of a question its follow-up items
         form.setFieldValue('item', rebuildFormItems(form.getValues()));
       }
 
@@ -101,7 +105,7 @@ export function QuestionnaireGroupMenu(props: QuestionnaireGroupMenuProps): JSX.
               addItem('question', item);
             }}
           >
-            Add Question
+            {isFollowUp ? 'Add Follow-up Question' : 'Add Question'}
           </Menu.Item>
           <Menu.Item
             leftSection={<IconFileText size={16} />}
@@ -112,15 +116,17 @@ export function QuestionnaireGroupMenu(props: QuestionnaireGroupMenuProps): JSX.
           >
             Add Display Text
           </Menu.Item>
-          <Menu.Item
-            leftSection={<IconFolders size={16} />}
-            onClick={(e) => {
-              e.stopPropagation();
-              addItem('group', item);
-            }}
-          >
-            Add Question Group
-          </Menu.Item>
+          {!isFollowUp && (
+            <Menu.Item
+              leftSection={<IconFolders size={16} />}
+              onClick={(e) => {
+                e.stopPropagation();
+                addItem('group', item);
+              }}
+            >
+              Add Question Group
+            </Menu.Item>
+          )}
           {!item && (
             <Menu.Item
               leftSection={<IconFiles size={16} />}
@@ -143,16 +149,18 @@ export function QuestionnaireGroupMenu(props: QuestionnaireGroupMenuProps): JSX.
           >
             Add LOINC Question
           </Menu.Item>
-          <Menu.Item
-            leftSection={<IconLayoutGrid size={16} />}
-            onClick={(e) => {
-              e.stopPropagation();
-              setLoincSearchType('panel');
-              setLoincSearchOpened(true);
-            }}
-          >
-            Add LOINC Panel
-          </Menu.Item>
+          {!isFollowUp && (
+            <Menu.Item
+              leftSection={<IconLayoutGrid size={16} />}
+              onClick={(e) => {
+                e.stopPropagation();
+                setLoincSearchType('panel');
+                setLoincSearchOpened(true);
+              }}
+            >
+              Add LOINC Panel
+            </Menu.Item>
+          )}
         </Menu.Dropdown>
       </Menu>
       {/* The drawer is portalled, but React still bubbles its events to the tree row this menu sits in. */}

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { Questionnaire, QuestionnaireItem, QuestionnaireResponse } from '@medplum/fhirtypes';
 import {
+  createFollowUpEnableWhen,
   createManualAnswerOption,
   evaluateEnableWhen,
   findFormItemByLinkId,
@@ -12,6 +13,8 @@ import {
   getLocalAnswerOptionSystem,
   getPageItems,
   getValueByPath,
+  hasFollowUpItems,
+  isHelpItem,
   isHorizontalChoiceLayout,
   isManualAnswerOption,
   isPageItem,
@@ -743,6 +746,232 @@ describe('QuestionnaireBuilderV2.utils', () => {
         false
       );
       expect(isManualAnswerOption({ value: { code: 'LA33-6', system: 'http://loinc.org' } } as any, local)).toBe(false);
+    });
+  });
+
+  describe('help items', () => {
+    const helpExtension = {
+      url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl',
+      valueCodeableConcept: {
+        coding: [{ system: 'http://hl7.org/fhir/questionnaire-item-control', code: 'help', display: 'Help-Button' }],
+      },
+    };
+
+    test('help is recognised by its item control and keeps its linkId', () => {
+      const helpItem: QuestionnaireItem = {
+        linkId: 'age-hint',
+        type: 'display',
+        text: 'In years',
+        extension: [helpExtension],
+      };
+      expect(isHelpItem(helpItem)).toBe(true);
+      expect(isHelpItem({ linkId: 'q_help', type: 'display', text: 'Not help' })).toBe(false);
+
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [{ linkId: 'age', type: 'integer', item: [helpItem] }],
+      });
+      expect(values.item[0].help).toBe('In years');
+      expect(values.item[0].item).toStrictEqual([]);
+
+      const exported = toFhirQuestionnaire(values);
+      expect(exported.item?.[0].item).toStrictEqual([
+        {
+          ...helpItem,
+          extension: [
+            { ...helpExtension, valueCodeableConcept: { ...helpExtension.valueCodeableConcept, text: 'Help-Button' } },
+          ],
+        },
+      ]);
+    });
+
+    test('new help text gets a _help linkId', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [{ linkId: 'q', type: 'string' }],
+      });
+      values.item[0].help = 'Some help';
+      expect(toFhirQuestionnaire(values).item?.[0].item?.[0].linkId).toBe('q_help');
+    });
+  });
+
+  describe('follow-up items', () => {
+    const questionnaire: Questionnaire = {
+      resourceType: 'Questionnaire',
+      id: 'smoking',
+      status: 'active',
+      item: [
+        {
+          linkId: 'smoke',
+          type: 'boolean',
+          text: 'Do you smoke?',
+          item: [
+            {
+              linkId: 'how-many',
+              type: 'integer',
+              text: 'How many per day?',
+              enableWhen: [{ question: 'smoke', operator: '=', answerBoolean: true }],
+            },
+          ],
+        },
+        {
+          linkId: 'meds',
+          type: 'choice',
+          text: 'Which medications?',
+          repeats: true,
+          answerOption: [
+            { valueCoding: { system: 'x', code: 'a', display: 'Aspirin' } },
+            { valueCoding: { system: 'x', code: 'b', display: 'Ibuprofen' } },
+          ],
+          item: [
+            {
+              linkId: 'dose',
+              type: 'string',
+              text: 'Dose',
+              enableWhen: [{ question: 'meds', operator: '=', answerCoding: { system: 'x', code: 'a' } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const response: QuestionnaireResponse = {
+      resourceType: 'QuestionnaireResponse',
+      status: 'completed',
+      item: [
+        {
+          linkId: 'smoke',
+          text: 'Do you smoke?',
+          answer: [
+            {
+              valueBoolean: true,
+              item: [{ linkId: 'how-many', text: 'How many per day?', answer: [{ valueInteger: 10 }] }],
+            },
+          ],
+        },
+        {
+          linkId: 'meds',
+          text: 'Which medications?',
+          answer: [
+            {
+              valueCoding: { system: 'x', code: 'a', display: 'Aspirin' },
+              item: [{ linkId: 'dose', text: 'Dose', answer: [{ valueString: '100 mg' }] }],
+            },
+            { valueCoding: { system: 'x', code: 'b', display: 'Ibuprofen' } },
+          ],
+        },
+      ],
+    };
+
+    function prefill(): Record<string, any> {
+      return {
+        ...questionnaire,
+        item: (questionnaire.item ?? []).map((item, index) =>
+          fromFhirQuestionnaireItem(item, questionnaire, index, response.item)
+        ),
+      };
+    }
+
+    test('follow-up items are kept on save', () => {
+      const exported = toFhirQuestionnaire(toFormValues(questionnaire));
+      expect(exported.item?.[0].item?.[0]).toMatchObject({
+        linkId: 'how-many',
+        type: 'integer',
+        enableWhen: [{ question: 'smoke', operator: '=', answerBoolean: true }],
+      });
+      expect(hasFollowUpItems(toFormValues(questionnaire).item[0])).toBe(true);
+    });
+
+    test('each answer has its own follow-up items, prefilled from answer.item', () => {
+      const values = prefill();
+      const meds = values.item[1];
+      expect(meds.item[0].path).toBe('item.1.item.0');
+      expect(meds.answer).toHaveLength(2);
+      expect(meds.answer[0].item[0].answerPath).toBe('item.1.answer.0.item.0');
+      expect(meds.answer[0].item[0].answer).toStrictEqual([{ value: '100 mg' }]);
+      expect(meds.answer[1].item[0].answerPath).toBe('item.1.answer.1.item.0');
+    });
+
+    test('a condition on the question is evaluated against the answer the follow-up item belongs to', () => {
+      const values = prefill();
+      const meds = values.item[1];
+      expect(evaluateEnableWhen(values, meds.answer[0].item[0])).toBe(true);
+      expect(evaluateEnableWhen(values, meds.answer[1].item[0])).toBe(false);
+
+      values.item[0].answer[0].value = false;
+      expect(evaluateEnableWhen(values, values.item[0].answer[0].item[0])).toBe(false);
+    });
+
+    test('follow-up answers are written under their answer', () => {
+      const result = toFhirQuestionnaireResponse(prefill());
+      expect(result.item).toStrictEqual(response.item);
+    });
+
+    test('rebuildFormItems keeps follow-up answers', () => {
+      const values = prefill();
+      const rebuilt = rebuildFormItems(values);
+      expect(rebuilt[1].answer[0].item?.[0].answer).toStrictEqual([{ value: '100 mg' }]);
+      expect(rebuilt[0].answer[0].item?.[0].answer).toStrictEqual([{ value: 10 }]);
+    });
+
+    test('follow-up items are validated when their answer is given', () => {
+      const values = prefill();
+      values.item[0].item[0].minValue = 20;
+      expect(validateFormAnswers(values)).toStrictEqual({
+        'item.0.answer.0.item.0.answer.0.value': 'How many per day? must be at least 20',
+      });
+      values.item[0].answer[0].value = false;
+      expect(validateFormAnswers(values)).toStrictEqual({});
+    });
+
+    test('a new follow-up item is shown for "yes" to a boolean question, and for any answer otherwise', () => {
+      const values = toFormValues(questionnaire);
+      expect(createFollowUpEnableWhen(values.item[0])).toMatchObject({ operator: '=', answer: true });
+      expect(createFollowUpEnableWhen(values.item[1])).toMatchObject({ operator: 'exists', answer: true });
+
+      values.item[1].item[0].enableWhen = [createFollowUpEnableWhen(values.item[1])];
+      expect(toFhirQuestionnaire(values).item?.[1].item?.[0].enableWhen).toStrictEqual([
+        { question: 'meds', operator: 'exists', answerBoolean: true },
+      ]);
+    });
+
+    test('items can be dropped into questions with follow-up items only', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          { linkId: 'smoke', type: 'boolean', item: [{ linkId: 'how-many', type: 'integer' }] },
+          { linkId: 'plain', type: 'string' },
+          { linkId: 'other', type: 'string' },
+        ],
+      });
+      const rows = flattenFormItems(values.item, { smoke: true });
+      expect(rows.map((row) => `${row.item.linkId}@${row.depth}`)).toStrictEqual([
+        'smoke@0',
+        'how-many@1',
+        'plain@0',
+        'other@0',
+      ]);
+      // Dragged up above plain, below how-many (the last follow-up item of smoke): out of smoke, or into it.
+      expect(getFormItemDropTarget(rows, 'other', 'plain', 0, 24)).toStrictEqual({
+        depth: 0,
+        parentLinkId: undefined,
+        index: 1,
+      });
+      expect(getFormItemDropTarget(rows, 'other', 'plain', 24, 24)).toStrictEqual({
+        depth: 1,
+        parentLinkId: 'smoke',
+        index: 1,
+      });
+      // plain has no follow-up items, so nothing can be dropped into it.
+      const collapsedRows = flattenFormItems(values.item, {});
+      expect(getFormItemDropTarget(collapsedRows, 'other', 'other', 24, 24)?.depth).toBe(0);
+
+      const moved = moveFormItem(values, 'other', { parentLinkId: 'smoke', index: 1 });
+      expect(moved[0].item.map((item: any) => item.linkId)).toStrictEqual(['how-many', 'other']);
+      expect(moved[0].item[1].path).toBe('item.0.item.1');
     });
   });
 

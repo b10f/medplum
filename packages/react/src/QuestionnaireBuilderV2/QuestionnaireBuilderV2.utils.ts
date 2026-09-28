@@ -19,7 +19,11 @@ import { QUESTIONNAIRE_HIDDEN_URL, QUESTIONNAIRE_ITEM_CONTROL_URL } from '@medpl
 import type { QuestionnaireForm } from './QuestionnaireFormContext';
 
 export interface ExtendedQuestionnaireItem extends Omit<QuestionnaireItem, 'enableWhen' | 'item' | 'answerOption'> {
-  answer: { value: any }[];
+  /**
+   * A question's answers; each carries its own copies of the question's follow-up items. A group's answers are its
+   * repetitions: copies of its items (see ExtendedQuestionnaireItemAnswer).
+   */
+  answer: ExtendedQuestionnaireItemAnswer[];
   prefix: string;
   hidden: boolean;
   minLength: number | null;
@@ -38,13 +42,22 @@ export interface ExtendedQuestionnaireItem extends Omit<QuestionnaireItem, 'enab
   supportLink: string;
   sliderStepValue: number;
   help: string;
+  /** The linkId of the help item, kept so an imported questionnaire's linkIds do not change on save. */
+  helpLinkId: string | undefined;
   itemControl: Record<string, any>;
   answerOption: ExtendedQuestionnaireItemAnswerOption[];
   path: string;
   answerPath: string;
+  /** A group's items, or a question's follow-up items. */
   item: ExtendedQuestionnaireItem[];
   parent: ExtendedQuestionnaireItem | undefined;
   enableWhen: ExtendedQuestionnaireItemEnableWhen[];
+}
+
+export interface ExtendedQuestionnaireItemAnswer {
+  value: any;
+  /** Copies of the question's follow-up items, answered for this answer. */
+  item?: ExtendedQuestionnaireItem[];
 }
 
 export interface ExtendedQuestionnaireItemAnswerOption extends QuestionnaireItemAnswerOption {
@@ -128,6 +141,58 @@ export function getPageItems(items: ExtendedQuestionnaireItem[]): ExtendedQuesti
 }
 
 /**
+ * Returns true if a FHIR item is help text: a display item with the `help` item control. Help is shown by its
+ * question or group, not as an item of its own.
+ * @param item - The FHIR QuestionnaireItem.
+ * @returns True if the item is help text.
+ */
+export function isHelpItem(item: QuestionnaireItem): boolean {
+  return (
+    item.type === 'display' &&
+    !!item.extension?.some(
+      (ext: Extension) =>
+        ext.url === EXTENSION_URLS.itemControl &&
+        ext.valueCodeableConcept?.coding?.some(
+          (coding: Coding) => coding.code === 'help' && coding.system === QUESTIONNAIRE_ITEM_CONTROL_SYSTEM
+        )
+    )
+  );
+}
+
+/**
+ * Returns true if the builder form item is a question: an item that is answered, so neither a group nor display text.
+ * @param item - The builder form item.
+ * @returns True if the item is a question.
+ */
+export function isQuestionItem(item: ExtendedQuestionnaireItem | undefined): boolean {
+  return !!item && item.type !== 'group' && item.type !== 'display';
+}
+
+/**
+ * Returns true if the builder form item is a question with follow-up items.
+ * @param item - The builder form item.
+ * @returns True if the question has follow-up items.
+ */
+export function hasFollowUpItems(item: ExtendedQuestionnaireItem | undefined): boolean {
+  return isQuestionItem(item) && (item?.item?.length ?? 0) > 0;
+}
+
+/**
+ * Returns the condition a new follow-up item starts with: shown when its question is answered "yes" for a boolean
+ * question, or answered at all for any other question.
+ * @param question - The question the follow-up item is added to.
+ * @returns The enableWhen condition.
+ */
+export function createFollowUpEnableWhen(question: ExtendedQuestionnaireItem): ExtendedQuestionnaireItemEnableWhen {
+  return {
+    id: generateId(),
+    question: question as unknown as QuestionnaireItem,
+    operator: question.type === 'boolean' ? '=' : 'exists',
+    answer: true,
+  };
+}
+
+/**
  * Reads a value from an object by a dotted form path (e.g. `item.0.item`).
  * @param obj - The object to read from.
  * @param path - The dotted path.
@@ -193,7 +258,8 @@ export interface FormItemDropTarget {
 }
 
 /**
- * Flattens builder form items into tree rows, in display order. Children are included only for expanded groups.
+ * Flattens builder form items into tree rows, in display order. Children (a group's items or a question's follow-up
+ * items) are included only for expanded items.
  * @param items - The builder form items.
  * @param expanded - The expanded state of the groups, by linkId.
  * @param collapsedLinkId - An item whose children are left out, e.g. the one being dragged.
@@ -210,7 +276,7 @@ export function flattenFormItems(
 ): FlattenedFormItem[] {
   return items.flatMap((item, index) => {
     const row: FlattenedFormItem = { item, parentLinkId, depth, index, siblings: items };
-    if (item.type !== 'group' || !expanded[item.linkId] || item.linkId === collapsedLinkId) {
+    if (!item.item?.length || !expanded[item.linkId] || item.linkId === collapsedLinkId) {
       return [row];
     }
     return [row, ...flattenFormItems(item.item ?? [], expanded, collapsedLinkId, item.linkId, depth + 1)];
@@ -219,7 +285,8 @@ export function flattenFormItems(
 
 /**
  * Projects where a dragged tree row lands. The row it is dragged over sets the position; the horizontal drag offset
- * sets the depth, within what the neighbouring rows allow: only groups take children, and pages stay top level.
+ * sets the depth, within what the neighbouring rows allow: only groups and questions that already have follow-up items
+ * take children, and pages stay top level.
  * @param rows - The tree rows, without the dragged item's children.
  * @param activeLinkId - The linkId of the dragged item.
  * @param overLinkId - The linkId of the row it is dragged over.
@@ -248,7 +315,8 @@ export function getFormItemDropTarget(
 
   let maxDepth = 0;
   if (previous && !isPageItem(active.item)) {
-    maxDepth = previous.item.type === 'group' ? previous.depth + 1 : previous.depth;
+    const takesChildren = previous.item.type === 'group' || hasFollowUpItems(previous.item);
+    maxDepth = takesChildren ? previous.depth + 1 : previous.depth;
   }
   const minDepth = Math.min(next?.depth ?? 0, maxDepth);
   const projectedDepth = active.depth + Math.round(offsetX / indentWidth);
@@ -301,9 +369,7 @@ export function moveFormItem(
     if (parentLinkId === target.parentLinkId) {
       return [...items.slice(0, target.index), moved, ...items.slice(target.index)];
     }
-    return items.map((item) =>
-      item.type === 'group' ? { ...item, item: insert(item.item ?? [], item.linkId) } : item
-    );
+    return items.map((item) => (item.item ? { ...item, item: insert(item.item, item.linkId) } : item));
   };
 
   return rebuildFormItems({ ...values, item: insert(remove(values.item ?? []), undefined) });
@@ -331,7 +397,10 @@ function toResponseItems(items: ExtendedQuestionnaireItem[]): QuestionnaireRespo
     return [
       {
         linkId: item.linkId,
-        answer: item.answer.map((answer) => toResponseItemAnswer(answer.value)),
+        answer: item.answer.map((answer) => ({
+          ...toResponseItemAnswer(answer.value),
+          ...(answer.item?.length && { item: toResponseItems(answer.item) }),
+        })),
       },
     ];
   });
@@ -397,6 +466,7 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
     supportLink,
     sliderStepValue,
     help,
+    helpLinkId,
     itemControl,
     enableWhen,
     enableBehavior,
@@ -546,12 +616,10 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
 
   const extensions: Extension[] = [];
 
-  if (item.linkId.split('_').at(-1) !== 'help') {
-    extensions.push({
-      url: EXTENSION_URLS.hidden,
-      valueBoolean: hidden ?? false,
-    });
-  }
+  extensions.push({
+    url: EXTENSION_URLS.hidden,
+    valueBoolean: hidden ?? false,
+  });
 
   if (minLength) {
     extensions.push({
@@ -701,12 +769,13 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
     });
   }
 
-  const processedChildItems =
-    item.type === 'group' ? childItems?.map((childItem: QuestionnaireItem) => toFhirQuestionnaireItem(childItem)) : [];
+  // A group's items, or a question's follow-up items.
+  const processedChildItems: QuestionnaireItem[] =
+    item.type === 'display' ? [] : (childItems ?? []).map((childItem: any) => toFhirQuestionnaireItem(childItem));
 
   if (help) {
     processedChildItems.unshift({
-      linkId: `${item.linkId}_help`,
+      linkId: helpLinkId || `${item.linkId}_help`,
       text: help,
       type: 'display',
       extension: [
@@ -769,7 +838,9 @@ export function fromFhirQuestionnaireItem(
   basePath: string = 'item',
   baseAnswerPath: string = 'item'
 ): any {
-  const childItems = (item.item ?? []) as QuestionnaireItem[];
+  // Help is not an item of its own: it is read into `help` below.
+  const childItems = ((item.item ?? []) as QuestionnaireItem[]).filter((childItem) => !isHelpItem(childItem));
+  const helpItem = ((item.item ?? []) as QuestionnaireItem[]).find(isHelpItem);
   const extensions: Extension[] = item.extension ?? [];
   const minOccurs = extensions.find((ext) => ext.url === EXTENSION_URLS.minOccurs)?.valueInteger ?? 1;
   const maxOccurs = extensions.find((ext) => ext.url === EXTENSION_URLS.maxOccurs)?.valueInteger ?? null;
@@ -822,16 +893,8 @@ export function fromFhirQuestionnaireItem(
     formData.required = item.required ?? false;
     formData.repeats = item.repeats ?? false;
     formData.readOnly = item.readOnly ?? false;
-    formData.help =
-      childItems.find((childItem: QuestionnaireItem) =>
-        childItem.extension?.some(
-          (ext: Extension) =>
-            ext.url === EXTENSION_URLS.itemControl &&
-            ext.valueCodeableConcept?.coding?.some(
-              (coding: Coding) => coding.code === 'help' && coding.system === QUESTIONNAIRE_ITEM_CONTROL_SYSTEM
-            )
-        )
-      )?.text ?? '';
+    formData.help = helpItem?.text ?? '';
+    formData.helpLinkId = helpItem?.linkId;
     formData.itemControl =
       extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.itemControl)?.valueCodeableConcept
         ?.coding?.[0] ?? {};
@@ -869,6 +932,27 @@ export function fromFhirQuestionnaireItem(
       : fromQuestionnaireItemInitialToAnswer(item as QuestionnaireItem);
     formData.unit =
       extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.unit)?.valueCoding ?? null;
+
+    // Follow-up items: defined in the question's `item`, answered under each of its answers (`answer.item`).
+    formData.item = childItems.map((childItem: QuestionnaireItem, childIndex: number) =>
+      fromFhirQuestionnaireItem(childItem, questionnaire, childIndex, undefined, formData, `${path}.item`)
+    );
+    if (childItems.length > 0) {
+      formData.answer = formData.answer.map((answer: ExtendedQuestionnaireItemAnswer, answerIndex: number) => ({
+        ...answer,
+        item: childItems.map((childItem: QuestionnaireItem, childIndex: number) =>
+          fromFhirQuestionnaireItem(
+            childItem,
+            questionnaire,
+            childIndex,
+            responseItem?.answer?.[answerIndex]?.item,
+            formData,
+            `${path}.item`,
+            `${answerPath}.answer.${answerIndex}.item`
+          )
+        ),
+      }));
+    }
   }
 
   // applies to groups only
@@ -882,46 +966,40 @@ export function fromFhirQuestionnaireItem(
 
     groupRepetitions.forEach((groupResponse: QuestionnaireResponseItem) => {
       formData.answer.push(
-        childItems
-          .filter((childItem: QuestionnaireItem) => childItem.linkId !== `${item.linkId}_help`)
-          .map((childItem: QuestionnaireItem, childIndex: number) =>
-            fromFhirQuestionnaireItem(
-              childItem,
-              questionnaire,
-              childIndex,
-              groupResponse.item,
-              formData,
-              `${path}.item`,
-              `${answerPath}.answer.${formData.answer.length}`
-            )
+        childItems.map((childItem: QuestionnaireItem, childIndex: number) =>
+          fromFhirQuestionnaireItem(
+            childItem,
+            questionnaire,
+            childIndex,
+            groupResponse.item,
+            formData,
+            `${path}.item`,
+            `${answerPath}.answer.${formData.answer.length}`
           )
+        )
       );
     });
 
-    formData.item = childItems
-      .filter((childItem: QuestionnaireItem) => childItem.linkId !== `${item.linkId}_help`)
-      .map((childItem: QuestionnaireItem, childIndex: number) =>
-        fromFhirQuestionnaireItem(childItem, questionnaire, childIndex, undefined, formData, `${path}.item`)
-      );
+    formData.item = childItems.map((childItem: QuestionnaireItem, childIndex: number) =>
+      fromFhirQuestionnaireItem(childItem, questionnaire, childIndex, undefined, formData, `${path}.item`)
+    );
   }
 
   // If it's a group, initialize its answers to track repetitions
   if (item.type === 'group') {
     while (formData.answer.length < minOccurs) {
       formData.answer.push(
-        childItems
-          .filter((childItem: QuestionnaireItem) => childItem.linkId !== `${item.linkId}_help`)
-          .map((childItem: QuestionnaireItem, childIndex: number) =>
-            fromFhirQuestionnaireItem(
-              childItem,
-              questionnaire,
-              childIndex,
-              undefined,
-              formData,
-              `${path}.item`,
-              `${answerPath}.answer.${formData.answer.length}`
-            )
+        childItems.map((childItem: QuestionnaireItem, childIndex: number) =>
+          fromFhirQuestionnaireItem(
+            childItem,
+            questionnaire,
+            childIndex,
+            undefined,
+            formData,
+            `${path}.item`,
+            `${answerPath}.answer.${formData.answer.length}`
           )
+        )
       );
     }
   }
@@ -977,7 +1055,7 @@ function findItemByLinkId(items: QuestionnaireItem[], linkId: string): Questionn
       return item;
     }
 
-    if (item.type === 'group' && item.item) {
+    if (item.item) {
       const found = findItemByLinkId(item.item, linkId);
       if (found) {
         return found;
@@ -1309,14 +1387,17 @@ export function evaluateEnableWhen(values: Record<string, any>, item: ExtendedQu
     return true;
   }
 
+  // A follow-up item of a question belongs to one of its answers: a condition on that question is about that answer.
+  const parentAnswer = getParentAnswer(values, item);
+
   return enableWhen[enableBehavior === 'all' ? 'every' : 'some']((condition: ExtendedQuestionnaireItemEnableWhen) => {
     const { question, operator, answer } = condition;
     const predicateQuestion = findFormItemByLinkId(values.item ?? [], question.linkId);
-    const parent = predicateQuestion?.parent;
-    const isInGroup: boolean = parent?.type === 'group';
     let answers: { value: any }[] | undefined;
 
-    if (isInGroup && predicateQuestion) {
+    if (parentAnswer && question.linkId === item.parent?.linkId) {
+      answers = [parentAnswer];
+    } else if (predicateQuestion?.parent) {
       const root = findRootItem(predicateQuestion);
       const answerItem = findAnswerItem(values, root, predicateQuestion);
       answers = answerItem?.answer;
@@ -1387,6 +1468,30 @@ export function findRootItem(item: ExtendedQuestionnaireItem): ExtendedQuestionn
   return findRootItem(item.parent);
 }
 
+/**
+ * Returns the answer a follow-up item belongs to, when the item is a copy under one of its question's answers.
+ * @param values - The current builder form values.
+ * @param item - The builder form item.
+ * @returns The question's answer, or undefined when the item is not a follow-up item copy.
+ */
+function getParentAnswer(values: Record<string, any>, item: ExtendedQuestionnaireItem): { value: any } | undefined {
+  const match = /^(.*\.answer\.\d+)\.item\.\d+$/.exec(item.answerPath ?? '');
+  return match ? getValueByPath(values, match[1]) : undefined;
+}
+
+/**
+ * Returns the items answered under one answer of an item: a group repetition's items, or a question answer's
+ * follow-up items.
+ * @param answer - A group repetition, or a question's answer.
+ * @returns The answered items, or undefined.
+ */
+export function getAnswerItems(answer: any): ExtendedQuestionnaireItem[] | undefined {
+  if (Array.isArray(answer)) {
+    return answer;
+  }
+  return Array.isArray(answer?.item) ? answer.item : undefined;
+}
+
 function findAnswerItem(
   values: Record<string, any>,
   node: ExtendedQuestionnaireItem,
@@ -1394,19 +1499,14 @@ function findAnswerItem(
 ): ExtendedQuestionnaireItem | undefined {
   const answers = getValueByPath(values, `${node.answerPath}.answer`) ?? [];
 
-  for (const answerGroup of answers) {
-    if (!Array.isArray(answerGroup)) {
-      continue;
-    }
-    for (const answerItem of answerGroup) {
+  for (const answer of answers) {
+    for (const answerItem of getAnswerItems(answer) ?? []) {
       if (answerItem.linkId === item.linkId) {
         return answerItem;
       }
-      if (answerItem.type === 'group') {
-        const found = findAnswerItem(values, answerItem, item);
-        if (found) {
-          return found;
-        }
+      const found = findAnswerItem(values, answerItem, item);
+      if (found) {
+        return found;
       }
     }
   }
@@ -1444,7 +1544,7 @@ export function addFormAnswer(
 
   if (item.type === 'group') {
     const newGroupAnswer = childItems
-      .filter((childItem: QuestionnaireItem) => childItem.linkId !== `${item.linkId}_help`)
+      .filter((childItem: QuestionnaireItem) => !isHelpItem(childItem))
       .map((childItem: QuestionnaireItem, childIndex: number) =>
         fromFhirQuestionnaireItem(
           childItem,
@@ -1481,6 +1581,20 @@ export function addFormAnswer(
   const initialValue = (initialArray?.[index] as { value?: any } | undefined)?.value ?? '';
 
   form.setFieldValue(`${path}.answer`, [...answerArray, { value: initialValue }]);
+  rebuildFollowUpAnswers(form, original ?? item);
+}
+
+/**
+ * After a question's answers were added, removed or replaced, gives each answer its own copies of the question's
+ * follow-up items (with their paths), keeping what was answered in them.
+ * @param form - The questionnaire form.
+ * @param question - The question's definition.
+ */
+export function rebuildFollowUpAnswers(form: QuestionnaireForm, question: ExtendedQuestionnaireItem): void {
+  const definition: ExtendedQuestionnaireItem = getValueByPath(form.getValues(), question.path) ?? question;
+  if (hasFollowUpItems(definition)) {
+    form.setFieldValue('item', rebuildFormItems(form.getValues()));
+  }
 }
 
 /**
@@ -1588,6 +1702,9 @@ export function validateFormAnswers(
       if (message) {
         errors[`${answersPath}.${index}.value`] = message;
       }
+      if (!isEmptyAnswerValue(answer.value)) {
+        answer.item?.forEach(visit);
+      }
     });
   };
 
@@ -1598,7 +1715,7 @@ export function validateFormAnswers(
 /**
  * Converts the answers in the builder form values into a FHIR QuestionnaireResponse. Hidden items, items disabled by
  * enableWhen, unanswered questions and, in a questionnaire with pages, top-level items outside a page are left out.
- * Each group repetition is a separate item with the group's linkId.
+ * Each group repetition is a separate item with the group's linkId; follow-up items are answered under their answer.
  * @param values - The current form values (the questionnaire with its answers).
  * @returns The QuestionnaireResponse.
  */
@@ -1643,7 +1760,14 @@ function toSubmittedResponseItems(
 
     const answers = (item.answer ?? [])
       .filter((answer) => !isEmptyAnswerValue(answer.value))
-      .map((answer) => toFhirResponseAnswer(original, answer.value));
+      .map((answer) => {
+        // Follow-up items are answered under the answer they belong to.
+        const followUpItems = toSubmittedResponseItems(values, answer.item ?? []);
+        return {
+          ...toFhirResponseAnswer(original, answer.value),
+          ...(followUpItems.length > 0 && { item: followUpItems }),
+        };
+      });
 
     return answers.length > 0 ? [{ ...base, answer: answers }] : [];
   });

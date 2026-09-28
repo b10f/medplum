@@ -50,3 +50,8 @@
   flex-shrink: 0;
   color: var(--mantine-color-orange-6);
 }
+
+.followUpIcon {
+  flex-shrink: 0;
+  color: var(--mantine-color-dimmed);
+}

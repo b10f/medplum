@@ -23,6 +23,7 @@ import { Group, Portal, Tooltip, useTree } from '@mantine/core';
 import {
   IconChevronDown,
   IconChevronRight,
+  IconCornerDownRight,
   IconEyeOff,
   IconFile,
   IconFolder,
@@ -37,7 +38,9 @@ import {
   flattenFormItems,
   getFormItemDropTarget,
   getPageItems,
+  hasFollowUpItems,
   isPageItem,
+  isQuestionItem,
   moveFormItem,
 } from './QuestionnaireBuilderV2.utils';
 import { useQuestionnaireFormContext } from './QuestionnaireFormContext';
@@ -162,6 +165,7 @@ function SortableTreeNode(props: SortableTreeNodeProps): JSX.Element {
   const { row, depth, treeController, selected, notShown, onSelectItem } = props;
   const { item, index, siblings } = row;
   const isGroup = item.type === 'group';
+  const expandable = isGroup || hasFollowUpItems(item);
   const expanded = !!treeController.expandedState[item.linkId];
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: item.linkId,
@@ -185,7 +189,7 @@ function SortableTreeNode(props: SortableTreeNodeProps): JSX.Element {
       role="treeitem"
       aria-level={depth + 1}
       aria-selected={selected}
-      aria-expanded={isGroup ? expanded : undefined}
+      aria-expanded={expandable ? expanded : undefined}
       className={cx(isDragging && classes.placeholder)}
     >
       <TreeNodeContent
@@ -209,7 +213,7 @@ function SortableTreeNode(props: SortableTreeNodeProps): JSX.Element {
         }
         actions={
           <Group gap={4} onClick={(e) => e.stopPropagation()}>
-            {isGroup && (
+            {(isGroup || isQuestionItem(item)) && (
               <QuestionnaireGroupMenu
                 item={item}
                 variant="action"
@@ -244,6 +248,8 @@ interface TreeNodeContentProps {
 function TreeNodeContent(props: TreeNodeContentProps): JSX.Element {
   const { item, className, expanded, notShown, handle, actions, onClick, onChevronClick } = props;
   const isGroup = item.type === 'group';
+  const expandable = isGroup || hasFollowUpItems(item);
+  const isFollowUp = !!item.parent && item.parent.type !== 'group';
   const title = [item.prefix, item.text].filter(Boolean).join(' ');
 
   return (
@@ -253,13 +259,14 @@ function TreeNodeContent(props: TreeNodeContentProps): JSX.Element {
           <IconGripVertical size={14} />
         </span>
       )}
-      {isGroup ? (
+      {expandable ? (
         <span onClick={onChevronClick} className={classes.chevron}>
           {expanded ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
         </span>
       ) : (
         <span className={classes.chevron} />
       )}
+      {isFollowUp && <IconCornerDownRight size={14} className={classes.followUpIcon} aria-label="Follow-up item" />}
       {isGroup ? <IconFolder size={16} /> : <IconFile size={16} />}
       <span className={cx(classes.label, notShown && classes.notShown)}>{title}</span>
       {notShown && (

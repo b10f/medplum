@@ -16,6 +16,7 @@ import type {
 import {
   createManualAnswerOption,
   fromFhirAnswerOptions,
+  getAnswerItems,
   getAnswerOptionProblems,
   getLocalAnswerOptionSystem,
   getValueByPath,
@@ -254,21 +255,23 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
     const path = node.answerPath;
     const answers = getValueByPath(form.getValues(), `${path}.answer`) ?? [];
 
-    for (const answerGroup of answers) {
-      for (const answerItem of answerGroup) {
+    // Walks group repetitions and the follow-up items of question answers.
+    for (const answer of answers) {
+      for (const answerItem of getAnswerItems(answer) ?? []) {
         if (answerItem.linkId === selectedItem?.linkId) {
           if (applyChange) {
             applyChange(answerItem);
           }
-        } else if (answerItem.type === 'group') {
-          syncAnswers(answerItem);
+        } else {
+          syncAnswers(answerItem, applyChange);
         }
       }
     }
   };
 
   const handleInitialInputChange = (value: any, index: number): void => {
-    const isInGroup: boolean = selectedItem?.parent?.type === 'group';
+    // The answers of a nested item are in copies under its ancestors' answers.
+    const isNested = !!selectedItem?.parent;
 
     const applyChange = (item: ExtendedQuestionnaireItem): void => {
       const path = item.answerPath;
@@ -280,7 +283,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
       }
     };
 
-    if (isInGroup) {
+    if (isNested) {
       const root = findRootGroup(selectedItem);
       syncAnswers(root, applyChange);
     } else {
@@ -303,7 +306,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
 
   const handleRepeatsChange = (repeats: boolean): void => {
     const parent = selectedItem?.parent;
-    const isInGroup: boolean = parent?.type === 'group';
+    const isNested = !!parent;
     const initialArray = getValueByPath(form.getValues(), `${selectedItem.path}.initial`) ?? [];
     const minOccurs = getValueByPath(form.getValues(), `${selectedItem.path}.minOccurs`) ?? 1;
 
@@ -338,7 +341,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
       }
     };
 
-    if (isInGroup) {
+    if (isNested) {
       const root = findRootGroup(selectedItem);
       syncAnswers(root, applyChange);
     } else {
@@ -359,7 +362,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
     }
 
     const parent = selectedItem?.parent;
-    const isInGroup: boolean = parent?.type === 'group';
+    const isNested = !!parent;
 
     const applyChange = (item: ExtendedQuestionnaireItem, original?: ExtendedQuestionnaireItem): void => {
       const path = item.answerPath;
@@ -377,7 +380,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
       }
     };
 
-    if (isInGroup) {
+    if (isNested) {
       const root = findRootGroup(selectedItem);
       syncAnswers(root, applyChange);
     } else {
@@ -392,7 +395,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
     }
 
     const parent = selectedItem?.parent;
-    const isInGroup: boolean = parent?.type === 'group';
+    const isNested = !!parent;
 
     const applyChange = (item: ExtendedQuestionnaireItem): void => {
       const path = item.answerPath;
@@ -405,7 +408,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
       }
     };
 
-    if (isInGroup) {
+    if (isNested) {
       const root = findRootGroup(selectedItem);
       syncAnswers(root, applyChange);
     } else {

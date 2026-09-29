@@ -10,8 +10,11 @@ import {
   Code,
   Divider,
   Group,
+  Input,
   Loader,
+  NumberInput,
   Stack,
+  TagsInput,
   Text,
 } from '@mantine/core';
 import type { MedplumClient } from '@medplum/core';
@@ -20,12 +23,15 @@ import type {
   Coding,
   QuestionnaireItemAnswerOption,
   ResourceType,
+  StructureDefinition,
+  ValueSet,
   ValueSetExpansionContains,
 } from '@medplum/fhirtypes';
 import { useMedplum } from '@medplum/react-hooks';
 import { IconList, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
+import { ResourceInput } from '../ResourceInput/ResourceInput';
 import { ResourceTypeInput } from '../ResourceTypeInput/ResourceTypeInput';
 import { ValueSetAutocomplete } from '../ValueSetAutocomplete/ValueSetAutocomplete';
 import type {
@@ -531,15 +537,20 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
 
             {type === 'reference' && <QuestionnaireReferenceTypes form={form} path={path} disabled={disabled} />}
 
+            {type === 'attachment' && <QuestionnaireAttachmentLimits form={form} path={path} disabled={disabled} />}
+
             {type === 'quantity' && (
-              <QuestionnaireUnitInput
-                form={form}
-                context={`${path}.unitOption`}
-                label="Allowed units"
-                description="The units the respondent chooses from. With one unit, the unit is fixed; with none, the respondent types a unit."
-                multiple
-                disabled={disabled}
-              />
+              <>
+                <QuestionnaireUnitInput
+                  form={form}
+                  context={`${path}.unitOption`}
+                  label="Allowed units"
+                  description="The units the respondent chooses from. With one unit, the unit is fixed; with none, the respondent types a unit."
+                  multiple
+                  disabled={disabled}
+                />
+                <QuestionnaireUnitValueSetInput form={form} path={path} disabled={disabled} />
+              </>
             )}
 
             {(type === 'integer' || type === 'decimal') && (
@@ -680,6 +691,24 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
                               handleAnswerOptionSelectionChange(value, index);
                               handleInitialInputChange(answer.value, 0);
                             }}
+                            disabled={disabled}
+                          />
+
+                          {repeats && (
+                            <FormSwitch
+                              form={form}
+                              label="Exclusive"
+                              description="Selecting it clears the other answers, e.g. 'None of the above'."
+                              context={`${path}.answerOption.${index}.exclusive`}
+                              disabled={disabled}
+                            />
+                          )}
+
+                          <FormTextInput
+                            form={form}
+                            label="Prefix"
+                            description="Shown before the option, e.g. 'a)' or '1.'."
+                            context={`${path}.answerOption.${index}.prefix`}
                             disabled={disabled}
                           />
 
@@ -965,6 +994,18 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
                       type={getRangeInputType(type)}
                       disabled={disabled}
                     />
+
+                    {(type === 'decimal' || type === 'quantity') && (
+                      <FormTextInput
+                        form={form}
+                        label="Maximum decimal places"
+                        description="E.g. 1 for 36.6; 0 for whole numbers. Empty for no limit."
+                        context={`${path}.maxDecimalPlaces`}
+                        type="number"
+                        min="0"
+                        disabled={disabled}
+                      />
+                    )}
                   </>
                 )}
 
@@ -1147,12 +1188,191 @@ function QuestionnaireReferenceTypes(props: QuestionnaireReferenceTypesProps): J
           Add resource type
         </Button>
       </Group>
+      <QuestionnaireReferenceProfiles form={form} path={path} disabled={disabled} />
+    </Stack>
+  );
+}
+
+const MEGABYTE = 1024 * 1024;
+
+/**
+ * Common file types, suggested for attachments; others can be typed. The mimeType extension is bound (required) to all
+ * MIME types (BCP 13), which cannot be listed, and wildcards such as image/* are not MIME types.
+ */
+const COMMON_FILE_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/heic',
+  'application/pdf',
+  'text/plain',
+  'audio/mpeg',
+  'video/mp4',
+];
+
+/** A MIME type: type/subtype, without wildcards or parameters. */
+const MIME_TYPE_PATTERN = /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/;
+
+/**
+ * The file types and maximum size an attachment question accepts (mimeType, maxSize). Other files are not uploaded.
+ * @param props - The QuestionnaireAttachmentLimits React props.
+ * @returns The QuestionnaireAttachmentLimits React node.
+ */
+function QuestionnaireAttachmentLimits(props: QuestionnaireReferenceTypesProps): JSX.Element {
+  const { form, path, disabled } = props;
+  const mimeTypes: string[] = getValueByPath(form.getValues(), `${path}.mimeType`) ?? [];
+  const maxSize: number | null = getValueByPath(form.getValues(), `${path}.maxSize`);
+  const [invalidType, setInvalidType] = useState<string>();
+
+  return (
+    <>
+      <TagsInput
+        label="Allowed file types"
+        description="MIME types, e.g. image/png or application/pdf. With none, any file can be uploaded."
+        placeholder="Add a file type"
+        data={COMMON_FILE_TYPES}
+        disabled={disabled}
+        value={mimeTypes}
+        error={invalidType && `${invalidType} is not a MIME type (type/subtype, e.g. image/png)`}
+        onChange={(types) => {
+          const cleaned = types.map((type) => type.trim().toLowerCase());
+          setInvalidType(cleaned.find((type) => !MIME_TYPE_PATTERN.test(type)));
+          form.setFieldValue(
+            `${path}.mimeType`,
+            cleaned.filter((type) => MIME_TYPE_PATTERN.test(type))
+          );
+        }}
+      />
+      <NumberInput
+        label="Maximum size (MB)"
+        description="Larger files are not uploaded. With none, any size can be uploaded."
+        min={0}
+        decimalScale={2}
+        disabled={disabled}
+        value={maxSize ? Number((maxSize / MEGABYTE).toFixed(2)) : ''}
+        onChange={(megabytes) =>
+          form.setFieldValue(`${path}.maxSize`, megabytes ? Math.round(Number(megabytes) * MEGABYTE) : null)
+        }
+      />
+    </>
+  );
+}
+
+/**
+ * The profiles a reference question's answer must conform to (questionnaire-referenceProfile), picked from the
+ * project's StructureDefinitions and saved by their canonical URL.
+ * @param props - The QuestionnaireReferenceTypes React props.
+ * @returns The QuestionnaireReferenceProfiles React node.
+ */
+function QuestionnaireReferenceProfiles(props: QuestionnaireReferenceTypesProps): JSX.Element {
+  const { form, path, disabled } = props;
+  const context = `${path}.referenceProfile`;
+  const profiles: string[] = getValueByPath(form.getValues(), context) ?? [];
+  // A new key clears the picker after each pick.
+  const [pickerKey, setPickerKey] = useState(0);
+
+  return (
+    <Stack gap="xs" mt="xs">
+      <Text size="sm" fw={500}>
+        Profiles
+      </Text>
+      <Text size="xs" c="dimmed">
+        The answer must conform to one of these profiles. With none, any resource of the types above can be picked.
+      </Text>
+      {profiles.map((profile, index) => (
+        <Group key={profile} gap="xs" wrap="nowrap">
+          <Code flex={1}>{profile}</Code>
+          <ActionIcon
+            variant="filled"
+            color="red"
+            aria-label="Remove profile"
+            disabled={disabled}
+            onClick={() =>
+              form.setFieldValue(
+                context,
+                profiles.filter((_, i) => i !== index)
+              )
+            }
+          >
+            <IconTrash size={16} />
+          </ActionIcon>
+        </Group>
+      ))}
+      <ResourceInput<StructureDefinition>
+        key={pickerKey}
+        resourceType="StructureDefinition"
+        name="reference-profile"
+        placeholder="Add a profile"
+        disabled={disabled}
+        onChange={(structureDefinition) => {
+          if (structureDefinition?.url && !profiles.includes(structureDefinition.url)) {
+            form.setFieldValue(context, [...profiles, structureDefinition.url]);
+          }
+          setPickerKey((key) => key + 1);
+        }}
+      />
     </Stack>
   );
 }
 
 /** Common UCUM units, the unit codes Medplum uses (UCUM); units not in it can be typed as UCUM codes. */
 const UCUM_COMMON_VALUE_SET = 'http://hl7.org/fhir/ValueSet/ucum-common';
+
+/**
+ * A value set a quantity's unit is picked from (questionnaire-unitValueSet), e.g. ucum-vitals-common; it is used
+ * instead of the allowed units.
+ * @param props - The QuestionnaireUnitValueSetInput React props.
+ * @returns The QuestionnaireUnitValueSetInput React node.
+ */
+function QuestionnaireUnitValueSetInput(props: QuestionnaireReferenceTypesProps): JSX.Element {
+  const { form, path, disabled } = props;
+  const context = `${path}.unitValueSet`;
+  const unitValueSet: string | null = getValueByPath(form.getValues(), context);
+
+  if (unitValueSet) {
+    return (
+      <Stack gap={4}>
+        <Text size="sm" fw={500}>
+          Units from a value set
+        </Text>
+        <Group gap="xs" wrap="nowrap">
+          <Code flex={1}>{unitValueSet}</Code>
+          <ActionIcon
+            variant="filled"
+            color="red"
+            aria-label="Remove unit value set"
+            disabled={disabled}
+            onClick={() => form.setFieldValue(context, null)}
+          >
+            <IconTrash size={16} />
+          </ActionIcon>
+        </Group>
+        <Text size="xs" c="dimmed">
+          The respondent searches this value set for the unit, instead of the allowed units.
+        </Text>
+      </Stack>
+    );
+  }
+
+  return (
+    <Input.Wrapper
+      label="Units from a value set"
+      description="Instead of allowed units, the respondent searches a value set, e.g. ucum-vitals-common."
+    >
+      <ResourceInput<ValueSet>
+        resourceType="ValueSet"
+        name="unit-value-set"
+        placeholder="Search value sets"
+        disabled={disabled}
+        onChange={(valueSet) => {
+          if (valueSet?.url) {
+            form.setFieldValue(context, valueSet.url);
+          }
+        }}
+      />
+    </Input.Wrapper>
+  );
+}
 
 interface QuestionnaireUnitInputProps {
   readonly form: QuestionnaireForm;

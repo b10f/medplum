@@ -30,6 +30,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
+import { normalizeErrorString } from '@medplum/core';
 import type { Coding, Quantity, QuestionnaireItem, Signature, ValueSetExpansionContains } from '@medplum/fhirtypes';
 import type { QuestionnaireFormPaginationState } from '@medplum/react-hooks';
 import { getQuestionnaireItemReferenceFilter } from '@medplum/react-hooks';
@@ -52,9 +53,11 @@ import type {
   QuestionnaireMode,
 } from './QuestionnaireBuilderV2.utils';
 import {
+  applyExclusiveOptions,
   evaluateEnableWhen,
   findAnswerOption,
   findRootItem,
+  getAnswerOptionDisplay,
   getAnswerOptionLabel,
   getChoiceValueKey,
   getPageItems,
@@ -615,6 +618,11 @@ function getAttachedText(original: ExtendedQuestionnaireItem, code: QuestionDisp
   return original.displayTexts?.[code] || undefined;
 }
 
+function getDecimalPlaces(original: ExtendedQuestionnaireItem): number | undefined {
+  const places = original.maxDecimalPlaces;
+  return places === null || places === undefined || (places as any) === '' ? undefined : Number(places);
+}
+
 function getUnitSection(
   unit: string | undefined
 ): Pick<TextInputProps, 'rightSection' | 'rightSectionWidth' | 'rightSectionProps'> {
@@ -858,7 +866,7 @@ function PreviewChoiceTable(props: PreviewChoiceTableProps): JSX.Element {
     const answers: ExtendedQuestionnaireItemAnswer[] = getValueByPath(values, answersPath) ?? [];
     const checked = answers.some((answer) => getChoiceValueKey(answer.value) === getChoiceValueKey(own.value));
     const readOnly = isReadOnlyFormItem(values, copy);
-    const label = `${original.text ?? ''}: ${getAnswerOptionLabel(own)}`;
+    const label = `${original.text ?? ''}: ${getAnswerOptionDisplay(own)}`;
 
     if (original.repeats) {
       return (
@@ -867,11 +875,20 @@ function PreviewChoiceTable(props: PreviewChoiceTableProps): JSX.Element {
           checked={checked}
           disabled={readOnly}
           onChange={(e) => {
-            const others = answers.filter(
-              (answer) =>
-                !isEmptyAnswerValue(answer.value) && getChoiceValueKey(answer.value) !== getChoiceValueKey(own.value)
+            const previous = answers.map((answer) => answer.value).filter((value) => !isEmptyAnswerValue(value));
+            const others = previous.filter((value) => getChoiceValueKey(value) !== getChoiceValueKey(own.value));
+            const newValues = applyExclusiveOptions(
+              original.answerOption,
+              previous,
+              e.currentTarget.checked ? [...others, own.value] : others
             );
-            form.setFieldValue(answersPath, e.currentTarget.checked ? [...others, { value: own.value }] : others);
+            form.setFieldValue(
+              answersPath,
+              newValues.map(
+                (value) =>
+                  answers.find((answer) => getChoiceValueKey(answer.value) === getChoiceValueKey(value)) ?? { value }
+              )
+            );
             rebuildAnswerItems(form, original);
           }}
         />
@@ -914,7 +931,7 @@ function PreviewChoiceTable(props: PreviewChoiceTableProps): JSX.Element {
               ))
             : options.map((option) => (
                 <Table.Th key={getChoiceValueKey(option.value)} ta="center">
-                  {getAnswerOptionLabel(option)}
+                  {getAnswerOptionDisplay(option)}
                 </Table.Th>
               ))}
         </Table.Tr>
@@ -923,7 +940,7 @@ function PreviewChoiceTable(props: PreviewChoiceTableProps): JSX.Element {
         {transposed
           ? options.map((option) => (
               <Table.Tr key={getChoiceValueKey(option.value)}>
-                <Table.Th>{getAnswerOptionLabel(option)}</Table.Th>
+                <Table.Th>{getAnswerOptionDisplay(option)}</Table.Th>
                 {questions.map(({ copy, original }) => (
                   <Table.Td key={copy.answerPath}>
                     <Center>{cell(copy, original, option)}</Center>
@@ -1306,7 +1323,9 @@ function PreviewInput(props: PreviewAnswerProps): JSX.Element {
       <NumberInput
         {...labelProps}
         disabled={readOnly}
-        allowDecimal={type === 'decimal'}
+        // Typing is limited to the decimal places (maxDecimalPlaces); other inputs are checked by validateAnswerValue.
+        allowDecimal={type === 'decimal' && getDecimalPlaces(original) !== 0}
+        decimalScale={type === 'decimal' ? getDecimalPlaces(original) : undefined}
         {...getUnitSection(unit ? (unit.display ?? unit.code) : getAttachedText(original, 'unit'))}
         min={original.minValue === null || original.minValue === '' ? undefined : Number(original.minValue)}
         max={original.maxValue === null || original.maxValue === '' ? undefined : Number(original.maxValue)}
@@ -1363,7 +1382,10 @@ function PreviewReference(props: PreviewAnswerProps): JSX.Element {
   const form = useQuestionnaireFormContext();
   const fieldPath = getFieldPath(item, answerIndex);
   const value = getValueByPath(form.getValues(), fieldPath);
-  const targetTypes = (original.referenceResource ?? []).filter(Boolean);
+  // With profiles, the answer must conform to one of them (ReferenceInput searches each profile's resource type by
+  // `_profile`); otherwise it is any resource of the resource types.
+  const profiles = (original.referenceProfile ?? []).filter(Boolean);
+  const targetTypes = profiles.length > 0 ? profiles : (original.referenceResource ?? []).filter(Boolean);
   // The filter extension is kept as the builder loaded it; Medplum's helper reads it the same way the form does.
   const searchCriteria = getQuestionnaireItemReferenceFilter(
     { linkId: original.linkId, type: 'reference', extension: original.preserved?.extension },
@@ -1395,7 +1417,7 @@ function PreviewReference(props: PreviewAnswerProps): JSX.Element {
  * @returns The PreviewAttachment React node.
  */
 function PreviewAttachment(props: PreviewAnswerProps): JSX.Element {
-  const { item, answerIndex, readOnly } = props;
+  const { item, original, answerIndex, readOnly } = props;
   const form = useQuestionnaireFormContext();
   const fieldPath = getFieldPath(item, answerIndex);
   const value = getValueByPath(form.getValues(), fieldPath);
@@ -1408,6 +1430,10 @@ function PreviewAttachment(props: PreviewAnswerProps): JSX.Element {
           path=""
           name={fieldPath}
           disabled={readOnly}
+          // Files of another type, or too large, are not uploaded (mimeType, maxSize).
+          accept={original.mimeType?.length ? original.mimeType : undefined}
+          maxSize={original.maxSize ? Number(original.maxSize) : undefined}
+          onUploadError={(outcome) => form.setFieldError(fieldPath, normalizeErrorString(outcome))}
           defaultValue={value && typeof value === 'object' ? value : undefined}
           onChange={(attachment) => form.setFieldValue(fieldPath, attachment ?? '')}
         />
@@ -1434,7 +1460,9 @@ function PreviewQuantity(props: PreviewAnswerProps): JSX.Element {
   const unitOptions: Coding[] = (original.unitOption ?? []).filter(Boolean);
   // One allowed unit is the unit; with none, the question's own unit (if any) is.
   let fixedUnit: ReturnType<typeof toQuantityUnit>;
-  if (unitOptions.length === 1) {
+  if (original.unitValueSet) {
+    fixedUnit = undefined;
+  } else if (unitOptions.length === 1) {
     fixedUnit = toQuantityUnit(unitOptions[0]);
   } else if (unitOptions.length === 0) {
     fixedUnit = toQuantityUnit(original.unit);
@@ -1446,7 +1474,33 @@ function PreviewQuantity(props: PreviewAnswerProps): JSX.Element {
   };
 
   let unitInput: JSX.Element;
-  if (unitOptions.length > 1) {
+  if (original.unitValueSet) {
+    // Units searched in a value set (questionnaire-unitValueSet).
+    unitInput = (
+      <ValueSetAutocomplete
+        aria-label="Unit"
+        name={`${fieldPath}-unit`}
+        binding={original.unitValueSet}
+        creatable={false}
+        clearable
+        maxValues={1}
+        placeholder="Unit"
+        disabled={readOnly}
+        defaultValue={quantity.code ? [{ system: quantity.system, code: quantity.code, display: quantity.unit }] : []}
+        onChange={(selected) =>
+          setQuantity(
+            toQuantityUnit(
+              selected[0] && { system: selected[0].system, code: selected[0].code, display: selected[0].display }
+            ) ?? {
+              unit: undefined,
+              system: undefined,
+              code: undefined,
+            }
+          )
+        }
+      />
+    );
+  } else if (unitOptions.length > 1) {
     unitInput = (
       <NativeSelect
         aria-label="Unit"
@@ -1665,7 +1719,7 @@ function PreviewChoice(props: PreviewAnswerProps): JSX.Element {
       <Radio
         key={getChoiceValueKey(option.value)}
         value={getChoiceValueKey(option.value)}
-        label={getAnswerOptionLabel(option)}
+        label={getAnswerOptionDisplay(option)}
         disabled={readOnly}
       />
     )),
@@ -1725,7 +1779,9 @@ function PreviewRepeatingChoice(props: PreviewAnswerProps): JSX.Element {
   const typedValues = values.filter((value) => isTypedAnswer(answerOption, value));
   const [otherChecked, setOtherChecked] = useState(typedValues.length > 0);
 
-  const setValues = (newValues: any[]): void => {
+  const setValues = (requestedValues: any[]): void => {
+    // "None of the above" and other exclusive options clear the other answers (and the other way round).
+    const newValues = applyExclusiveOptions(answerOption, values, requestedValues);
     // Answers that stay selected keep their follow-up items.
     form.setFieldValue(
       answersPath,
@@ -1791,7 +1847,7 @@ function PreviewRepeatingChoice(props: PreviewAnswerProps): JSX.Element {
             <Checkbox
               key={getChoiceValueKey(option.value)}
               value={getChoiceValueKey(option.value)}
-              label={getAnswerOptionLabel(option)}
+              label={getAnswerOptionDisplay(option)}
               disabled={readOnly}
             />
           ))}
@@ -1917,6 +1973,6 @@ function fromChoiceText(answerOption: ExtendedQuestionnaireItemAnswerOption[], t
 function toOptionData(answerOption: ExtendedQuestionnaireItemAnswerOption[]): { value: string; label: string }[] {
   return answerOption.map((option) => ({
     value: getChoiceValueKey(option.value),
-    label: getAnswerOptionLabel(option),
+    label: getAnswerOptionDisplay(option),
   }));
 }

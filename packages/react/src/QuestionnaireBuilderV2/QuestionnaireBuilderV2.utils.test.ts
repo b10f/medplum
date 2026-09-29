@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { Questionnaire, QuestionnaireItem, QuestionnaireResponse } from '@medplum/fhirtypes';
 import {
+  applyExclusiveOptions,
   createFollowUpEnableWhen,
   createManualAnswerOption,
   DEFAULT_SIGNATURE_TYPE,
@@ -9,6 +10,7 @@ import {
   findFormItemByLinkId,
   flattenFormItems,
   fromFhirQuestionnaireItem,
+  getAnswerOptionDisplay,
   getAnswerOptionProblems,
   getFormItemDropTarget,
   getItemControlOptions,
@@ -1417,6 +1419,29 @@ describe('QuestionnaireBuilderV2.utils', () => {
       ]);
     });
 
+    test('units from a value set are saved as questionnaire-unitValueSet', () => {
+      const unitValueSet = 'http://hl7.org/fhir/StructureDefinition/questionnaire-unitValueSet';
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          {
+            linkId: 'weight',
+            type: 'quantity',
+            extension: [{ url: unitValueSet, valueCanonical: 'http://hl7.org/fhir/ValueSet/ucum-bodyweight' }],
+          },
+        ],
+      });
+      expect(values.item[0].unitValueSet).toBe('http://hl7.org/fhir/ValueSet/ucum-bodyweight');
+      expect(values.item[0].preserved).toBeUndefined();
+      expect(toFhirQuestionnaire(values).item?.[0].extension).toContainEqual({
+        url: unitValueSet,
+        valueCanonical: 'http://hl7.org/fhir/ValueSet/ucum-bodyweight',
+      });
+      values.item[0].unitValueSet = null;
+      expect(toFhirQuestionnaire(values).item?.[0].extension?.some((ext) => ext.url === unitValueSet)).toBe(false);
+    });
+
     test('quantity ranges are saved as decimals (R4 minValue/maxValue take no Quantity)', () => {
       const item = fromFhirQuestionnaireItem(
         {
@@ -1455,8 +1480,8 @@ describe('QuestionnaireBuilderV2.utils', () => {
       code: [{ system: 'http://loinc.org', version: '2.77', code: '29463-7', display: 'Body weight' }],
       extension: [
         {
-          url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-unitValueSet',
-          valueCanonical: 'http://example.com/vs',
+          url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-signatureRequired',
+          valueCodeableConcept: { coding: [{ system: 'urn:iso-astm:E1762-95:2013', code: '1.2.840.10065.1.12.1.7' }] },
         },
         {
           url: 'http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-calculatedExpression',
@@ -1588,6 +1613,33 @@ describe('QuestionnaireBuilderV2.utils', () => {
   });
 
   describe('attachment questions', () => {
+    test('allowed file types and maximum size are saved as mimeType and maxSize', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          {
+            linkId: 'photo',
+            type: 'attachment',
+            extension: [
+              { url: 'http://hl7.org/fhir/StructureDefinition/mimeType', valueCode: 'image/png' },
+              { url: 'http://hl7.org/fhir/StructureDefinition/maxSize', valueDecimal: 1048576 },
+            ],
+          },
+        ],
+      });
+      expect(values.item[0].mimeType).toStrictEqual(['image/png']);
+      expect(values.item[0].maxSize).toBe(1048576);
+      values.item[0].mimeType = ['image/jpeg', 'application/pdf'];
+      expect(
+        toFhirQuestionnaire(values).item?.[0].extension?.filter((ext) => !ext.url.endsWith('hidden'))
+      ).toStrictEqual([
+        { url: 'http://hl7.org/fhir/StructureDefinition/maxSize', valueDecimal: 1048576 },
+        { url: 'http://hl7.org/fhir/StructureDefinition/mimeType', valueCode: 'image/jpeg' },
+        { url: 'http://hl7.org/fhir/StructureDefinition/mimeType', valueCode: 'application/pdf' },
+      ]);
+    });
+
     test('answers are attachments, and are required like any answer', () => {
       const questionnaire: Questionnaire = {
         resourceType: 'Questionnaire',
@@ -1936,6 +1988,122 @@ describe('QuestionnaireBuilderV2.utils', () => {
         ['pain-low', 'No pain', 'lower'],
         ['pain_upper', 'Worst pain', 'upper'],
       ]);
+    });
+  });
+
+  describe('exclusive options and reference profiles', () => {
+    const exclusive = {
+      url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-optionExclusive',
+      valueBoolean: true,
+    };
+
+    test('exclusive options are read, saved, and clear the other answers as in Medplum', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          {
+            linkId: 'symptoms',
+            type: 'choice',
+            repeats: true,
+            answerOption: [
+              { valueCoding: { code: 'fever', display: 'Fever' } },
+              { valueCoding: { code: 'cough', display: 'Cough' } },
+              { valueCoding: { code: 'none', display: 'None of the above' }, extension: [exclusive] },
+            ],
+          },
+        ],
+      });
+      const options = values.item[0].answerOption;
+      expect(options.map((option: any) => !!option.exclusive)).toStrictEqual([false, false, true]);
+      expect(toFhirQuestionnaire(values).item?.[0].answerOption?.[2].extension).toStrictEqual([exclusive]);
+
+      const [fever, cough, none] = options.map((option: any) => option.value);
+      expect(applyExclusiveOptions(options, [fever, cough], [fever, cough, none])).toStrictEqual([none]);
+      expect(applyExclusiveOptions(options, [none], [none, fever])).toStrictEqual([fever]);
+      expect(applyExclusiveOptions(options, [fever, cough], [fever])).toStrictEqual([fever]);
+      expect(applyExclusiveOptions([], [none], [none, fever])).toStrictEqual([none, fever]);
+    });
+
+    test('reference profiles are saved as questionnaire-referenceProfile on reference questions', () => {
+      const referenceProfile = 'http://hl7.org/fhir/StructureDefinition/questionnaire-referenceProfile';
+      const profile = 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-practitioner';
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          { linkId: 'doctor', type: 'reference', extension: [{ url: referenceProfile, valueCanonical: profile }] },
+        ],
+      });
+      expect(values.item[0].referenceProfile).toStrictEqual([profile]);
+      expect(values.item[0].preserved).toBeUndefined();
+      values.item[0].referenceProfile = [profile, 'http://example.com/StructureDefinition/other'];
+      expect(
+        toFhirQuestionnaire(values).item?.[0].extension?.filter((ext) => ext.url === referenceProfile)
+      ).toStrictEqual([
+        { url: referenceProfile, valueCanonical: profile },
+        { url: referenceProfile, valueCanonical: 'http://example.com/StructureDefinition/other' },
+      ]);
+    });
+  });
+
+  describe('option prefix and decimal places', () => {
+    test('an option prefix is read, listed before the option, and saved', () => {
+      const optionPrefix = 'http://hl7.org/fhir/StructureDefinition/questionnaire-optionPrefix';
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          {
+            linkId: 'q',
+            type: 'choice',
+            answerOption: [
+              { valueCoding: { code: 'a', display: 'Apple' }, extension: [{ url: optionPrefix, valueString: 'a)' }] },
+              { valueString: 'Banana' },
+            ],
+          },
+        ],
+      });
+      const [apple, banana] = values.item[0].answerOption;
+      expect(getAnswerOptionDisplay(apple)).toBe('a) Apple');
+      expect(getAnswerOptionDisplay(banana)).toBe('Banana');
+      banana.prefix = 'b)';
+      expect(toFhirQuestionnaire(values).item?.[0].answerOption?.map((option) => option.extension)).toStrictEqual([
+        [{ url: optionPrefix, valueString: 'a)' }],
+        [{ url: optionPrefix, valueString: 'b)' }],
+      ]);
+    });
+
+    test('decimal places are saved as maxDecimalPlaces and checked', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          {
+            linkId: 'temp',
+            type: 'decimal',
+            text: 'Temperature',
+            extension: [{ url: 'http://hl7.org/fhir/StructureDefinition/maxDecimalPlaces', valueInteger: 1 }],
+          },
+          { linkId: 'weight', type: 'quantity', text: 'Weight' },
+        ],
+      });
+      expect(values.item[0].maxDecimalPlaces).toBe(1);
+      values.item[0].answer = [{ value: '36.6' }];
+      expect(validateFormAnswers(values)).toStrictEqual({});
+      values.item[0].answer = [{ value: '36.65' }];
+      expect(validateFormAnswers(values)).toStrictEqual({
+        'item.0.answer.0.value': 'Temperature can have at most 1 decimal place',
+      });
+
+      values.item[0].answer = [{ value: '36.6' }];
+      values.item[1].maxDecimalPlaces = '0';
+      values.item[1].answer = [{ value: { value: '72.5', unit: 'kg' } }];
+      expect(validateFormAnswers(values)).toStrictEqual({ 'item.1.answer.0.value': 'Weight must be a whole number' });
+      expect(toFhirQuestionnaire(values).item?.[1].extension).toContainEqual({
+        url: 'http://hl7.org/fhir/StructureDefinition/maxDecimalPlaces',
+        valueInteger: 0,
+      });
     });
   });
 

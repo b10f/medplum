@@ -21,6 +21,7 @@ import {
   getQuestionnaireItemReferenceTargetTypes,
   QUESTIONNAIRE_HIDDEN_URL,
   QUESTIONNAIRE_ITEM_CONTROL_URL,
+  QUESTIONNAIRE_OPTION_EXCLUSIVE_URL,
   QUESTIONNAIRE_REFERENCE_RESOURCE_URL,
   QUESTIONNAIRE_SIGNATURE_REQUIRED_URL,
   QUESTIONNAIRE_SIGNATURE_RESPONSE_URL,
@@ -50,6 +51,16 @@ export interface ExtendedQuestionnaireItem extends Omit<QuestionnaireItem, 'enab
   unitOption: any[];
   /** The resource types a reference question can point to (questionnaire-referenceResource). */
   referenceResource: string[];
+  /** The profiles a reference question's answer must conform to (questionnaire-referenceProfile). */
+  referenceProfile: string[];
+  /** The value set a quantity's unit is picked from (questionnaire-unitValueSet). */
+  unitValueSet: string | null;
+  /** The most decimal places a decimal or quantity answer may have (maxDecimalPlaces). */
+  maxDecimalPlaces: number | null;
+  /** An attachment's maximum size in bytes (maxSize). */
+  maxSize: number | null;
+  /** The file types an attachment may have (mimeType), e.g. `image/png` or `image/*`. */
+  mimeType: string[];
   usageMode: string;
   supportLink: string;
   sliderStepValue: number;
@@ -95,7 +106,11 @@ export interface ExtendedQuestionnaireItemAnswerOption extends QuestionnaireItem
   value: any;
   /** The FHIR value[x] the option was read from, e.g. `valueString`; a coding when undefined. */
   valueType?: string;
-  /** Extensions other than the score (e.g. optionExclusive), written back unchanged on save. */
+  /** Selecting this option clears the other answers, e.g. "None of the above" (questionnaire-optionExclusive). */
+  exclusive?: boolean;
+  /** A label shown before the option, e.g. "a)" or "1." (questionnaire-optionPrefix). */
+  prefix?: string;
+  /** Extensions other than the score and exclusive flag, written back unchanged on save. */
   preservedExtension?: Extension[];
 }
 
@@ -129,6 +144,12 @@ const EXTENSION_URLS = {
   supportLink: `${STRUCTURE_DEFINITION_URL}/questionnaire-supportLink`,
   sliderStepValue: `${STRUCTURE_DEFINITION_URL}/questionnaire-sliderStepValue`,
   referenceResource: QUESTIONNAIRE_REFERENCE_RESOURCE_URL,
+  referenceProfile: `${STRUCTURE_DEFINITION_URL}/questionnaire-referenceProfile`,
+  maxSize: `${STRUCTURE_DEFINITION_URL}/maxSize`,
+  unitValueSet: `${STRUCTURE_DEFINITION_URL}/questionnaire-unitValueSet`,
+  maxDecimalPlaces: `${STRUCTURE_DEFINITION_URL}/maxDecimalPlaces`,
+  optionPrefix: `${STRUCTURE_DEFINITION_URL}/questionnaire-optionPrefix`,
+  mimeType: `${STRUCTURE_DEFINITION_URL}/mimeType`,
   designNote: `${STRUCTURE_DEFINITION_URL}/designNote`,
   ordinalValue: `${STRUCTURE_DEFINITION_URL}/ordinalValue`,
 } as const;
@@ -153,6 +174,11 @@ const MODELED_EXTENSIONS = {
     'unitOption',
     'sliderStepValue',
     'referenceResource',
+    'referenceProfile',
+    'maxSize',
+    'mimeType',
+    'maxDecimalPlaces',
+    'unitValueSet',
   ],
 } satisfies Record<string, (keyof typeof EXTENSION_URLS)[]>;
 
@@ -715,6 +741,11 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
     sliderStepValue,
     designNote,
     referenceResource,
+    referenceProfile,
+    maxSize,
+    mimeType,
+    maxDecimalPlaces,
+    unitValueSet,
     help,
     helpDisplay,
     helpItem,
@@ -1045,6 +1076,29 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
     processedChildItems.unshift(withDisplayControl({ ...base, text: help }, helpDisplay || 'help'));
   }
 
+  if (item.type === 'quantity' && unitValueSet) {
+    extensions.push({ url: EXTENSION_URLS.unitValueSet, valueCanonical: unitValueSet });
+  }
+
+  if ((item.type === 'decimal' || item.type === 'quantity') && isNonNegativeInteger(maxDecimalPlaces)) {
+    extensions.push({ url: EXTENSION_URLS.maxDecimalPlaces, valueInteger: +maxDecimalPlaces });
+  }
+
+  if (item.type === 'attachment') {
+    if (maxSize) {
+      extensions.push({ url: EXTENSION_URLS.maxSize, valueDecimal: +maxSize });
+    }
+    for (const type of (mimeType ?? []).filter(Boolean)) {
+      extensions.push({ url: EXTENSION_URLS.mimeType, valueCode: type });
+    }
+  }
+
+  if (item.type === 'reference') {
+    for (const profile of (referenceProfile ?? []).filter(Boolean)) {
+      extensions.push({ url: EXTENSION_URLS.referenceProfile, valueCanonical: profile });
+    }
+  }
+
   extensions.push(...(preserved?.extension ?? []));
 
   const result: QuestionnaireItem = {
@@ -1213,6 +1267,19 @@ export function fromFhirQuestionnaireItem(
     formData.unit =
       extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.unit)?.valueCoding ?? null;
     formData.referenceResource = getQuestionnaireItemReferenceTargetTypes(item as QuestionnaireItem) ?? [];
+    formData.maxSize =
+      extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.maxSize)?.valueDecimal ?? null;
+    formData.unitValueSet =
+      extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.unitValueSet)?.valueCanonical ?? null;
+    formData.maxDecimalPlaces =
+      extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.maxDecimalPlaces)?.valueInteger ??
+      null;
+    formData.mimeType = extensions
+      .filter((extension: Extension) => extension.url === EXTENSION_URLS.mimeType && extension.valueCode)
+      .map((extension: Extension) => extension.valueCode);
+    formData.referenceProfile = extensions
+      .filter((extension: Extension) => extension.url === EXTENSION_URLS.referenceProfile && extension.valueCanonical)
+      .map((extension: Extension) => extension.valueCanonical);
 
     // Follow-up items: defined in the question's `item`, answered under each of its answers (`answer.item`).
     formData.item = childItems.map((childItem: QuestionnaireItem, childIndex: number) =>
@@ -1625,6 +1692,34 @@ export function getAnswerOptionLabel(answerOption: ExtendedQuestionnaireItemAnsw
 }
 
 /**
+ * Returns the text an answer option is listed with: its prefix (questionnaire-optionPrefix), if any, and its label.
+ * @param answerOption - The builder form answer option.
+ * @returns The option's listed text, e.g. "a) Apple".
+ */
+export function getAnswerOptionDisplay(answerOption: ExtendedQuestionnaireItemAnswerOption): string {
+  const label = getAnswerOptionLabel(answerOption);
+  return answerOption.prefix?.trim() ? `${answerOption.prefix.trim()} ${label}` : label;
+}
+
+function isNonNegativeInteger(value: unknown): value is number | string {
+  return value !== null && value !== undefined && value !== '' && Number.isInteger(Number(value)) && Number(value) >= 0;
+}
+
+/**
+ * Counts the decimal places of a number as typed (e.g. "1.250" has 3).
+ * @param value - The number, or its text.
+ * @returns The decimal places.
+ */
+function countDecimalPlaces(value: unknown): number {
+  const text = String(value).trim().toLowerCase();
+  if (text.includes('e')) {
+    return 0;
+  }
+  const point = text.indexOf('.');
+  return point < 0 ? 0 : text.length - point - 1;
+}
+
+/**
  * Returns a key that identifies a choice answer value: codings by code, references by reference, plain values by type
  * and value. Answers and answer options with the same key are the same answer.
  * @param value - A choice answer value, or an answer option's value.
@@ -1651,6 +1746,39 @@ export function findAnswerOption(
   return (answerOptions ?? []).find((option) => getChoiceValueKey(option.value) === key);
 }
 
+/**
+ * Applies exclusive answer options (questionnaire-optionExclusive) to a change of a repeating choice question's
+ * answers, as Medplum's QuestionnaireForm does: selecting an exclusive option clears the other answers, and selecting
+ * another option clears a selected exclusive one. Removing answers changes nothing else.
+ * @param answerOptions - The question's answer options.
+ * @param previousValues - The answer values before the change.
+ * @param newValues - The answer values the change asks for.
+ * @returns The answer values to keep.
+ */
+export function applyExclusiveOptions(
+  answerOptions: ExtendedQuestionnaireItemAnswerOption[] | undefined,
+  previousValues: any[],
+  newValues: any[]
+): any[] {
+  const exclusiveKeys = (answerOptions ?? [])
+    .filter((option) => option.exclusive)
+    .map((option) => getChoiceValueKey(option.value));
+  if (exclusiveKeys.length === 0) {
+    return newValues;
+  }
+  const isExclusive = (value: any): boolean => exclusiveKeys.includes(getChoiceValueKey(value));
+  const previousKeys = previousValues.map(getChoiceValueKey);
+  const added = newValues.filter((value) => !previousKeys.includes(getChoiceValueKey(value)));
+  const addedExclusive = added.find(isExclusive);
+  if (addedExclusive !== undefined) {
+    return [addedExclusive];
+  }
+  if (added.some((value) => !isExclusive(value))) {
+    return newValues.filter((value) => !isExclusive(value));
+  }
+  return newValues;
+}
+
 function matchesChoiceValue(value: any, expected: any): boolean {
   const key = getChoiceValueKey(expected);
   return (Array.isArray(value) ? value : [value]).some((entry) => getChoiceValueKey(entry) === key);
@@ -1662,16 +1790,21 @@ function matchesChoiceValue(value: any, expected: any): boolean {
  * @returns The FHIR answer option, or undefined when it is incomplete (a coding without code, an empty value).
  */
 function toFhirAnswerOption(option: ExtendedQuestionnaireItemAnswerOption): QuestionnaireItemAnswerOption | undefined {
-  const { initialSelected, value, preservedExtension = [] } = option;
+  const { initialSelected, value, exclusive, prefix, preservedExtension = [] } = option;
+  const exclusiveExtension = [
+    ...(exclusive ? [{ url: QUESTIONNAIRE_OPTION_EXCLUSIVE_URL, valueBoolean: true }] : []),
+    ...(prefix?.trim() ? [{ url: EXTENSION_URLS.optionPrefix, valueString: prefix }] : []),
+  ];
   if (!isCodedAnswerOption(option)) {
     if (value === undefined || value === null || value === '') {
       return undefined;
     }
     const typed = option.valueType === 'valueInteger' ? Number.parseInt(String(value), 10) : value;
+    const plainExtension = [...exclusiveExtension, ...preservedExtension];
     return {
       initialSelected,
       [option.valueType as string]: typed,
-      ...(preservedExtension.length > 0 && { extension: preservedExtension }),
+      ...(plainExtension.length > 0 && { extension: plainExtension }),
     };
   }
 
@@ -1683,6 +1816,7 @@ function toFhirAnswerOption(option: ExtendedQuestionnaireItemAnswerOption): Ques
   const hasScore = score !== undefined && score !== null && score !== '';
   const extension = [
     ...(hasScore ? [{ url: EXTENSION_URLS.ordinalValue, valueDecimal: +score }] : []),
+    ...exclusiveExtension,
     ...preservedExtension,
   ];
   return {
@@ -1762,7 +1896,21 @@ function fromQuestionnaireItemAnswerOption(answerOption: QuestionnaireItemAnswer
   if (valueType && valueType !== 'valueCoding') {
     formData.valueType = valueType;
   }
-  const preservedExtension = extensions.filter((extension: Extension) => extension.url !== EXTENSION_URLS.ordinalValue);
+  if (extensions.some((extension) => extension.url === QUESTIONNAIRE_OPTION_EXCLUSIVE_URL && extension.valueBoolean)) {
+    formData.exclusive = true;
+  }
+  const prefix = extensions.find((extension) => extension.url === EXTENSION_URLS.optionPrefix)?.valueString;
+  if (prefix) {
+    formData.prefix = prefix;
+  }
+  const modeledOptionExtensions = [
+    EXTENSION_URLS.ordinalValue,
+    QUESTIONNAIRE_OPTION_EXCLUSIVE_URL,
+    EXTENSION_URLS.optionPrefix,
+  ];
+  const preservedExtension = extensions.filter(
+    (extension: Extension) => !modeledOptionExtensions.includes(extension.url)
+  );
   if (preservedExtension.length > 0) {
     formData.preservedExtension = preservedExtension;
   }
@@ -2144,6 +2292,15 @@ export function validateAnswerValue(original: ExtendedQuestionnaireItem, value: 
     }
     if (!isValidUrl(text)) {
       return `${label} must be a full link, e.g. https://example.com`;
+    }
+  }
+
+  if ((type === 'decimal' || type === 'quantity') && isNonNegativeInteger(original.maxDecimalPlaces)) {
+    const places = +original.maxDecimalPlaces;
+    if (countDecimalPlaces(getNumericAnswer(value)) > places) {
+      return places === 0
+        ? `${label} must be a whole number`
+        : `${label} can have at most ${places} decimal place${places === 1 ? '' : 's'}`;
     }
   }
 

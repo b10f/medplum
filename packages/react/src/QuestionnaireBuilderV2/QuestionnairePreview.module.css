@@ -20,6 +20,12 @@
   padding-left: 12px;
 }
 
+.answerLabel {
+  display: block;
+  width: 100%;
+  margin-bottom: var(--mantine-spacing-xs);
+}
+
 .questionText {
   flex: 1;
 }

@@ -4,6 +4,7 @@ import { generateId, getReferenceString, HTTP_HL7_ORG, UCUM } from '@medplum/cor
 import type {
   Coding,
   Extension,
+  Quantity,
   Questionnaire,
   QuestionnaireItem,
   QuestionnaireItemAnswerOption,
@@ -15,7 +16,13 @@ import type {
   ValueSet,
   ValueSetExpansionContains,
 } from '@medplum/fhirtypes';
-import { QUESTIONNAIRE_HIDDEN_URL, QUESTIONNAIRE_ITEM_CONTROL_URL } from '@medplum/react-hooks';
+import {
+  getQuestionnaireItemReferenceTargetTypes,
+  QUESTIONNAIRE_HIDDEN_URL,
+  QUESTIONNAIRE_ITEM_CONTROL_URL,
+  QUESTIONNAIRE_REFERENCE_RESOURCE_URL,
+  setQuestionnaireItemReferenceTargetTypes,
+} from '@medplum/react-hooks';
 import type { QuestionnaireForm } from './QuestionnaireFormContext';
 
 export interface ExtendedQuestionnaireItem extends Omit<QuestionnaireItem, 'enableWhen' | 'item' | 'answerOption'> {
@@ -38,12 +45,16 @@ export interface ExtendedQuestionnaireItem extends Omit<QuestionnaireItem, 'enab
   displayCategory: Record<string, any>;
   unit: Coding | null;
   unitOption: any[];
+  /** The resource types a reference question can point to (questionnaire-referenceResource). */
+  referenceResource: string[];
   usageMode: string;
   supportLink: string;
   sliderStepValue: number;
   help: string;
-  /** The linkId of the help item, kept so an imported questionnaire's linkIds do not change on save. */
-  helpLinkId: string | undefined;
+  /** The help item as loaded, so its linkId and anything else on it are kept on save; only its text is edited. */
+  helpItem: QuestionnaireItem | undefined;
+  /** What the builder does not edit (other fields and extensions), written back unchanged on save. */
+  preserved: PreservedItemContent | undefined;
   itemControl: Record<string, any>;
   answerOption: ExtendedQuestionnaireItemAnswerOption[];
   path: string;
@@ -54,6 +65,14 @@ export interface ExtendedQuestionnaireItem extends Omit<QuestionnaireItem, 'enab
   enableWhen: ExtendedQuestionnaireItemEnableWhen[];
 }
 
+/** The parts of a FHIR item or answer option that the builder does not edit. */
+export interface PreservedItemContent {
+  /** Fields such as `id`, `definition`, `modifierExtension` and primitive extensions (`_text`). */
+  readonly fields?: Record<string, any>;
+  /** Extensions the builder does not read. */
+  readonly extension?: Extension[];
+}
+
 export interface ExtendedQuestionnaireItemAnswer {
   value: any;
   /** Copies of the question's follow-up items, answered for this answer. */
@@ -61,7 +80,12 @@ export interface ExtendedQuestionnaireItemAnswer {
 }
 
 export interface ExtendedQuestionnaireItemAnswerOption extends QuestionnaireItemAnswerOption {
+  /** A coding ({ code, display, system, score }), or the plain value of a string, integer, date or time option. */
   value: any;
+  /** The FHIR value[x] the option was read from, e.g. `valueString`; a coding when undefined. */
+  valueType?: string;
+  /** Extensions other than the score (e.g. optionExclusive), written back unchanged on save. */
+  preservedExtension?: Extension[];
 }
 
 export interface ExtendedQuestionnaireItemEnableWhen extends Omit<
@@ -93,31 +117,50 @@ const EXTENSION_URLS = {
   usageMode: `${STRUCTURE_DEFINITION_URL}/questionnaire-usageMode`,
   supportLink: `${STRUCTURE_DEFINITION_URL}/questionnaire-supportLink`,
   sliderStepValue: `${STRUCTURE_DEFINITION_URL}/questionnaire-sliderStepValue`,
+  referenceResource: QUESTIONNAIRE_REFERENCE_RESOURCE_URL,
   ordinalValue: `${STRUCTURE_DEFINITION_URL}/ordinalValue`,
 } as const;
 
 const QUESTIONNAIRE_ITEM_CONTROL_SYSTEM = `${HTTP_HL7_ORG}/fhir/questionnaire-item-control`;
 
+/** The extensions the builder reads into its own fields and writes back from them. */
+const MODELED_EXTENSION_URLS: string[] = Object.entries(EXTENSION_URLS)
+  .filter(([name]) => name !== 'ordinalValue')
+  .map(([, url]) => url);
+
+/** The FHIR QuestionnaireItem fields the builder does not edit. */
+const PRESERVED_ITEM_FIELDS = ['id', 'definition', 'modifierExtension'];
+
+/**
+ * Collects what the builder does not edit on a FHIR item: other fields, primitive extensions and other extensions.
+ * @param item - The FHIR QuestionnaireItem.
+ * @returns The preserved content, or undefined when there is none.
+ */
+function getPreservedItemContent(item: QuestionnaireItem): PreservedItemContent | undefined {
+  const fields = Object.fromEntries(
+    Object.entries(item).filter(([key]) => PRESERVED_ITEM_FIELDS.includes(key) || key.startsWith('_'))
+  );
+  const extension = (item.extension ?? []).filter((ext) => !MODELED_EXTENSION_URLS.includes(ext.url));
+  if (Object.keys(fields).length === 0 && extension.length === 0) {
+    return undefined;
+  }
+  return {
+    ...(Object.keys(fields).length > 0 && { fields }),
+    ...(extension.length > 0 && { extension }),
+  };
+}
+
 /** The item control that marks a top-level group as a page, as used by Medplum's QuestionnaireBuilder and form. */
 export const PAGE_ITEM_CONTROL: Coding = { system: QUESTIONNAIRE_ITEM_CONTROL_SYSTEM, code: 'page', display: 'Page' };
 
-const MAX_HORIZONTAL_CHOICE_OPTIONS = 4;
-const MAX_HORIZONTAL_CHOICE_TOTAL_LENGTH = 40;
-
 /**
- * Decides whether a choice question's options are laid out in a row. An explicit `choiceOrientation` always wins;
- * otherwise only a few short options go in a row (their labels together fit in a narrow column), since long or many
- * options wrap into an uneven grid.
+ * Decides whether a choice question's options are laid out in a row: only when its `choiceOrientation` is
+ * horizontal. Without one, options are listed one per line.
  * @param item - The choice item (its definition).
  * @returns True for a horizontal layout, false for one option per line.
  */
 export function isHorizontalChoiceLayout(item: ExtendedQuestionnaireItem): boolean {
-  if (item.choiceOrientation === 'horizontal' || item.choiceOrientation === 'vertical') {
-    return item.choiceOrientation === 'horizontal';
-  }
-  const options = item.answerOption ?? [];
-  const totalLength = options.reduce((sum, option) => sum + String(option.value?.display ?? '').length, 0);
-  return options.length <= MAX_HORIZONTAL_CHOICE_OPTIONS && totalLength <= MAX_HORIZONTAL_CHOICE_TOTAL_LENGTH;
+  return item.choiceOrientation === 'horizontal';
 }
 
 /**
@@ -465,8 +508,10 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
     usageMode,
     supportLink,
     sliderStepValue,
+    referenceResource,
     help,
-    helpLinkId,
+    helpItem,
+    preserved,
     itemControl,
     enableWhen,
     enableBehavior,
@@ -512,11 +557,19 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
         condition.operator !== 'exists' &&
         condition.operator !== 'empty'
       ) {
-        answer = {
-          code: answer.code,
-          display: answer.display,
-          system: answer.system,
-        };
+        // Typed like the option it names: a coding, or a plain value (answerString, answerInteger, ...).
+        const option = findAnswerOption(condition.question.answerOption, answer);
+        if (option && !isCodedAnswerOption(option)) {
+          answerKey = (option.valueType as string).replace(/^value/, 'answer');
+        } else if (answer && typeof answer === 'object') {
+          answer = {
+            ...(answer.system && { system: answer.system }),
+            code: answer.code,
+            ...(answer.display && { display: answer.display }),
+          };
+        } else {
+          answerKey = 'answerString';
+        }
       }
 
       if (questionType === 'boolean') {
@@ -583,7 +636,7 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
         } else if (questionType === 'dateTime') {
           value = new Date(initialItem.value).toISOString();
         } else if (questionType === 'quantity') {
-          value = { value: initialItem.value };
+          value = { value: +initialItem.value };
         } else {
           value = initialItem.value;
         }
@@ -592,26 +645,8 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
       });
 
     transformedAnswerOption = (answerOption ?? [])
-      .filter((option: { initialSelected: boolean; value: any }) => option.value.code && option.value.display)
-      .map((option: { initialSelected: boolean; value: any }) => {
-        const answerOptionExtensions: Extension[] = [];
-        const { initialSelected, value } = option;
-        const { score, ...withoutScore } = value;
-
-        // A score of 0 is a real score (e.g. "Not at all" in PHQ instruments).
-        if (score !== undefined && score !== null && score !== '') {
-          answerOptionExtensions.push({
-            url: EXTENSION_URLS.ordinalValue,
-            valueDecimal: +score,
-          });
-        }
-
-        return {
-          initialSelected: initialSelected,
-          [valueKey]: withoutScore,
-          ...(answerOptionExtensions?.length && { extension: answerOptionExtensions }),
-        };
-      });
+      .map((option: ExtendedQuestionnaireItemAnswerOption) => toFhirAnswerOption(option))
+      .filter(Boolean);
   }
 
   const extensions: Extension[] = [];
@@ -630,10 +665,14 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
 
   if (minValue) {
     const questionType: string = item.type;
-    const valueKey = `value${questionType.charAt(0).toUpperCase()}${questionType.slice(1)}`;
+    // R4 minValue/maxValue take no Quantity: a quantity's bound is its number, as a decimal.
+    const valueKey =
+      questionType === 'quantity'
+        ? 'valueDecimal'
+        : `value${questionType.charAt(0).toUpperCase()}${questionType.slice(1)}`;
     let value: string | number;
 
-    if (questionType === 'integer' || questionType === 'decimal') {
+    if (questionType === 'integer' || questionType === 'decimal' || questionType === 'quantity') {
       value = +minValue;
     } else if (questionType === 'time') {
       value = `${minValue}:00`;
@@ -651,10 +690,14 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
 
   if (maxValue) {
     const questionType = item.type;
-    const valueKey = `value${questionType.charAt(0).toUpperCase()}${questionType.slice(1)}`;
+    // R4 minValue/maxValue take no Quantity: a quantity's bound is its number, as a decimal.
+    const valueKey =
+      questionType === 'quantity'
+        ? 'valueDecimal'
+        : `value${questionType.charAt(0).toUpperCase()}${questionType.slice(1)}`;
     let value: string | number;
 
-    if (questionType === 'integer' || questionType === 'decimal') {
+    if (questionType === 'integer' || questionType === 'decimal' || questionType === 'quantity') {
       value = +maxValue;
     } else if (questionType === 'dateTime') {
       value = new Date(maxValue).toISOString();
@@ -762,7 +805,7 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
     });
   }
 
-  if (item.type === 'integer' && itemControl.code === 'slider' && sliderStepValue) {
+  if ((item.type === 'integer' || item.type === 'decimal') && itemControl.code === 'slider' && sliderStepValue) {
     extensions.push({
       url: EXTENSION_URLS.sliderStepValue,
       valueInteger: +sliderStepValue,
@@ -774,30 +817,36 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
     item.type === 'display' ? [] : (childItems ?? []).map((childItem: any) => toFhirQuestionnaireItem(childItem));
 
   if (help) {
+    // A loaded help item keeps everything but its text; a new one is a help-button display item.
     processedChildItems.unshift({
-      linkId: helpLinkId || `${item.linkId}_help`,
-      text: help,
-      type: 'display',
-      extension: [
-        {
-          url: EXTENSION_URLS.itemControl,
-          valueCodeableConcept: {
-            coding: [
-              {
-                system: QUESTIONNAIRE_ITEM_CONTROL_SYSTEM,
-                code: 'help',
-                display: 'Help-Button',
-              },
-            ],
-            text: 'Help-Button',
+      ...(helpItem ?? {
+        linkId: `${item.linkId}_help`,
+        type: 'display',
+        extension: [
+          {
+            url: EXTENSION_URLS.itemControl,
+            valueCodeableConcept: {
+              coding: [
+                {
+                  system: QUESTIONNAIRE_ITEM_CONTROL_SYSTEM,
+                  code: 'help',
+                  display: 'Help-Button',
+                },
+              ],
+              text: 'Help-Button',
+            },
           },
-        },
-      ],
+        ],
+      }),
+      text: help,
     });
   }
 
-  return {
+  extensions.push(...(preserved?.extension ?? []));
+
+  const result: QuestionnaireItem = {
     ...rest,
+    ...preserved?.fields,
     ...(prefix && { prefix: prefix }),
     ...(maxLength && { maxLength: +maxLength }),
     ...(transformedEnableWhen && transformedEnableWhen.length !== 0 && { enableWhen: transformedEnableWhen }),
@@ -816,6 +865,12 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
     ...(extensions?.length !== 0 && { extension: extensions }),
     ...(processedChildItems?.length !== 0 && { item: processedChildItems }),
   };
+
+  // Written with Medplum's helper, as its QuestionnaireBuilder does: one type as a code, several as a CodeableConcept.
+  const targetTypes = (referenceResource ?? []).filter(Boolean);
+  return item.type === 'reference' && targetTypes.length > 0
+    ? setQuestionnaireItemReferenceTargetTypes(result, targetTypes)
+    : result;
 }
 
 /**
@@ -880,21 +935,18 @@ export function fromFhirQuestionnaireItem(
       extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.supportLink)?.valueUri ?? '',
     usageMode: extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.usageMode)?.valueCode ?? '',
     parent: parentRef,
+    preserved: getPreservedItemContent(item as QuestionnaireItem),
   };
 
   // applies to questions & groups
   if (item.type !== 'display') {
-    formData.code =
-      item.code?.map((code: Coding) => ({
-        code: code.code,
-        display: code.display,
-        system: code.system,
-      })) || [];
+    // Whole codings, so fields the builder does not edit (e.g. version) are kept.
+    formData.code = item.code?.map((code: Coding) => ({ ...code })) || [];
     formData.required = item.required ?? false;
     formData.repeats = item.repeats ?? false;
     formData.readOnly = item.readOnly ?? false;
     formData.help = helpItem?.text ?? '';
-    formData.helpLinkId = helpItem?.linkId;
+    formData.helpItem = helpItem;
     formData.itemControl =
       extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.itemControl)?.valueCodeableConcept
         ?.coding?.[0] ?? {};
@@ -924,6 +976,8 @@ export function fromFhirQuestionnaireItem(
       item.answerOption?.map((answerOption: QuestionnaireItemAnswerOption) =>
         fromQuestionnaireItemAnswerOption(answerOption)
       ) ?? [];
+    // Answers bound to a value set instead of listed as options (FHIR allows one or the other).
+    formData.answerValueSet = item.answerValueSet;
     formData.unitOption = extensions
       .filter((extension: Extension) => extension.url === EXTENSION_URLS.unitOption)
       .map((extension: Extension) => extension.valueCoding);
@@ -932,6 +986,7 @@ export function fromFhirQuestionnaireItem(
       : fromQuestionnaireItemInitialToAnswer(item as QuestionnaireItem);
     formData.unit =
       extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.unit)?.valueCoding ?? null;
+    formData.referenceResource = getQuestionnaireItemReferenceTargetTypes(item as QuestionnaireItem) ?? [];
 
     // Follow-up items: defined in the question's `item`, answered under each of its answers (`answer.item`).
     formData.item = childItems.map((childItem: QuestionnaireItem, childIndex: number) =>
@@ -1040,7 +1095,9 @@ function fromExtensionToValue(
     if (questionType === 'time') {
       return (extension as any)[valueKey].split(':').slice(0, 2).join(':');
     } else if (questionType === 'dateTime') {
-      return (extension as any)[valueKey].split('.')[0];
+      return toLocalDateTime((extension as any)[valueKey]);
+    } else if (questionType === 'quantity') {
+      return extension.valueDecimal ?? extension.valueInteger ?? (extension as any).valueQuantity?.value ?? null;
     }
 
     return (extension as any)[valueKey];
@@ -1093,7 +1150,7 @@ function fromFhirQuestionnaireItemEnableWhen(
   } else if ('answerDate' in enableWhen) {
     formData.answer = enableWhen.answerDate;
   } else if ('answerDateTime' in enableWhen) {
-    formData.answer = enableWhen.answerDateTime?.split('.')[0];
+    formData.answer = toLocalDateTime(enableWhen.answerDateTime);
   } else if ('answerTime' in enableWhen) {
     formData.answer = enableWhen.answerTime?.split(':').slice(0, 2).join(':');
   } else if ('answerString' in enableWhen) {
@@ -1127,7 +1184,7 @@ function fromQuestionnaireItemInitial(initial: QuestionnaireItemInitial): any {
   } else if ('valueDate' in initial) {
     formData.value = initial.valueDate;
   } else if ('valueDateTime' in initial) {
-    formData.value = initial.valueDateTime?.split('.')[0];
+    formData.value = toLocalDateTime(initial.valueDateTime);
   } else if ('valueTime' in initial) {
     formData.value = initial.valueTime?.split(':').slice(0, 2).join(':');
   } else if ('valueString' in initial) {
@@ -1166,7 +1223,7 @@ function fromQuestionnaireItemInitialToAnswer(item: QuestionnaireItem): { value:
     } else if ('valueDate' in initial) {
       value = initial.valueDate;
     } else if ('valueDateTime' in initial) {
-      value = initial.valueDateTime?.split('.')[0];
+      value = toLocalDateTime(initial.valueDateTime);
     } else if ('valueTime' in initial) {
       value = initial.valueTime?.split(':').slice(0, 2).join(':');
     } else if ('valueString' in initial) {
@@ -1178,7 +1235,8 @@ function fromQuestionnaireItemInitialToAnswer(item: QuestionnaireItem): { value:
     } else if ('valueCoding' in initial) {
       value = initial.valueCoding;
     } else if ('valueQuantity' in initial) {
-      value = initial.valueQuantity?.value;
+      // A quantity answer keeps its unit and comparator.
+      value = item.type === 'quantity' ? { ...initial.valueQuantity } : initial.valueQuantity?.value;
     } else if ('valueReference' in initial) {
       value = initial.valueReference;
     }
@@ -1189,7 +1247,9 @@ function fromQuestionnaireItemInitialToAnswer(item: QuestionnaireItem): { value:
   if (item.type === 'choice' || item.type === 'open-choice') {
     const initialSelected = (item.answerOption ?? [])
       .filter((answer: QuestionnaireItemAnswerOption) => answer.initialSelected)
-      .map((answer: QuestionnaireItemAnswerOption) => ({ value: answer.valueCoding }));
+      .map((answer: QuestionnaireItemAnswerOption) => ({
+        value: answer.valueCoding ?? fromQuestionnaireItemAnswerOption(answer).value,
+      }));
 
     answers = initialSelected;
   }
@@ -1211,6 +1271,11 @@ function fromQuestionnaireResponseItemAnswer(
   return answers.map((answer: QuestionnaireResponseItemAnswer) => {
     let value: any;
 
+    // A choice answer is one of the options' values, which are kept as they are.
+    if ((itemType === 'choice' || itemType === 'open-choice') && (answer.valueTime || answer.valueDateTime)) {
+      return { value: answer.valueTime ?? answer.valueDateTime };
+    }
+
     if ('valueBoolean' in answer) {
       value = answer.valueBoolean;
     } else if ('valueDecimal' in answer) {
@@ -1220,7 +1285,7 @@ function fromQuestionnaireResponseItemAnswer(
     } else if ('valueDate' in answer) {
       value = answer.valueDate;
     } else if ('valueDateTime' in answer) {
-      value = answer.valueDateTime?.split('.')[0];
+      value = toLocalDateTime(answer.valueDateTime);
     } else if ('valueTime' in answer) {
       value = answer.valueTime?.split(':').slice(0, 2).join(':');
     } else if ('valueString' in answer) {
@@ -1232,7 +1297,7 @@ function fromQuestionnaireResponseItemAnswer(
     } else if ('valueCoding' in answer) {
       value = answer.valueCoding;
     } else if ('valueQuantity' in answer) {
-      value = answer.valueQuantity?.value;
+      value = itemType === 'quantity' ? { ...answer.valueQuantity } : answer.valueQuantity?.value;
     } else if ('valueReference' in answer) {
       value = answer.valueReference;
     } else {
@@ -1293,6 +1358,111 @@ export function toFhirAnswerOptionsFromValueSet(valueSet: ValueSet): Questionnai
     }));
 }
 
+const ANSWER_OPTION_VALUE_TYPES = [
+  'valueCoding',
+  'valueString',
+  'valueInteger',
+  'valueDate',
+  'valueTime',
+  'valueReference',
+] as const;
+
+/**
+ * Returns true if an answer option is a coding (hand-written, LOINC, value set), rather than a plain value.
+ * @param answerOption - The builder form answer option.
+ * @returns True for a coded option.
+ */
+export function isCodedAnswerOption(answerOption: ExtendedQuestionnaireItemAnswerOption): boolean {
+  return !answerOption.valueType || answerOption.valueType === 'valueCoding';
+}
+
+/**
+ * Returns the text an answer option is shown with: a coding's display (or code), a reference's display (or
+ * reference), or a plain value itself.
+ * @param answerOption - The builder form answer option.
+ * @returns The option's label.
+ */
+export function getAnswerOptionLabel(answerOption: ExtendedQuestionnaireItemAnswerOption): string {
+  const value = answerOption.value;
+  if (value && typeof value === 'object') {
+    return String(value.display || value.code || value.reference || '');
+  }
+  return String(value ?? '');
+}
+
+/**
+ * Returns a key that identifies a choice answer value: codings by code, references by reference, plain values by type
+ * and value. Answers and answer options with the same key are the same answer.
+ * @param value - A choice answer value, or an answer option's value.
+ * @returns The key.
+ */
+export function getChoiceValueKey(value: any): string {
+  if (value && typeof value === 'object') {
+    return value.reference ? `reference:${value.reference}` : `code:${value.code ?? ''}`;
+  }
+  return `${typeof value}:${String(value ?? '')}`;
+}
+
+/**
+ * Finds the answer option a choice answer value was selected from.
+ * @param answerOptions - The item's answer options.
+ * @param value - The answer value.
+ * @returns The answer option, or undefined (e.g. for an open-choice answer typed by the respondent).
+ */
+export function findAnswerOption(
+  answerOptions: ExtendedQuestionnaireItemAnswerOption[] | undefined,
+  value: any
+): ExtendedQuestionnaireItemAnswerOption | undefined {
+  const key = getChoiceValueKey(value);
+  return (answerOptions ?? []).find((option) => getChoiceValueKey(option.value) === key);
+}
+
+function matchesChoiceValue(value: any, expected: any): boolean {
+  const key = getChoiceValueKey(expected);
+  return (Array.isArray(value) ? value : [value]).some((entry) => getChoiceValueKey(entry) === key);
+}
+
+/**
+ * Converts a builder form answer option back into a FHIR answer option.
+ * @param option - The builder form answer option.
+ * @returns The FHIR answer option, or undefined when it is incomplete (a coding without code, an empty value).
+ */
+function toFhirAnswerOption(option: ExtendedQuestionnaireItemAnswerOption): QuestionnaireItemAnswerOption | undefined {
+  const { initialSelected, value, preservedExtension = [] } = option;
+  if (!isCodedAnswerOption(option)) {
+    if (value === undefined || value === null || value === '') {
+      return undefined;
+    }
+    const typed = option.valueType === 'valueInteger' ? Number.parseInt(String(value), 10) : value;
+    return {
+      initialSelected,
+      [option.valueType as string]: typed,
+      ...(preservedExtension.length > 0 && { extension: preservedExtension }),
+    };
+  }
+
+  const { score, ...coding } = value ?? {};
+  if (!String(coding.code ?? '').trim()) {
+    return undefined;
+  }
+  // A score of 0 is a real score (e.g. "Not at all" in PHQ instruments).
+  const hasScore = score !== undefined && score !== null && score !== '';
+  const extension = [
+    ...(hasScore ? [{ url: EXTENSION_URLS.ordinalValue, valueDecimal: +score }] : []),
+    ...preservedExtension,
+  ];
+  return {
+    initialSelected,
+    // Empty fields left by editing (e.g. a cleared display) are not written.
+    valueCoding: Object.fromEntries(
+      Object.entries(coding).filter(
+        ([, fieldValue]) => fieldValue !== undefined && fieldValue !== null && fieldValue !== ''
+      )
+    ),
+    ...(extension.length > 0 && { extension }),
+  };
+}
+
 /**
  * Returns true if an answer option was written by hand in this questionnaire (coded in its local system). Other coded
  * answers (LOINC, a value set) keep their code and text, so they mean the same wherever they are used.
@@ -1304,6 +1474,10 @@ export function isManualAnswerOption(
   answerOption: ExtendedQuestionnaireItemAnswerOption,
   localSystem: string | undefined
 ): boolean {
+  if (!isCodedAnswerOption(answerOption)) {
+    // A plain value has no code system to keep; a reference points at a resource and is not edited here.
+    return answerOption.valueType !== 'valueReference';
+  }
   const system = answerOption.value?.system;
   return !system || system === localSystem;
 }
@@ -1316,17 +1490,19 @@ export function isManualAnswerOption(
  */
 export function getAnswerOptionProblems(answerOptions: ExtendedQuestionnaireItemAnswerOption[]): string[] {
   const problems: string[] = [];
-  if (
-    answerOptions.some(
-      (option) => !String(option.value?.code ?? '').trim() || !String(option.value?.display ?? '').trim()
-    )
-  ) {
-    problems.push('Every answer option needs a code and display text; incomplete options are not saved.');
+  if (answerOptions.some((option) => !toFhirAnswerOption(option))) {
+    problems.push('Every answer option needs a code (or a value); incomplete options are not saved.');
   }
-  const codes = answerOptions.map((option) => String(option.value?.code ?? '').trim()).filter(Boolean);
-  const duplicates = [...new Set(codes.filter((code, index) => codes.indexOf(code) !== index))];
+  const keys = answerOptions
+    .filter((option) => toFhirAnswerOption(option))
+    .map((option) => getChoiceValueKey(option.value));
+  const duplicates = [
+    ...new Set(
+      keys.filter((key, index) => keys.indexOf(key) !== index).map((key) => key.split(':').slice(1).join(':'))
+    ),
+  ];
   if (duplicates.length > 0) {
-    problems.push(`Answer option codes must be unique: ${duplicates.join(', ')}`);
+    problems.push(`Answer options must be unique: ${duplicates.join(', ')}`);
   }
   return problems;
 }
@@ -1348,6 +1524,14 @@ function fromQuestionnaireItemAnswerOption(answerOption: QuestionnaireItemAnswer
     id: generateId(),
     initialSelected: answerOption.initialSelected ?? false,
   };
+  const valueType = ANSWER_OPTION_VALUE_TYPES.find((key) => key in answerOption);
+  if (valueType && valueType !== 'valueCoding') {
+    formData.valueType = valueType;
+  }
+  const preservedExtension = extensions.filter((extension: Extension) => extension.url !== EXTENSION_URLS.ordinalValue);
+  if (preservedExtension.length > 0) {
+    formData.preservedExtension = preservedExtension;
+  }
 
   // Detect and add the appropriate value[x] property
   if ('valueInteger' in answerOption) {
@@ -1359,10 +1543,9 @@ function fromQuestionnaireItemAnswerOption(answerOption: QuestionnaireItemAnswer
   } else if ('valueString' in answerOption) {
     formData.value = answerOption.valueString;
   } else if ('valueCoding' in answerOption) {
+    // The whole coding, so fields the builder does not edit (e.g. version) are kept.
     formData.value = {
-      code: answerOption.valueCoding?.code,
-      display: answerOption.valueCoding?.display,
-      system: answerOption.valueCoding?.system,
+      ...answerOption.valueCoding,
       score: extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.ordinalValue)?.valueDecimal,
     };
   } else if ('valueReference' in answerOption) {
@@ -1410,7 +1593,12 @@ export function evaluateEnableWhen(values: Record<string, any>, item: ExtendedQu
 
     answers = answers ?? [];
     const isCodeType = predicateQuestion?.type === 'choice' || predicateQuestion?.type === 'open-choice';
-    const isNumeric = typeof answer === 'number' || predicateQuestion?.type === 'quantity';
+    // Numbers compare as numbers, also when typed into a text field as a string.
+    const isNumeric =
+      typeof answer === 'number' || ['integer', 'decimal', 'quantity'].includes(predicateQuestion?.type ?? '');
+
+    // Comparisons only count given answers: an unanswered number is an empty string, not 0.
+    const given = answers.filter((a) => !isEmptyAnswerValue(a.value));
 
     switch (operator) {
       case 'exists':
@@ -1420,39 +1608,39 @@ export function evaluateEnableWhen(values: Record<string, any>, item: ExtendedQu
       case 'empty':
         return answers.some((a) => !hasAnswerValue(a.value));
       case '=':
-        return answers.some((a) => {
+        return given.some((a) => {
           if (!predicateQuestion) {
             return false;
           }
           if (isCodeType) {
-            return getAnswerCodes(a.value).includes(answer?.code);
+            return matchesChoiceValue(a.value, answer);
           }
           if (isNumeric) {
-            return +a.value === +answer;
+            return +getNumericAnswer(a.value) === +answer;
           }
           return a.value === answer;
         });
       case '!=':
-        return answers.some((a) => {
+        return given.some((a) => {
           if (!predicateQuestion) {
             return false;
           }
           if (isCodeType) {
-            return !getAnswerCodes(a.value).includes(answer?.code);
+            return !matchesChoiceValue(a.value, answer);
           }
           if (isNumeric) {
-            return +a.value !== +answer;
+            return +getNumericAnswer(a.value) !== +answer;
           }
           return a.value !== answer;
         });
       case '>':
-        return answers.some((a) => (isNumeric ? +a.value > +answer : a.value && a.value > answer));
+        return given.some((a) => (isNumeric ? +getNumericAnswer(a.value) > +answer : a.value && a.value > answer));
       case '>=':
-        return answers.some((a) => (isNumeric ? +a.value >= +answer : a.value && a.value >= answer));
+        return given.some((a) => (isNumeric ? +getNumericAnswer(a.value) >= +answer : a.value && a.value >= answer));
       case '<':
-        return answers.some((a) => (isNumeric ? +a.value < +answer : a.value && a.value < answer));
+        return given.some((a) => (isNumeric ? +getNumericAnswer(a.value) < +answer : a.value && a.value < answer));
       case '<=':
-        return answers.some((a) => (isNumeric ? +a.value <= +answer : a.value && a.value <= answer));
+        return given.some((a) => (isNumeric ? +getNumericAnswer(a.value) <= +answer : a.value && a.value <= answer));
       default:
         return false;
     }
@@ -1518,11 +1706,28 @@ function findAnswerItem(
 }
 
 function hasAnswerValue(value: any): boolean {
+  if (isQuantityAnswer(value)) {
+    return !isEmptyAnswerValue(value.value);
+  }
   return Array.isArray(value) ? value.length > 0 : Boolean(value);
 }
 
-function getAnswerCodes(value: any): (string | undefined)[] {
-  return Array.isArray(value) ? value.map((coding) => coding?.code) : [value?.code];
+/**
+ * Returns true if an answer value is a quantity ({ value, comparator, unit, code, system }).
+ * @param value - The answer value.
+ * @returns True for a quantity.
+ */
+export function isQuantityAnswer(value: any): value is Quantity {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && 'value' in value;
+}
+
+/**
+ * Returns the number of an answer: a quantity's value, or the answer itself.
+ * @param value - The answer value.
+ * @returns The number (or the value to convert to one).
+ */
+function getNumericAnswer(value: any): any {
+  return isQuantityAnswer(value) ? value.value : value;
 }
 
 /**
@@ -1660,6 +1865,9 @@ export function isEmptyAnswerValue(value: any): boolean {
   if (value === undefined || value === null) {
     return true;
   }
+  if (isQuantityAnswer(value)) {
+    return isEmptyAnswerValue(value.value);
+  }
   if (typeof value === 'string') {
     return value.trim() === '';
   }
@@ -1694,11 +1902,22 @@ export function validateAnswerValue(original: ExtendedQuestionnaireItem, value: 
     }
   }
 
+  if (type === 'url') {
+    const text = String(value);
+    if (original.maxLength && text.length > +original.maxLength) {
+      return `${label} cannot exceed ${original.maxLength} characters`;
+    }
+    if (!isValidUrl(text)) {
+      return `${label} must be a full link, e.g. https://example.com`;
+    }
+  }
+
   if (type === 'integer' || type === 'decimal' || type === 'quantity') {
-    if (!isEmptyAnswerValue(original.minValue) && +value < +(original.minValue as number | string)) {
+    const number = +getNumericAnswer(value);
+    if (!isEmptyAnswerValue(original.minValue) && number < +(original.minValue as number | string)) {
       return `${label} must be at least ${original.minValue}`;
     }
-    if (!isEmptyAnswerValue(original.maxValue) && +value > +(original.maxValue as number | string)) {
+    if (!isEmptyAnswerValue(original.maxValue) && number > +(original.maxValue as number | string)) {
       return `${label} cannot exceed ${original.maxValue}`;
     }
   }
@@ -1859,23 +2078,95 @@ function toFhirResponseAnswer(item: ExtendedQuestionnaireItem, value: any): Ques
     case 'reference':
       return { valueReference: value };
     case 'quantity': {
-      const unit = item.unit;
+      const quantity: Quantity = isQuantityAnswer(value) ? value : { value };
+      // The respondent's unit, or else the question's fixed unit: its only allowed unit, or its unit.
+      const unitOptions: Coding[] = (item.unitOption ?? []).filter(Boolean);
+      const fixedUnit = unitOptions.length === 1 ? unitOptions[0] : item.unit;
+      const unit = quantity.unit || quantity.code ? quantity : toQuantityUnit(fixedUnit);
       return {
         valueQuantity: {
-          value: parseFloat(value),
-          ...(unit && { unit: unit.display, system: unit.system, code: unit.code }),
+          ...(quantity.comparator && { comparator: quantity.comparator }),
+          value: parseFloat(String(quantity.value)),
+          ...(unit?.unit && { unit: unit.unit }),
+          ...(unit?.system && { system: unit.system }),
+          ...(unit?.code && { code: unit.code }),
         },
       };
     }
     case 'choice':
-    case 'open-choice':
-      if (typeof value === 'object') {
-        return { valueCoding: { code: value.code, display: value.display, system: value.system } };
+    case 'open-choice': {
+      // Written with the value type of the option it was selected from.
+      const option = findAnswerOption(item.answerOption, value);
+      if (option && !isCodedAnswerOption(option)) {
+        return { [option.valueType as string]: option.value };
       }
+      if (value && typeof value === 'object') {
+        if (value.reference) {
+          return { valueReference: value };
+        }
+        return {
+          valueCoding: {
+            ...(value.system && { system: value.system }),
+            code: value.code,
+            ...(value.display && { display: value.display }),
+          },
+        };
+      }
+      // An open-choice answer typed by the respondent.
       return { valueString: String(value) };
+    }
     default:
       return { valueString: String(value) };
   }
+}
+
+/**
+ * Converts a FHIR dateTime into the local date and time of a `datetime-local` input. Builder values are local times,
+ * saved as UTC instants (toISOString), so they must be read back in local time or they shift by the time zone offset.
+ * @param value - The FHIR dateTime.
+ * @returns The local date and time (`YYYY-MM-DDTHH:mm`, with seconds when not zero), or the value when it has no time.
+ */
+export function toLocalDateTime(value: string | undefined): string | undefined {
+  if (!value?.includes('T')) {
+    return value;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  const local = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return date.getSeconds() ? `${local}:${pad(date.getSeconds())}` : local;
+}
+
+const URL_PROTOCOLS = ['http:', 'https:', 'ftp:', 'mailto:'];
+
+/**
+ * Returns true if a URL answer is a full link: a web or FTP address with a host, or a mailto address.
+ * @param value - The answer.
+ * @returns True if the value is a valid URL.
+ */
+function isValidUrl(value: string): boolean {
+  try {
+    const url = new URL(value.trim());
+    return URL_PROTOCOLS.includes(url.protocol) && (url.protocol === 'mailto:' || !!url.hostname);
+  } catch (_err) {
+    return false;
+  }
+}
+
+/**
+ * Converts a unit coding (questionnaire-unit, questionnaire-unitOption) into the unit fields of a Quantity.
+ * @param coding - The unit coding.
+ * @returns The Quantity's unit, system and code, or undefined.
+ */
+export function toQuantityUnit(
+  coding: Coding | null | undefined
+): Pick<Quantity, 'unit' | 'system' | 'code'> | undefined {
+  if (!coding) {
+    return undefined;
+  }
+  return { unit: coding.display ?? coding.code, system: coding.system, code: coding.code };
 }
 
 function toFhirTime(value: string): string {
@@ -1890,7 +2181,8 @@ function toRegExp(regex: string | undefined): RegExp | undefined {
     return undefined;
   }
   try {
-    return new RegExp(regex);
+    // A FHIR regex must match the whole value, as in Medplum's own validation of FHIR types.
+    return new RegExp(`^(?:${regex})$`);
   } catch (_err) {
     // An invalid pattern typed into the builder is not the respondent's error.
     return undefined;

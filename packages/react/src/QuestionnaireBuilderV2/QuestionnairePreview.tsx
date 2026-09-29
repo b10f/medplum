@@ -3,6 +3,7 @@
 import {
   ActionIcon,
   Anchor,
+  Autocomplete,
   Button,
   Card,
   Checkbox,
@@ -17,21 +18,26 @@ import {
   Stack,
   Switch,
   Table,
+  TagsInput,
   Text,
   Textarea,
   TextInput,
   Title,
   Tooltip,
 } from '@mantine/core';
-import type { Coding, QuestionnaireItem } from '@medplum/fhirtypes';
+import type { Coding, Quantity, QuestionnaireItem, ValueSetExpansionContains } from '@medplum/fhirtypes';
 import type { QuestionnaireFormPaginationState } from '@medplum/react-hooks';
+import { getQuestionnaireItemReferenceFilter } from '@medplum/react-hooks';
 import { IconExternalLink, IconInfoCircle, IconPlus, IconTrash } from '@tabler/icons-react';
 import cx from 'clsx';
-import type { JSX, ReactNode } from 'react';
+import type { JSX, ReactNode, WheelEvent } from 'react';
 import { Fragment, useEffect, useState } from 'react';
+import { AttachmentInput } from '../AttachmentInput/AttachmentInput';
 import { Form } from '../Form/Form';
 import { SubmitButton } from '../Form/SubmitButton';
 import { QuestionnaireFormStepper } from '../QuestionnaireForm/QuestionnaireFormStepper';
+import { ReferenceInput } from '../ReferenceInput/ReferenceInput';
+import { ValueSetAutocomplete } from '../ValueSetAutocomplete/ValueSetAutocomplete';
 import type {
   ExtendedQuestionnaireItem,
   ExtendedQuestionnaireItemAnswer,
@@ -39,15 +45,20 @@ import type {
 } from './QuestionnaireBuilderV2.utils';
 import {
   evaluateEnableWhen,
+  findAnswerOption,
   findRootItem,
+  getAnswerOptionLabel,
+  getChoiceValueKey,
   getPageItems,
   getRequiredGroupError,
   getValueByPath,
   isEmptyAnswerValue,
   isHorizontalChoiceLayout,
+  isQuantityAnswer,
   isQuestionItem,
   isReadOnlyFormItem,
   rebuildAnswerItems,
+  toQuantityUnit,
   validateAnswerValue,
   validateFormAnswers,
 } from './QuestionnaireBuilderV2.utils';
@@ -337,9 +348,9 @@ function PreviewItem(props: PreviewItemProps): JSX.Element | null {
           {/* Each selected option has its own follow-up items. */}
           {(item.answer ?? []).map((answer, answerIndex) => (
             <PreviewFollowUpItems
-              key={`${item.linkId}-${answer.value?.code ?? answerIndex}`}
+              key={`${item.linkId}-${getChoiceValueKey(answer.value)}-${answerIndex}`}
               answer={answer}
-              label={answer.value?.display}
+              label={toChoiceText(original.answerOption ?? [], answer.value)}
               {...followUpProps}
             />
           ))}
@@ -376,7 +387,13 @@ function PreviewAnswer(props: PreviewAnswerProps): JSX.Element | null {
   const type = props.original.type;
   if (isChoiceType(type) && props.original.repeats) {
     return <PreviewRepeatingChoice {...props} />;
-  } else if (['string', 'integer', 'decimal', 'quantity', 'url'].includes(type)) {
+  } else if (type === 'quantity') {
+    return <PreviewQuantity {...props} />;
+  } else if (type === 'reference') {
+    return <PreviewReference {...props} />;
+  } else if (type === 'attachment') {
+    return <PreviewAttachment {...props} />;
+  } else if (['string', 'integer', 'decimal', 'url'].includes(type)) {
     return <PreviewInput {...props} />;
   } else if (type === 'boolean') {
     return <PreviewBoolean {...props} />;
@@ -780,12 +797,20 @@ interface PreviewAnswerProps {
  * @param props - The preview answer props.
  * @returns The label and the input's accessible name.
  */
-function getAnswerLabel(props: PreviewAnswerProps): { label?: JSX.Element; 'aria-label'?: string } {
+function getAnswerLabel(props: PreviewAnswerProps): {
+  label?: JSX.Element;
+  labelProps?: { className: string };
+  'aria-label'?: string;
+} {
   const { item, original, answerIndex, addAnswer, inline } = props;
   if (inline) {
     return { 'aria-label': original.text };
   }
-  return { label: <PreviewQuestion item={item} original={original} index={answerIndex} addAnswer={addAnswer} /> };
+  return {
+    label: <PreviewQuestion item={item} original={original} index={answerIndex} addAnswer={addAnswer} />,
+    // Full width, so the question's buttons sit on the right as in a group header.
+    labelProps: { className: classes.answerLabel },
+  };
 }
 
 /**
@@ -844,12 +869,15 @@ function PreviewInput(props: PreviewAnswerProps): JSX.Element {
     );
   }
 
-  if (type === 'quantity' || (type === 'integer' && unit) || (type === 'decimal' && unit)) {
+  if ((type === 'integer' && unit) || (type === 'decimal' && unit)) {
     return (
       <TextInput
         {...labelProps}
         disabled={readOnly}
         type="number"
+        rightSection={<Text size="sm">{unit.display ?? unit.code}</Text>}
+        rightSectionWidth="auto"
+        rightSectionProps={{ style: { paddingInline: 'var(--mantine-spacing-sm)' } }}
         step="any"
         value={value ?? ''}
         error={form.errors[fieldPath]}
@@ -863,6 +891,8 @@ function PreviewInput(props: PreviewAnswerProps): JSX.Element {
       {...labelProps}
       disabled={readOnly}
       type={type === 'integer' || type === 'decimal' ? 'number' : 'text'}
+      // A URL keyboard on mobile, without the browser's own URL check: validateAnswerValue checks the value.
+      inputMode={type === 'url' ? 'url' : undefined}
       step={type === 'decimal' ? 'any' : undefined}
       placeholder={original.entryFormat}
       maxLength={!ignoreValidation && original.maxLength ? original.maxLength : undefined}
@@ -870,6 +900,159 @@ function PreviewInput(props: PreviewAnswerProps): JSX.Element {
       error={form.errors[fieldPath]}
       onChange={(e) => setAnswerValue(form, fieldPath, original, e.currentTarget.value, ignoreValidation)}
     />
+  );
+}
+
+/**
+ * A reference answer, picked with Medplum's ReferenceInput from the question's resource types
+ * (questionnaire-referenceResource), narrowed by its search filter (questionnaire-referenceFilter).
+ * @param props - The preview answer props.
+ * @returns The PreviewReference React node.
+ */
+function PreviewReference(props: PreviewAnswerProps): JSX.Element {
+  const { item, original, answerIndex, readOnly } = props;
+  const form = useQuestionnaireFormContext();
+  const fieldPath = getFieldPath(item, answerIndex);
+  const value = getValueByPath(form.getValues(), fieldPath);
+  const targetTypes = (original.referenceResource ?? []).filter(Boolean);
+  // The filter extension is kept as the builder loaded it; Medplum's helper reads it the same way the form does.
+  const searchCriteria = getQuestionnaireItemReferenceFilter(
+    { linkId: original.linkId, type: 'reference', extension: original.preserved?.extension },
+    undefined,
+    undefined
+  );
+  const { label, labelProps } = getAnswerLabel(props);
+
+  return (
+    <Input.Wrapper label={label} labelProps={labelProps} error={form.errors[fieldPath]}>
+      <ReferenceInput
+        // A new set of resource types starts a new search.
+        key={`${fieldPath}-${targetTypes.join(',')}`}
+        name={fieldPath}
+        targetTypes={targetTypes.length > 0 ? targetTypes : undefined}
+        searchCriteria={searchCriteria}
+        disabled={readOnly}
+        defaultValue={value && typeof value === 'object' ? value : undefined}
+        onChange={(reference) => form.setFieldValue(fieldPath, reference ?? '')}
+      />
+    </Input.Wrapper>
+  );
+}
+
+/**
+ * An attachment answer, uploaded with Medplum's AttachmentInput: the file is stored as a Binary and the answer holds
+ * its URL, as in Medplum's QuestionnaireForm.
+ * @param props - The preview answer props.
+ * @returns The PreviewAttachment React node.
+ */
+function PreviewAttachment(props: PreviewAnswerProps): JSX.Element {
+  const { item, answerIndex, readOnly } = props;
+  const form = useQuestionnaireFormContext();
+  const fieldPath = getFieldPath(item, answerIndex);
+  const value = getValueByPath(form.getValues(), fieldPath);
+  const { label, labelProps } = getAnswerLabel(props);
+
+  return (
+    <Input.Wrapper label={label} labelProps={labelProps} error={form.errors[fieldPath]}>
+      <Group py={4}>
+        <AttachmentInput
+          path=""
+          name={fieldPath}
+          disabled={readOnly}
+          defaultValue={value && typeof value === 'object' ? value : undefined}
+          onChange={(attachment) => form.setFieldValue(fieldPath, attachment ?? '')}
+        />
+      </Group>
+    </Input.Wrapper>
+  );
+}
+
+const QUANTITY_COMPARATORS = ['', '<', '<=', '>=', '>'];
+
+/**
+ * A quantity answer, as Medplum's QuantityInput: a comparator, the value and the unit. The unit is picked from the
+ * question's unit options, fixed by its unit, or typed.
+ * @param props - The preview answer props.
+ * @returns The PreviewQuantity React node.
+ */
+function PreviewQuantity(props: PreviewAnswerProps): JSX.Element {
+  const { item, original, answerIndex, ignoreValidation, readOnly } = props;
+  const form = useQuestionnaireFormContext();
+  const fieldPath = getFieldPath(item, answerIndex);
+  const current = getValueByPath(form.getValues(), fieldPath);
+  // Always with a value key, so an answer with only a unit still counts as unanswered.
+  const quantity: Quantity = isQuantityAnswer(current) ? current : { value: current === '' ? undefined : current };
+  const unitOptions: Coding[] = (original.unitOption ?? []).filter(Boolean);
+  // One allowed unit is the unit; with none, the question's own unit (if any) is.
+  let fixedUnit: ReturnType<typeof toQuantityUnit>;
+  if (unitOptions.length === 1) {
+    fixedUnit = toQuantityUnit(unitOptions[0]);
+  } else if (unitOptions.length === 0) {
+    fixedUnit = toQuantityUnit(original.unit);
+  }
+  const { label, labelProps, 'aria-label': ariaLabel } = getAnswerLabel(props);
+
+  const setQuantity = (changes: Partial<Quantity>): void => {
+    setAnswerValue(form, fieldPath, original, { ...quantity, ...changes }, ignoreValidation);
+  };
+
+  let unitInput: JSX.Element;
+  if (unitOptions.length > 1) {
+    unitInput = (
+      <NativeSelect
+        aria-label="Unit"
+        disabled={readOnly}
+        data={[
+          { value: '', label: 'Unit' },
+          ...unitOptions.map((unit) => ({ value: unit.code ?? '', label: unit.display ?? unit.code ?? '' })),
+        ]}
+        value={quantity.code ?? ''}
+        onChange={(e) => {
+          const unit = unitOptions.find((option) => option.code === e.currentTarget.value);
+          setQuantity(toQuantityUnit(unit) ?? { unit: undefined, system: undefined, code: undefined });
+        }}
+      />
+    );
+  } else if (fixedUnit) {
+    unitInput = <TextInput aria-label="Unit" disabled value={fixedUnit.unit ?? ''} />;
+  } else {
+    unitInput = (
+      <TextInput
+        aria-label="Unit"
+        placeholder="Unit"
+        disabled={readOnly}
+        value={quantity.unit ?? ''}
+        onChange={(e) => setQuantity({ unit: e.currentTarget.value, system: undefined, code: undefined })}
+      />
+    );
+  }
+
+  return (
+    <Input.Wrapper label={label} labelProps={labelProps} error={form.errors[fieldPath]}>
+      <Group gap="xs" grow wrap="nowrap">
+        <NativeSelect
+          aria-label="Comparator"
+          disabled={readOnly}
+          style={{ width: 80 }}
+          data={QUANTITY_COMPARATORS}
+          value={quantity.comparator ?? ''}
+          onChange={(e) => setQuantity({ comparator: (e.currentTarget.value || undefined) as Quantity['comparator'] })}
+        />
+        <TextInput
+          aria-label={ariaLabel ?? 'Value'}
+          disabled={readOnly}
+          type="number"
+          step="any"
+          placeholder="Value"
+          // The typed text is kept as it is (e.g. "1."), and converted to a number when the response is written.
+          value={quantity.value ?? ''}
+          error={!!form.errors[fieldPath]}
+          onWheel={(e: WheelEvent<HTMLInputElement>) => e.currentTarget.blur()}
+          onChange={(e) => setQuantity({ value: e.currentTarget.value as unknown as number })}
+        />
+        {unitInput}
+      </Group>
+    </Input.Wrapper>
   );
 }
 
@@ -929,8 +1112,11 @@ function PreviewDateTime(props: PreviewAnswerProps): JSX.Element {
   );
 }
 
+const OTHER_OPTION = '__other__';
+
 /**
  * A non-repeating choice question: one answer, rendered as a drop-down or radio buttons based on the item control.
+ * An open-choice question also takes an answer typed by the respondent.
  * @param props - The preview answer props.
  * @returns The PreviewChoice React node.
  */
@@ -940,48 +1126,94 @@ function PreviewChoice(props: PreviewAnswerProps): JSX.Element {
   const fieldPath = getFieldPath(item, answerIndex);
   const value = getValueByPath(form.getValues(), fieldPath);
   const answerOption: ExtendedQuestionnaireItemAnswerOption[] = original.answerOption ?? [];
+  const isOpen = original.type === 'open-choice';
   const isHorizontal = isHorizontalChoiceLayout(original);
   const labelProps = getAnswerLabel(props);
+  const typedAnswer = isOpen && isTypedAnswer(answerOption, value);
+  const [otherSelected, setOtherSelected] = useState(typedAnswer);
+  const setValue = (newValue: any): void => form.setFieldValue(fieldPath, newValue);
+
+  if (original.answerValueSet && answerOption.length === 0) {
+    return <PreviewValueSetChoice {...props} values={isEmptyAnswerValue(value) ? [] : [value]} />;
+  }
 
   if (original.itemControl?.code === 'drop-down') {
+    if (isOpen) {
+      // Suggests the options, and takes any other text as the answer.
+      return (
+        <Autocomplete
+          {...labelProps}
+          disabled={readOnly}
+          placeholder="Select or type an answer"
+          data={[...new Set(answerOption.map(getAnswerOptionLabel))]}
+          value={toChoiceText(answerOption, value)}
+          error={form.errors[fieldPath]}
+          onChange={(text) => setValue(fromChoiceText(answerOption, text))}
+        />
+      );
+    }
     return (
       <NativeSelect
         {...labelProps}
         disabled={readOnly}
         data={[{ value: '', label: 'Select an option' }, ...toOptionData(answerOption)]}
-        value={value?.code ?? ''}
+        value={isEmptyAnswerValue(value) ? '' : getChoiceValueKey(value)}
         error={form.errors[fieldPath]}
-        onChange={(e) => form.setFieldValue(fieldPath, findOption(answerOption, e.currentTarget.value))}
+        onChange={(e) => setValue(findOptionValue(answerOption, e.currentTarget.value))}
       />
     );
   }
 
-  const radios = answerOption.map((option) => (
-    <Radio
-      key={`${item.linkId}-${option.value.code}`}
-      value={option.value.code}
-      label={option.value.display}
-      disabled={readOnly}
-    />
-  ));
+  const radios = [
+    ...answerOption.map((option) => (
+      <Radio
+        key={getChoiceValueKey(option.value)}
+        value={getChoiceValueKey(option.value)}
+        label={getAnswerOptionLabel(option)}
+        disabled={readOnly}
+      />
+    )),
+    ...(isOpen ? [<Radio key={OTHER_OPTION} value={OTHER_OPTION} label="Other" disabled={readOnly} />] : []),
+  ];
+  let radioValue: string | null = null;
+  if (otherSelected || typedAnswer) {
+    radioValue = OTHER_OPTION;
+  } else if (!isEmptyAnswerValue(value)) {
+    radioValue = getChoiceValueKey(value);
+  }
 
   return (
-    <Radio.Group
-      {...labelProps}
-      value={value?.code ?? null}
-      error={form.errors[fieldPath]}
-      onChange={(code) => form.setFieldValue(fieldPath, findOption(answerOption, code))}
-    >
-      <Stack gap={isHorizontal ? 'md' : 'xs'} mt="xs">
-        {isHorizontal ? <Group gap="xl">{radios}</Group> : radios}
-      </Stack>
-    </Radio.Group>
+    <Stack gap="xs">
+      <Radio.Group
+        {...labelProps}
+        value={radioValue}
+        error={form.errors[fieldPath]}
+        onChange={(key) => {
+          setOtherSelected(key === OTHER_OPTION);
+          setValue(key === OTHER_OPTION ? '' : findOptionValue(answerOption, key));
+        }}
+      >
+        <Stack gap={isHorizontal ? 'md' : 'xs'} mt="xs">
+          {isHorizontal ? <Group gap="xl">{radios}</Group> : radios}
+        </Stack>
+      </Radio.Group>
+      {radioValue === OTHER_OPTION && (
+        <TextInput
+          aria-label="Other"
+          placeholder="Please specify"
+          disabled={readOnly}
+          value={typeof value === 'string' ? value : ''}
+          onChange={(e) => setValue(e.currentTarget.value)}
+        />
+      )}
+    </Stack>
   );
 }
 
 /**
  * A repeating choice question: multiple answers are allowed, one per selected option. Rendered as a multi-select
- * drop-down or checkboxes based on the item control.
+ * drop-down or checkboxes based on the item control. An open-choice question also takes answers typed by the
+ * respondent.
  * @param props - The preview answer props.
  * @returns The PreviewRepeatingChoice React node.
  */
@@ -989,62 +1221,205 @@ function PreviewRepeatingChoice(props: PreviewAnswerProps): JSX.Element {
   const { item, original, readOnly } = props;
   const form = useQuestionnaireFormContext();
   const answersPath = `${item.answerPath}.answer`;
-  const answers: { value: any }[] = getValueByPath(form.getValues(), answersPath) ?? [];
+  const answers: ExtendedQuestionnaireItemAnswer[] = getValueByPath(form.getValues(), answersPath) ?? [];
   const answerOption: ExtendedQuestionnaireItemAnswerOption[] = original.answerOption ?? [];
-  const selectedCodes = answers.map((answer) => answer.value?.code).filter((code): code is string => Boolean(code));
+  const isOpen = original.type === 'open-choice';
   const labelProps = getAnswerLabel({ ...props, answerIndex: 0 });
+  const values = answers.map((answer) => answer.value).filter((value) => !isEmptyAnswerValue(value));
+  const typedValues = values.filter((value) => isTypedAnswer(answerOption, value));
+  const [otherChecked, setOtherChecked] = useState(typedValues.length > 0);
 
-  const setSelectedCodes = (codes: string[]): void => {
-    // Options that stay selected keep their answers, including their follow-up items.
+  const setValues = (newValues: any[]): void => {
+    // Answers that stay selected keep their follow-up items.
     form.setFieldValue(
       answersPath,
-      codes
-        .map(
-          (code) => answers.find((answer) => answer.value?.code === code) ?? { value: findOption(answerOption, code) }
-        )
-        .filter((answer) => answer.value)
+      newValues.map(
+        (value) => answers.find((answer) => getChoiceValueKey(answer.value) === getChoiceValueKey(value)) ?? { value }
+      )
     );
     rebuildAnswerItems(form, original);
   };
 
+  if (original.answerValueSet && answerOption.length === 0) {
+    return <PreviewValueSetChoice {...props} values={values} multiple />;
+  }
+
   if (original.itemControl?.code === 'drop-down') {
+    if (isOpen) {
+      return (
+        <TagsInput
+          {...labelProps}
+          disabled={readOnly}
+          placeholder="Select or type answers"
+          data={[...new Set(answerOption.map(getAnswerOptionLabel))]}
+          value={values.map((value) => toChoiceText(answerOption, value))}
+          error={form.errors[answersPath]}
+          onChange={(texts) => setValues(texts.map((text) => fromChoiceText(answerOption, text)))}
+        />
+      );
+    }
     return (
       <MultiSelect
         {...labelProps}
         disabled={readOnly}
         placeholder="Select items"
         data={toOptionData(answerOption)}
-        value={selectedCodes}
+        value={values.map(getChoiceValueKey)}
         error={form.errors[answersPath]}
-        onChange={setSelectedCodes}
+        onChange={(keys) => setValues(keys.map((key) => findOptionValue(answerOption, key)))}
       />
     );
   }
 
+  const selectedKeys = values.filter((value) => !isTypedAnswer(answerOption, value)).map(getChoiceValueKey);
+  const typedValue = typedValues[0] ?? '';
+
   return (
-    <Checkbox.Group {...labelProps} value={selectedCodes} error={form.errors[answersPath]} onChange={setSelectedCodes}>
-      <Stack gap="xs" mt="xs">
-        {answerOption.map((option) => (
-          <Checkbox
-            key={`${item.linkId}-${option.value.code}`}
-            value={option.value.code}
-            label={option.value.display}
-            disabled={readOnly}
-          />
-        ))}
-      </Stack>
-    </Checkbox.Group>
+    <Stack gap="xs">
+      <Checkbox.Group
+        {...labelProps}
+        value={[...selectedKeys, ...(otherChecked ? [OTHER_OPTION] : [])]}
+        error={form.errors[answersPath]}
+        onChange={(keys) => {
+          const checkOther = keys.includes(OTHER_OPTION);
+          setOtherChecked(checkOther);
+          const optionValues = keys
+            .filter((key) => key !== OTHER_OPTION)
+            .map((key) => findOptionValue(answerOption, key));
+          setValues([...optionValues, ...(checkOther && typedValue ? [typedValue] : [])]);
+        }}
+      >
+        <Stack gap="xs" mt="xs">
+          {answerOption.map((option) => (
+            <Checkbox
+              key={getChoiceValueKey(option.value)}
+              value={getChoiceValueKey(option.value)}
+              label={getAnswerOptionLabel(option)}
+              disabled={readOnly}
+            />
+          ))}
+          {isOpen && <Checkbox value={OTHER_OPTION} label="Other" disabled={readOnly} />}
+        </Stack>
+      </Checkbox.Group>
+      {isOpen && otherChecked && (
+        <TextInput
+          aria-label="Other"
+          placeholder="Please specify"
+          disabled={readOnly}
+          value={typedValue}
+          onChange={(e) => {
+            const text = e.currentTarget.value;
+            const optionValues = values.filter((value) => !isTypedAnswer(answerOption, value));
+            setValues([...optionValues, ...(text ? [text] : [])]);
+          }}
+        />
+      )}
+    </Stack>
   );
+}
+
+interface PreviewValueSetChoiceProps extends PreviewAnswerProps {
+  readonly values: any[];
+  readonly multiple?: boolean;
+}
+
+/**
+ * A choice question whose answers come from a value set (answerValueSet): the codes are searched as the respondent
+ * types, as in Medplum's QuestionnaireForm. An open-choice question also takes text that is not in the value set.
+ * @param props - The PreviewValueSetChoice props.
+ * @returns The PreviewValueSetChoice React node.
+ */
+function PreviewValueSetChoice(props: PreviewValueSetChoiceProps): JSX.Element {
+  const { item, original, answerIndex, readOnly, values, multiple } = props;
+  const form = useQuestionnaireFormContext();
+  const answersPath = `${item.answerPath}.answer`;
+  const fieldPath = multiple ? answersPath : getFieldPath(item, answerIndex);
+  const isOpen = original.type === 'open-choice';
+
+  return (
+    <ValueSetAutocomplete
+      {...getAnswerLabel(props)}
+      binding={original.answerValueSet}
+      creatable={isOpen}
+      clearable
+      disabled={readOnly}
+      maxValues={multiple ? undefined : 1}
+      placeholder={isOpen ? 'Search or type an answer' : 'Search'}
+      defaultValue={values.map(toValueSetContains)}
+      error={form.errors[fieldPath]}
+      onChange={(selected) => {
+        // A code the respondent typed (not in the value set) has no system: it is a typed answer.
+        const newValues = selected.map((entry) =>
+          entry.system
+            ? { system: entry.system, code: entry.code, display: entry.display }
+            : (entry.display ?? entry.code)
+        );
+        if (multiple) {
+          form.setFieldValue(
+            answersPath,
+            newValues.map((value) => ({ value }))
+          );
+          rebuildAnswerItems(form, original);
+        } else {
+          form.setFieldValue(fieldPath, newValues[0] ?? '');
+        }
+      }}
+    />
+  );
+}
+
+function toValueSetContains(value: any): ValueSetExpansionContains {
+  if (value && typeof value === 'object') {
+    return { system: value.system, code: value.code, display: value.display };
+  }
+  return { code: String(value), display: String(value) };
 }
 
 function isChoiceType(type: string | undefined): boolean {
   return type === 'choice' || type === 'open-choice';
 }
 
-function findOption(answerOption: ExtendedQuestionnaireItemAnswerOption[], code: string | null): Coding | undefined {
-  return answerOption.find((option) => option.value.code === code)?.value;
+/**
+ * Returns true if an answer was typed by the respondent (an open-choice answer that is none of the options).
+ * @param answerOption - The item's answer options.
+ * @param value - The answer value.
+ * @returns True for a typed answer.
+ */
+function isTypedAnswer(answerOption: ExtendedQuestionnaireItemAnswerOption[], value: any): boolean {
+  return typeof value === 'string' && value !== '' && !findAnswerOption(answerOption, value);
+}
+
+function findOptionValue(answerOption: ExtendedQuestionnaireItemAnswerOption[], key: string | null): any {
+  return answerOption.find((option) => getChoiceValueKey(option.value) === key)?.value ?? '';
+}
+
+/**
+ * The text of a choice answer in a free-text field: the selected option's label, or the typed answer.
+ * @param answerOption - The item's answer options.
+ * @param value - The answer value.
+ * @returns The text.
+ */
+function toChoiceText(answerOption: ExtendedQuestionnaireItemAnswerOption[], value: any): string {
+  const option = findAnswerOption(answerOption, value);
+  if (option) {
+    return getAnswerOptionLabel(option);
+  }
+  return typeof value === 'string' ? value : String(value?.display ?? value?.code ?? '');
+}
+
+/**
+ * The answer for text entered in a free-text field: the option with that label, or the text itself.
+ * @param answerOption - The item's answer options.
+ * @param text - The text.
+ * @returns The answer value.
+ */
+function fromChoiceText(answerOption: ExtendedQuestionnaireItemAnswerOption[], text: string): any {
+  return answerOption.find((option) => getAnswerOptionLabel(option) === text)?.value ?? text;
 }
 
 function toOptionData(answerOption: ExtendedQuestionnaireItemAnswerOption[]): { value: string; label: string }[] {
-  return answerOption.map((option) => ({ value: option.value.code, label: option.value.display }));
+  return answerOption.map((option) => ({
+    value: getChoiceValueKey(option.value),
+    label: getAnswerOptionLabel(option),
+  }));
 }

@@ -1,13 +1,33 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
-import { Accordion, Alert, Box, Button, Card, Divider, Group, Loader, Stack, Text } from '@mantine/core';
+import {
+  Accordion,
+  ActionIcon,
+  Alert,
+  Box,
+  Button,
+  Card,
+  Code,
+  Divider,
+  Group,
+  Loader,
+  Stack,
+  Text,
+} from '@mantine/core';
 import type { MedplumClient } from '@medplum/core';
-import { generateId, HTTP_HL7_ORG, LOINC } from '@medplum/core';
-import type { Coding, QuestionnaireItemAnswerOption, ValueSetExpansionContains } from '@medplum/fhirtypes';
+import { generateId, HTTP_HL7_ORG, LOINC, UCUM } from '@medplum/core';
+import type {
+  Coding,
+  QuestionnaireItemAnswerOption,
+  ResourceType,
+  ValueSetExpansionContains,
+} from '@medplum/fhirtypes';
 import { useMedplum } from '@medplum/react-hooks';
 import { IconList, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
+import { ResourceTypeInput } from '../ResourceTypeInput/ResourceTypeInput';
+import { ValueSetAutocomplete } from '../ValueSetAutocomplete/ValueSetAutocomplete';
 import type {
   ExtendedQuestionnaireItem,
   ExtendedQuestionnaireItemAnswerOption,
@@ -15,11 +35,15 @@ import type {
 } from './QuestionnaireBuilderV2.utils';
 import {
   createManualAnswerOption,
+  findFormItemByLinkId,
   fromFhirAnswerOptions,
   getAnswerItems,
+  getAnswerOptionLabel,
   getAnswerOptionProblems,
+  getChoiceValueKey,
   getLocalAnswerOptionSystem,
   getValueByPath,
+  isCodedAnswerOption,
   isManualAnswerOption,
   isPageItem,
   PAGE_ITEM_CONTROL,
@@ -37,16 +61,15 @@ import {
 import { QuestionnaireLoincAnswerListDrawer } from './QuestionnaireLoincAnswerListDrawer';
 import { QuestionnaireValueSetAnswersDrawer } from './QuestionnaireValueSetAnswersDrawer';
 
+/** FHIR's item type code system: `group`, `display` and `question` at the top, the question types under `question`. */
+const ITEM_TYPE_SYSTEM = `${HTTP_HL7_ORG}/fhir/item-type`;
+
 const VALUE_SET_URLS = {
-  itemType: `${HTTP_HL7_ORG}/fhir/ValueSet/item-type`,
   questionnaireEnableOperator: `${HTTP_HL7_ORG}/fhir/ValueSet/questionnaire-enable-operator`,
   questionnaireEnableBehavior: `${HTTP_HL7_ORG}/fhir/ValueSet/questionnaire-enable-behavior`,
   questionnaireItemControl: `${HTTP_HL7_ORG}/fhir/ValueSet/questionnaire-item-control`,
   questionnaireUsageMode: `${HTTP_HL7_ORG}/fhir/ValueSet/questionnaire-usage-mode`,
 } as const;
-
-// Medplum's expansion of item-type lists the abstract `question` code as a regular code, so it is excluded explicitly.
-const EXCLUDED_ITEM_TYPES = ['group', 'display', 'attachment', 'reference', 'question'];
 
 export interface QuestionnaireItemSettingsProps {
   readonly selectedItem: ExtendedQuestionnaireItem;
@@ -79,7 +102,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
           questionnaireItemControlValueSet,
           questionnaireUsageModeValueSet,
         ] = await Promise.all([
-          expandValueSet(medplum, VALUE_SET_URLS.itemType),
+          loadQuestionTypes(medplum),
           expandValueSet(medplum, VALUE_SET_URLS.questionnaireEnableOperator),
           expandValueSet(medplum, VALUE_SET_URLS.questionnaireEnableBehavior),
           expandValueSet(medplum, VALUE_SET_URLS.questionnaireItemControl),
@@ -105,8 +128,11 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
     form.insertListItem(`${path}.initial`, { id: generateId(), value: '' });
   };
 
+  // Several initial values only for a repeating question, and no more than its maximum occurrences.
   const canAddInitial = (): boolean => {
-    return true;
+    const maxOccurs = getValueByPath(form.getValues(), `${path}.maxOccurs`);
+    const initialCount = (getValueByPath(form.getValues(), `${path}.initial`) ?? []).length;
+    return !maxOccurs || initialCount < +maxOccurs;
   };
 
   const getItemControlOptions = (): Coding[] => {
@@ -122,7 +148,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
         const code = itemType.code as string;
         if (type === 'choice' || type === 'open-choice') {
           return repeats ? repeatingChoiceTypes.includes(code) : choiceTypes.includes(code);
-        } else if (type === 'integer') {
+        } else if (type === 'integer' || type === 'decimal') {
           return numericTypes.includes(code);
         } else if (type === 'group') {
           return groupTypes.includes(code);
@@ -156,9 +182,10 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
   const repeats = getValueByPath(form.getValues(), `${path}.repeats`);
   const isRequired = getValueByPath(form.getValues(), `${path}.required`);
   const itemControl = getValueByPath(form.getValues(), `${path}.itemControl`);
-  const isSlider = type === 'integer' && itemControl?.code === 'slider';
+  const isSlider = (type === 'integer' || type === 'decimal') && itemControl?.code === 'slider';
   const answerOptions = (getValueByPath(form.getValues(), `${path}.answerOption`) ||
     []) as ExtendedQuestionnaireItemAnswerOption[];
+  const answerValueSet: string | undefined = getValueByPath(form.getValues(), `${path}.answerValueSet`);
   const enableWhens = (getValueByPath(form.getValues(), `${path}.enableWhen`) ||
     []) as ExtendedQuestionnaireItemEnableWhen[];
 
@@ -242,8 +269,14 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
       (questionnaireValues.id ? medplum.fhirUrl('Questionnaire', questionnaireValues.id).toString() : undefined)
   );
 
+  // FHIR allows answer options or a value set, not both: listed options replace a value set.
+  const setAnswerOptions = (options: ExtendedQuestionnaireItemAnswerOption[]): void => {
+    form.setFieldValue(`${path}.answerOption`, options);
+    form.setFieldValue(`${path}.answerValueSet`, undefined);
+  };
+
   const addAnswerOption = (): void => {
-    form.insertListItem(`${path}.answerOption`, createManualAnswerOption(answerOptions, localAnswerSystem));
+    setAnswerOptions([...answerOptions, createManualAnswerOption(answerOptions, localAnswerSystem)]);
     setOpenedAnswerOption(String(answerOptions.length));
   };
 
@@ -281,7 +314,13 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
       const answerArray: { value: any }[] = getValueByPath(form.getValues(), `${path}.answer`) ?? [];
 
       if (index >= 0 && index < answerArray.length) {
-        answerArray[index].value = item.type === 'integer' || item.type === 'decimal' ? +value : value;
+        const current = answerArray[index].value;
+        if (item.type === 'quantity') {
+          // The initial value sets the number; a unit already chosen is kept.
+          answerArray[index].value = { ...(current && typeof current === 'object' ? current : {}), value: +value };
+        } else {
+          answerArray[index].value = item.type === 'integer' || item.type === 'decimal' ? +value : value;
+        }
         form.setFieldValue(`${path}.answer`, answerArray);
       }
     };
@@ -400,6 +439,11 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
     const parent = selectedItem?.parent;
     const isNested = !!parent;
 
+    const initialArray = getValueByPath(form.getValues(), `${selectedItem.path}.initial`) ?? [];
+    if (initialArray.length > maxOccurs) {
+      form.setFieldValue(`${selectedItem.path}.initial`, initialArray.slice(0, maxOccurs));
+    }
+
     const applyChange = (item: ExtendedQuestionnaireItem): void => {
       const path = item.answerPath;
       const answerArray = getValueByPath(form.getValues(), `${path}.answer`) ?? [];
@@ -450,14 +494,16 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
               label="Type"
               context={`${path}.type`}
               loading={loading}
-              data={toSelectData(itemType.filter((t: Coding) => !EXCLUDED_ITEM_TYPES.includes(t.code as string)))}
+              data={toSelectData(itemType)}
             />
 
-            {type !== 'choice' && type !== 'open-choice' && answerOptions.length === 0 && (
+            {/* A reference or attachment answer is picked or uploaded in the form, not typed as an initial value. */}
+            {!['choice', 'open-choice', 'reference', 'attachment'].includes(type) && answerOptions.length === 0 && (
               <FormFlatCollection
                 form={form}
                 context={`${path}.initial`}
                 add={addInitial}
+                addable={!!repeats}
                 canAdd={canAddInitial}
                 disabled={disabled}
               >
@@ -487,61 +533,107 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
                 )}
               </FormFlatCollection>
             )}
-          </>
-        )}
 
-        {questionnaireItemControl && !isPage && ['group', 'choice', 'open-choice', 'integer'].includes(type) && (
-          <>
-            <FormSelect
-              form={form}
-              label="Item Control"
-              placeholder="Item Control"
-              context={`${path}.itemControl`}
-              data={toSelectData(itemControlOptions)}
-              loading={loading}
-              disabled={disabled}
-              // A group without an item control is rendered as a list.
-              value={itemControl?.code ?? (isGroup ? 'list' : null)}
-              onChange={(code) => {
-                const coding = itemControlOptions.find((option: Coding) => option.code === code);
-                form.setFieldValue(
-                  `${path}.itemControl`,
-                  coding ? { code: coding.code, display: coding.display, system: coding.system } : {}
-                );
-              }}
-            />
+            {type === 'reference' && <QuestionnaireReferenceTypes form={form} path={path} disabled={disabled} />}
 
-            {isSlider && (
-              <FormTextInput
+            {type === 'quantity' && (
+              <QuestionnaireUnitInput
                 form={form}
-                label="Slider Step Value"
-                context={`${path}.sliderStepValue`}
-                type="number"
-                min="1"
+                context={`${path}.unitOption`}
+                label="Allowed units"
+                description="The units the respondent chooses from. With one unit, the unit is fixed; with none, the respondent types a unit."
+                multiple
                 disabled={disabled}
               />
             )}
 
-            {isChoice && (
-              <FormRadioGroup
+            {(type === 'integer' || type === 'decimal') && (
+              <QuestionnaireUnitInput
                 form={form}
-                label="Choice Orientation"
-                description="Desired orientation when rendering a list of choices"
-                context={`${path}.choiceOrientation`}
-                options={[
-                  { value: 'horizontal', label: 'Horizontal' },
-                  { value: 'vertical', label: 'Vertical' },
-                ]}
+                context={`${path}.unit`}
+                label="Unit"
+                description="The unit of the number, shown next to the answer."
                 disabled={disabled}
               />
             )}
           </>
         )}
 
-        {!isGroup && isChoice && answerOptions.length === 0 && (
+        {questionnaireItemControl &&
+          !isPage &&
+          ['group', 'choice', 'open-choice', 'integer', 'decimal'].includes(type) && (
+            <>
+              <FormSelect
+                form={form}
+                label="Item Control"
+                placeholder="Item Control"
+                context={`${path}.itemControl`}
+                data={toSelectData(itemControlOptions)}
+                loading={loading}
+                disabled={disabled}
+                value={itemControl?.code ?? getDefaultItemControl(type, !!repeats)}
+                onChange={(code) => {
+                  const coding = itemControlOptions.find((option: Coding) => option.code === code);
+                  form.setFieldValue(
+                    `${path}.itemControl`,
+                    coding ? { code: coding.code, display: coding.display, system: coding.system } : {}
+                  );
+                }}
+              />
+
+              {isSlider && (
+                <FormTextInput
+                  form={form}
+                  label="Slider Step Value"
+                  context={`${path}.sliderStepValue`}
+                  type="number"
+                  min="1"
+                  disabled={disabled}
+                />
+              )}
+
+              {isChoice && (
+                <FormRadioGroup
+                  form={form}
+                  label="Choice Orientation"
+                  description="Desired orientation when rendering a list of choices"
+                  context={`${path}.choiceOrientation`}
+                  options={[
+                    { value: 'horizontal', label: 'Horizontal' },
+                    { value: 'vertical', label: 'Vertical' },
+                  ]}
+                  defaultValue="vertical"
+                  disabled={disabled}
+                />
+              )}
+            </>
+          )}
+
+        {isChoice && answerValueSet && answerOptions.length === 0 && (
+          <Card withBorder>
+            <Stack gap="xs">
+              <Text fw={500}>Answers from a value set</Text>
+              <Text size="sm">
+                The respondent searches the codes of <Code>{answerValueSet}</Code>.
+              </Text>
+              <Group>
+                <Button
+                  variant="default"
+                  size="xs"
+                  leftSection={<IconTrash size={16} />}
+                  onClick={() => form.setFieldValue(`${path}.answerValueSet`, undefined)}
+                  disabled={disabled}
+                >
+                  Remove value set
+                </Button>
+              </Group>
+            </Stack>
+          </Card>
+        )}
+        {isChoice && !answerValueSet && answerOptions.length === 0 && (
           <Alert color="blue">No answer options added. Add at least one option for choice questions.</Alert>
         )}
-        {!isGroup && !isDisplay && !(isChoice && answerOptions.length === 0) && (
+        {isChoice && answerOptions.length > 0 && (
           <Card withBorder>
             <Card.Section withBorder inheritPadding py="xs">
               <Text fw={500}>Answer Options</Text>
@@ -551,24 +643,41 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
                 {answerOptions.map((answer: ExtendedQuestionnaireItemAnswerOption, index: number) => {
                   // Coded answers (LOINC, a value set) keep their code, text and score, so they mean the same everywhere.
                   const isCodedAnswer = !isManualAnswerOption(answer, localAnswerSystem);
+                  // A plain value (string, integer, date, time) is its own text and code.
+                  const isPlainValue = !isCodedAnswerOption(answer);
                   return (
                     <Accordion.Item key={answer.id ?? index} value={String(index)}>
-                      <Accordion.Control>{answer.value.display}</Accordion.Control>
+                      <Accordion.Control>{getAnswerOptionLabel(answer)}</Accordion.Control>
                       <Accordion.Panel>
                         <Stack gap="md">
-                          {isCodedAnswer && (
+                          {isPlainValue && answer.valueType === 'valueReference' && (
+                            <Text size="sm">Reference to {answer.value?.reference}; it cannot be edited here.</Text>
+                          )}
+                          {isPlainValue && answer.valueType !== 'valueReference' && (
+                            <FormTextInput
+                              form={form}
+                              label="Value"
+                              context={`${path}.answerOption.${index}.value`}
+                              type={getPlainOptionInputType(answer.valueType)}
+                              required={true}
+                              disabled={disabled}
+                            />
+                          )}
+                          {!isPlainValue && isCodedAnswer && (
                             <Text size="xs" c="dimmed">
                               {answer.value?.system === LOINC ? 'LOINC answer' : 'Coded answer'}: its text, code and
                               score are fixed so it means the same everywhere.
                             </Text>
                           )}
-                          <FormTextInput
-                            form={form}
-                            label="Display Text"
-                            context={`${path}.answerOption.${index}.value.display`}
-                            required={!isCodedAnswer}
-                            disabled={disabled || isCodedAnswer}
-                          />
+                          {!isPlainValue && (
+                            <FormTextInput
+                              form={form}
+                              label="Display Text"
+                              context={`${path}.answerOption.${index}.value.display`}
+                              required={!isCodedAnswer}
+                              disabled={disabled || isCodedAnswer}
+                            />
+                          )}
 
                           <FormSwitch
                             form={form}
@@ -581,29 +690,33 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
                             disabled={disabled}
                           />
 
-                          <FormTextInput
-                            form={form}
-                            label="Code"
-                            context={`${path}.answerOption.${index}.value.code`}
-                            required={!isCodedAnswer}
-                            disabled={disabled || isCodedAnswer}
-                          />
+                          {!isPlainValue && (
+                            <>
+                              <FormTextInput
+                                form={form}
+                                label="Code"
+                                context={`${path}.answerOption.${index}.value.code`}
+                                required={!isCodedAnswer}
+                                disabled={disabled || isCodedAnswer}
+                              />
 
-                          <FormTextInput
-                            form={form}
-                            label="System"
-                            context={`${path}.answerOption.${index}.value.system`}
-                            disabled={true}
-                          />
+                              <FormTextInput
+                                form={form}
+                                label="System"
+                                context={`${path}.answerOption.${index}.value.system`}
+                                disabled={true}
+                              />
 
-                          <FormTextInput
-                            form={form}
-                            label="Score"
-                            context={`${path}.answerOption.${index}.value.score`}
-                            type="number"
-                            min="0"
-                            disabled={disabled || isCodedAnswer}
-                          />
+                              <FormTextInput
+                                form={form}
+                                label="Score"
+                                context={`${path}.answerOption.${index}.value.score`}
+                                type="number"
+                                min="0"
+                                disabled={disabled || isCodedAnswer}
+                              />
+                            </>
+                          )}
 
                           <Button
                             variant="filled"
@@ -660,17 +773,13 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
               opened={answerListSearchOpened}
               onClose={() => setAnswerListSearchOpened(false)}
               replaces={answerOptions.length > 0}
-              onSelect={(answerOption) =>
-                form.setFieldValue(`${path}.answerOption`, fromFhirAnswerOptions(answerOption))
-              }
+              onSelect={(answerOption) => setAnswerOptions(fromFhirAnswerOptions(answerOption))}
             />
             <QuestionnaireValueSetAnswersDrawer
               opened={valueSetSearchOpened}
               onClose={() => setValueSetSearchOpened(false)}
               replaces={answerOptions.length > 0}
-              onSelect={(answerOption) =>
-                form.setFieldValue(`${path}.answerOption`, fromFhirAnswerOptions(answerOption))
-              }
+              onSelect={(answerOption) => setAnswerOptions(fromFhirAnswerOptions(answerOption))}
             />
           </>
         )}
@@ -755,7 +864,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
 
         {type !== 'display' && type !== 'group' && (
           <>
-            {['string', 'text', 'integer', 'decimal', 'date', 'dateTime', 'time', 'quantity'].includes(type) && (
+            {['string', 'text', 'url', 'integer', 'decimal', 'date', 'dateTime', 'time', 'quantity'].includes(type) && (
               <>
                 {['string', 'text'].includes(type) && (
                   <>
@@ -775,6 +884,16 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
                       disabled={disabled}
                     />
                   </>
+                )}
+
+                {type === 'url' && (
+                  <FormTextInput
+                    form={form}
+                    label="Max Length"
+                    context={`${path}.maxLength`}
+                    type="number"
+                    disabled={disabled}
+                  />
                 )}
 
                 {['integer', 'decimal', 'quantity', 'date', 'dateTime', 'time'].includes(type) && (
@@ -836,6 +955,8 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
                           (q: ExtendedQuestionnaireItem) => q.linkId === linkId
                         );
                         form.setFieldValue(`${path}.enableWhen.${index}.question`, question ?? null);
+                        // An answer to another question means nothing for this one.
+                        form.setFieldValue(`${path}.enableWhen.${index}.answer`, '');
                       }}
                     />
 
@@ -846,6 +967,19 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
                         context={`${path}.enableWhen.${index}.operator`}
                         loading={loading}
                         data={toSelectData(getApplicableQuestionnaireEnableWhenOperators(condition))}
+                      />
+                    )}
+
+                    {condition.question && condition.operator && !['exists', 'empty'].includes(condition.operator) && (
+                      <QuestionnaireEnableWhenAnswer
+                        key={condition.question.linkId}
+                        form={form}
+                        context={`${path}.enableWhen.${index}.answer`}
+                        question={
+                          findFormItemByLinkId(form.getValues().item ?? [], condition.question.linkId) ??
+                          (condition.question as unknown as ExtendedQuestionnaireItem)
+                        }
+                        disabled={disabled}
                       />
                     )}
 
@@ -901,6 +1035,223 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
   );
 }
 
+interface QuestionnaireReferenceTypesProps {
+  readonly form: QuestionnaireForm;
+  readonly path: string;
+  readonly disabled?: boolean;
+}
+
+/**
+ * The resource types a reference question can point to, one ResourceTypeInput each, as in Medplum's
+ * QuestionnaireBuilder. With none, any resource can be referenced.
+ * @param props - The QuestionnaireReferenceTypes React props.
+ * @returns The QuestionnaireReferenceTypes React node.
+ */
+function QuestionnaireReferenceTypes(props: QuestionnaireReferenceTypesProps): JSX.Element {
+  const { form, path, disabled } = props;
+  const context = `${path}.referenceResource`;
+  const targetTypes: string[] = getValueByPath(form.getValues(), context) ?? [];
+  const setTargetTypes = (types: string[]): void => form.setFieldValue(context, types);
+
+  return (
+    <Stack gap="xs">
+      <Text size="sm" fw={500}>
+        Resource types
+      </Text>
+      <Text size="xs" c="dimmed">
+        The kinds of resource the answer can point to. With none, any resource can be picked.
+      </Text>
+      {targetTypes.map((targetType, index) => (
+        <Group key={`${index}-${targetType}`} gap="xs" wrap="nowrap">
+          <Box flex={1}>
+            <ResourceTypeInput
+              name={`resourceType-${index}`}
+              placeholder="Resource Type"
+              defaultValue={(targetType || undefined) as ResourceType | undefined}
+              disabled={disabled}
+              onChange={(value) => setTargetTypes(targetTypes.map((type, i) => (i === index ? (value ?? '') : type)))}
+            />
+          </Box>
+          <ActionIcon
+            variant="filled"
+            color="red"
+            size="input-sm"
+            aria-label="Remove resource type"
+            disabled={disabled}
+            onClick={() => setTargetTypes(targetTypes.filter((_, i) => i !== index))}
+          >
+            <IconTrash size={16} />
+          </ActionIcon>
+        </Group>
+      ))}
+      <Group>
+        <Button
+          variant="default"
+          size="xs"
+          leftSection={<IconPlus size={16} />}
+          disabled={disabled}
+          onClick={() => setTargetTypes([...targetTypes, ''])}
+        >
+          Add resource type
+        </Button>
+      </Group>
+    </Stack>
+  );
+}
+
+/** Common UCUM units, the unit codes Medplum uses (UCUM); units not in it can be typed as UCUM codes. */
+const UCUM_COMMON_VALUE_SET = 'http://hl7.org/fhir/ValueSet/ucum-common';
+
+interface QuestionnaireUnitInputProps {
+  readonly form: QuestionnaireForm;
+  readonly context: string;
+  readonly label: string;
+  readonly description: string;
+  /** Several units (questionnaire-unitOption) rather than one (questionnaire-unit). */
+  readonly multiple?: boolean;
+  readonly disabled?: boolean;
+}
+
+/**
+ * Picks UCUM units for a question: searched in the common UCUM units, or typed as a UCUM code (e.g. mm[Hg]).
+ * @param props - The QuestionnaireUnitInput React props.
+ * @returns The QuestionnaireUnitInput React node.
+ */
+function QuestionnaireUnitInput(props: QuestionnaireUnitInputProps): JSX.Element {
+  const { form, context, label, description, multiple, disabled } = props;
+  const value = getValueByPath(form.getValues(), context);
+  const units: Coding[] = (multiple ? (value ?? []) : [value]).filter(Boolean);
+
+  return (
+    <ValueSetAutocomplete
+      key={context}
+      label={label}
+      description={description}
+      binding={UCUM_COMMON_VALUE_SET}
+      creatable
+      clearable
+      disabled={disabled}
+      maxValues={multiple ? undefined : 1}
+      placeholder="Search units, or type a UCUM code"
+      defaultValue={units.map((unit) => ({ system: UCUM, code: unit.code, display: unit.display ?? unit.code }))}
+      onChange={(selected) => {
+        const codings = selected.map((entry) => ({
+          system: UCUM,
+          code: entry.code,
+          display: entry.display ?? entry.code,
+        }));
+        form.setFieldValue(context, multiple ? codings : (codings[0] ?? null));
+      }}
+    />
+  );
+}
+
+interface QuestionnaireEnableWhenAnswerProps {
+  readonly form: QuestionnaireForm;
+  readonly context: string;
+  /** The question the condition checks (its current definition). */
+  readonly question: ExtendedQuestionnaireItem;
+  readonly disabled?: boolean;
+}
+
+/**
+ * The answer a condition compares the question's answer with, entered as the question is answered: one of its
+ * options, yes or no, a number, a date or time, or text.
+ * @param props - The QuestionnaireEnableWhenAnswer React props.
+ * @returns The QuestionnaireEnableWhenAnswer React node.
+ */
+function QuestionnaireEnableWhenAnswer(props: QuestionnaireEnableWhenAnswerProps): JSX.Element {
+  const { form, context, question, disabled } = props;
+  const answer = getValueByPath(form.getValues(), context);
+  const type = question.type;
+
+  if (type === 'choice' || type === 'open-choice') {
+    const options: ExtendedQuestionnaireItemAnswerOption[] = question.answerOption ?? [];
+    if (question.answerValueSet && options.length === 0) {
+      return (
+        <ValueSetAutocomplete
+          label="Answer"
+          binding={question.answerValueSet}
+          maxValues={1}
+          creatable={false}
+          disabled={disabled}
+          defaultValue={answer?.code ? [{ system: answer.system, code: answer.code, display: answer.display }] : []}
+          onChange={(selected) =>
+            form.setFieldValue(
+              context,
+              selected[0] ? { system: selected[0].system, code: selected[0].code, display: selected[0].display } : ''
+            )
+          }
+        />
+      );
+    }
+    return (
+      <FormSelect
+        form={form}
+        label="Answer"
+        context={context}
+        required={true}
+        disabled={disabled}
+        data={options.map((option) => ({
+          value: getChoiceValueKey(option.value),
+          label: getAnswerOptionLabel(option),
+        }))}
+        value={answer === '' || answer === undefined || answer === null ? null : getChoiceValueKey(answer)}
+        onChange={(key) =>
+          form.setFieldValue(context, options.find((option) => getChoiceValueKey(option.value) === key)?.value ?? '')
+        }
+      />
+    );
+  }
+
+  if (type === 'boolean') {
+    return (
+      <FormSelect
+        form={form}
+        label="Answer"
+        context={context}
+        disabled={disabled}
+        data={[
+          { value: 'true', label: 'Yes' },
+          { value: 'false', label: 'No' },
+        ]}
+        value={answer === false ? 'false' : 'true'}
+        onChange={(value) => form.setFieldValue(context, value !== 'false')}
+      />
+    );
+  }
+
+  const inputType = getEnableWhenAnswerInputType(type);
+  if (!inputType) {
+    return (
+      <Text size="sm" c="dimmed">
+        A condition on this type of question can only check whether it is answered.
+      </Text>
+    );
+  }
+  return (
+    <FormTextInput form={form} label="Answer" context={context} type={inputType} required={true} disabled={disabled} />
+  );
+}
+
+function getEnableWhenAnswerInputType(
+  type: string
+): 'number' | 'date' | 'datetime-local' | 'time' | 'text' | undefined {
+  if (type === 'integer' || type === 'decimal' || type === 'quantity') {
+    return 'number';
+  }
+  if (type === 'date' || type === 'time') {
+    return type;
+  }
+  if (type === 'dateTime') {
+    return 'datetime-local';
+  }
+  if (type === 'string' || type === 'text' || type === 'url') {
+    return 'text';
+  }
+  return undefined;
+}
+
 interface QuestionnaireItemCodesProps {
   readonly form: QuestionnaireForm;
   readonly path: string;
@@ -947,6 +1298,22 @@ function QuestionnaireItemCodes(props: QuestionnaireItemCodesProps): JSX.Element
   );
 }
 
+/**
+ * Loads the question types: the codes under `question` in FHIR's item type code system. Its hierarchy is not declared
+ * as is-a, so a value set expansion is flat (and cannot filter by it); the code system's own nesting is read instead.
+ * @param medplum - The Medplum client.
+ * @returns The question types.
+ */
+async function loadQuestionTypes(medplum: MedplumClient): Promise<Coding[]> {
+  const codeSystem = await medplum.searchOne('CodeSystem', { url: ITEM_TYPE_SYSTEM });
+  const question = codeSystem?.concept?.find((concept) => concept.code === 'question');
+  return (question?.concept ?? []).map((concept) => ({
+    system: ITEM_TYPE_SYSTEM,
+    code: concept.code,
+    display: concept.display,
+  }));
+}
+
 async function expandValueSet(medplum: MedplumClient, url: string): Promise<Coding[]> {
   const valueSet = await medplum.valueSetExpand({ url, count: 1000 });
   return flattenExpansion(valueSet.expansion?.contains ?? []);
@@ -976,7 +1343,7 @@ function getTitle(selectedItem: ExtendedQuestionnaireItem | undefined, type: str
 }
 
 function getInitialInputType(type: string): 'number' | 'date' | 'datetime-local' | 'time' | 'text' {
-  if (type === 'integer' || type === 'decimal') {
+  if (type === 'integer' || type === 'decimal' || type === 'quantity') {
     return 'number';
   }
   if (type === 'date') {
@@ -991,12 +1358,48 @@ function getInitialInputType(type: string): 'number' | 'date' | 'datetime-local'
   return 'text';
 }
 
-function getRangeInputType(type: string): 'number' | 'date' | 'time' | 'text' {
-  if (type === 'integer' || type === 'decimal') {
+function getPlainOptionInputType(valueType: string | undefined): 'number' | 'date' | 'time' | 'text' {
+  if (valueType === 'valueInteger') {
     return 'number';
   }
-  if (type === 'date' || type === 'dateTime') {
+  if (valueType === 'valueDate') {
     return 'date';
+  }
+  if (valueType === 'valueTime') {
+    return 'time';
+  }
+  return 'text';
+}
+
+/**
+ * The item control an item is rendered with when it has none: a group as a list, a number in a text box, a choice as
+ * radio buttons (checkboxes when it repeats).
+ * @param type - The item type.
+ * @param repeats - True if the item repeats.
+ * @returns The item control code, or null when the renderer's default has no item control of its own.
+ */
+function getDefaultItemControl(type: string, repeats: boolean): string | null {
+  if (type === 'group') {
+    return 'list';
+  }
+  if (type === 'choice' || type === 'open-choice') {
+    return repeats ? 'check-box' : 'radio-button';
+  }
+  if (type === 'integer' || type === 'decimal') {
+    return 'text-box';
+  }
+  return null;
+}
+
+function getRangeInputType(type: string): 'number' | 'date' | 'datetime-local' | 'time' | 'text' {
+  if (type === 'integer' || type === 'decimal' || type === 'quantity') {
+    return 'number';
+  }
+  if (type === 'date') {
+    return 'date';
+  }
+  if (type === 'dateTime') {
+    return 'datetime-local';
   }
   if (type === 'time') {
     return 'time';

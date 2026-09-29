@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
 import type { ComboboxItem } from '@mantine/core';
-import { ActionIcon, Box, Group, Radio, Skeleton, Switch, Textarea, TextInput } from '@mantine/core';
+import { ActionIcon, Box, Group, Radio, Skeleton, Stack, Switch, Textarea, TextInput } from '@mantine/core';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import type { JSX, ReactNode } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
@@ -139,13 +139,31 @@ export interface FormRadioGroupProps {
   readonly description?: string;
   readonly context: string;
   readonly options: { value: string; label: string }[];
+  /** The option shown as selected while the form has no value. */
+  readonly defaultValue?: string;
   readonly required?: boolean;
   readonly disabled?: boolean;
   readonly onChange?: (value: string) => void;
 }
 
 export function FormRadioGroup(props: FormRadioGroupProps): JSX.Element {
-  const { form, label, description, context, options, required = false, disabled = false, onChange } = props;
+  const {
+    form,
+    label,
+    description,
+    context,
+    options,
+    defaultValue,
+    required = false,
+    disabled = false,
+    onChange,
+  } = props;
+  const { defaultValue: _formDefaultValue, ...inputProps } = form.getInputProps(context, {
+    withError: true,
+    withFocus: true,
+  });
+  // An uncontrolled form gives no `value`; read the current one, so the default applies only while there is none.
+  const value = getValueByPath(form.getValues(), context);
 
   return (
     <Radio.Group
@@ -153,15 +171,18 @@ export function FormRadioGroup(props: FormRadioGroupProps): JSX.Element {
       label={label}
       description={description}
       withAsterisk={required}
-      {...form.getInputProps(context, { withError: true, withFocus: true })}
+      {...inputProps}
+      value={value || defaultValue || null}
       onChange={(value) => {
         form.setFieldValue(context, value);
         onChange?.(value);
       }}
     >
-      {options.map((option) => (
-        <Radio key={`${context}-${option.value}`} value={option.value} label={option.label} disabled={disabled} />
-      ))}
+      <Stack gap="xs" mt="xs">
+        {options.map((option) => (
+          <Radio key={`${context}-${option.value}`} value={option.value} label={option.label} disabled={disabled} />
+        ))}
+      </Stack>
     </Radio.Group>
   );
 }
@@ -255,23 +276,32 @@ export interface FormFlatCollectionProps {
   readonly form: QuestionnaireForm;
   readonly context: string;
   readonly add: () => void;
+  /** Shows the add button; false for a single value. */
+  readonly addable?: boolean;
   readonly canAdd?: () => boolean;
   readonly disabled?: boolean;
   readonly children: (index: number) => ReactNode;
 }
 
 export function FormFlatCollection(props: FormFlatCollectionProps): JSX.Element {
-  const { form, context, add, canAdd = () => true, disabled = false, children } = props;
+  const { form, context, add, addable = true, canAdd = () => true, disabled = false, children } = props;
   const fields: any[] = getValueByPath(form.getValues(), context) || [];
 
   return (
     <>
       {fields.map((item: any, index: number) => (
-        <Group key={item?.id ? `${context}-${item.id}` : `${context}-${index}`} align="flex-start" gap="xs">
+        // The buttons line up with the (last) input: same height, bottom aligned.
+        <Group key={item?.id ? `${context}-${item.id}` : `${context}-${index}`} align="flex-end" gap="xs">
           <Box flex={1}>{children(index)}</Box>
-          <Group gap="xs" mt={32}>
-            {index === fields.length - 1 && (
-              <ActionIcon variant="outline" aria-label="Add" onClick={add} disabled={!canAdd() || disabled}>
+          <Group gap="xs">
+            {addable && index === fields.length - 1 && (
+              <ActionIcon
+                variant="outline"
+                size="input-sm"
+                aria-label="Add"
+                onClick={add}
+                disabled={!canAdd() || disabled}
+              >
                 <IconPlus size={16} />
               </ActionIcon>
             )}
@@ -279,6 +309,7 @@ export function FormFlatCollection(props: FormFlatCollectionProps): JSX.Element 
               <ActionIcon
                 variant="filled"
                 color="red"
+                size="input-sm"
                 aria-label="Remove"
                 onClick={() => form.removeListItem(context, index)}
                 disabled={disabled}

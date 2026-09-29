@@ -15,6 +15,7 @@ import {
   getRequiredGroupError,
   getValueByPath,
   hasFollowUpItems,
+  isEmptyAnswerValue,
   isHelpItem,
   isHorizontalChoiceLayout,
   isManualAnswerOption,
@@ -631,6 +632,68 @@ describe('QuestionnaireBuilderV2.utils', () => {
       expect(validateFormAnswers(values)).toStrictEqual({ 'item.0.answer.0.value': 'Age cannot exceed 99' });
     });
 
+    test('a regex must match the whole value', () => {
+      const values = setup({
+        linkId: 'q',
+        type: 'string',
+        text: 'Zip',
+        extension: [{ url: 'http://hl7.org/fhir/StructureDefinition/regex', valueString: '[0-9]{5}' }],
+      });
+      values.item[0].answer = [{ value: 'abc12345xyz' }];
+      expect(validateFormAnswers(values)).toStrictEqual({ 'item.0.answer.0.value': 'Zip format is invalid' });
+      values.item[0].answer = [{ value: '1234' }];
+      expect(validateFormAnswers(values)).toStrictEqual({ 'item.0.answer.0.value': 'Zip format is invalid' });
+      values.item[0].answer = [{ value: '12345' }];
+      expect(validateFormAnswers(values)).toStrictEqual({});
+      // An empty answer is not checked (only required is)
+      values.item[0].answer = [{ value: '' }];
+      expect(validateFormAnswers(values)).toStrictEqual({});
+    });
+
+    test('dateTime values keep their local time through save and load', () => {
+      const item = fromFhirQuestionnaireItem({ linkId: 'a', type: 'dateTime' }, null, 0);
+      item.initial = [{ value: '2026-09-29T10:00' }];
+      item.minValue = '2026-09-29T09:30';
+      item.maxValue = '2026-09-29T18:00';
+
+      let current = item;
+      for (let i = 0; i < 2; i++) {
+        current = fromFhirQuestionnaireItem(toFhirQuestionnaireItem(current), null, 0);
+      }
+      expect(current.initial[0].value).toBe('2026-09-29T10:00');
+      expect(current.answer[0].value).toBe('2026-09-29T10:00');
+      expect(current.minValue).toBe('2026-09-29T09:30');
+      expect(current.maxValue).toBe('2026-09-29T18:00');
+      // Saved as the UTC instant of that local time
+      expect(toFhirQuestionnaireItem(current).initial?.[0].valueDateTime).toBe(
+        new Date('2026-09-29T10:00').toISOString()
+      );
+    });
+
+    test('a URL must be a full link, within its max length', () => {
+      const values = setup({ linkId: 'q', type: 'url', text: 'Website', maxLength: 25 });
+      for (const valid of [
+        'https://example.com',
+        'http://localhost:3000/a',
+        'ftp://files.example.com',
+        'mailto:a@b.co',
+      ]) {
+        values.item[0].answer = [{ value: valid }];
+        expect(validateFormAnswers(values)).toStrictEqual({});
+      }
+      for (const invalid of ['example.com', 'www.example.com', 'https://', 'hello world', 'javascript:alert(1)']) {
+        values.item[0].answer = [{ value: invalid }];
+        expect(validateFormAnswers(values)).toStrictEqual({
+          'item.0.answer.0.value': 'Website must be a full link, e.g. https://example.com',
+        });
+      }
+      values.item[0].answer = [{ value: 'https://example.com/a-long-path' }];
+      expect(validateFormAnswers(values)).toStrictEqual({
+        'item.0.answer.0.value': 'Website cannot exceed 25 characters',
+      });
+      expect(toFhirQuestionnaireItem(values.item[0]).maxLength).toBe(25);
+    });
+
     test('an invalid regex in the definition is ignored', () => {
       const values = setup({
         linkId: 'q',
@@ -674,14 +737,8 @@ describe('QuestionnaireBuilderV2.utils', () => {
         0
       );
 
-    expect(isHorizontalChoiceLayout(choice(['Yes', 'No', 'Refused', 'Not asked']))).toBe(true);
-    expect(
-      isHorizontalChoiceLayout(choice(['Not at all', 'Several days', 'More than half the days', 'Nearly every day']))
-    ).toBe(false);
-    expect(isHorizontalChoiceLayout(choice(['I have not had a change in my weight', 'I have lost weight']))).toBe(
-      false
-    );
-    expect(isHorizontalChoiceLayout(choice(['A', 'B', 'C', 'D', 'E']))).toBe(false);
+    // Vertical unless the orientation says horizontal
+    expect(isHorizontalChoiceLayout(choice(['Yes', 'No']))).toBe(false);
     expect(isHorizontalChoiceLayout(choice(['A', 'B', 'C', 'D', 'E'], 'horizontal'))).toBe(true);
     expect(isHorizontalChoiceLayout(choice(['Yes', 'No'], 'vertical'))).toBe(false);
   });
@@ -736,7 +793,7 @@ describe('QuestionnaireBuilderV2.utils', () => {
           { value: { code: '1', display: 'A' } },
           { value: { code: '1', display: 'B' } },
         ] as any[])
-      ).toStrictEqual(['Answer option codes must be unique: 1']);
+      ).toStrictEqual(['Answer options must be unique: 1']);
     });
   });
 
@@ -801,15 +858,9 @@ describe('QuestionnaireBuilderV2.utils', () => {
       expect(values.item[0].help).toBe('In years');
       expect(values.item[0].item).toStrictEqual([]);
 
+      // Kept exactly as loaded
       const exported = toFhirQuestionnaire(values);
-      expect(exported.item?.[0].item).toStrictEqual([
-        {
-          ...helpItem,
-          extension: [
-            { ...helpExtension, valueCodeableConcept: { ...helpExtension.valueCodeableConcept, text: 'Help-Button' } },
-          ],
-        },
-      ]);
+      expect(exported.item?.[0].item).toStrictEqual([helpItem]);
     });
 
     test('new help text gets a _help linkId', () => {
@@ -1117,6 +1168,434 @@ describe('QuestionnaireBuilderV2.utils', () => {
       values.item[0].item[0].item[1].required = true;
       values.item[0].item[0].readOnly = true;
       expect(validateFormAnswers(values)).toStrictEqual({});
+    });
+  });
+
+  describe('choice answers', () => {
+    const colors: QuestionnaireItem = {
+      linkId: 'color',
+      type: 'choice',
+      text: 'Favourite color',
+      answerOption: [{ valueString: 'Red' }, { valueString: 'Blue', initialSelected: true }],
+    };
+    const count: QuestionnaireItem = {
+      linkId: 'count',
+      type: 'choice',
+      answerOption: [{ valueInteger: 1 }, { valueInteger: 2 }],
+    };
+    const time: QuestionnaireItem = {
+      linkId: 'time',
+      type: 'choice',
+      answerOption: [{ valueTime: '09:00:00' }, { valueTime: '17:30:00' }],
+    };
+
+    test('options of every value type, codes without display and value sets are kept on save', () => {
+      const exported = toFhirQuestionnaire(
+        toFormValues({
+          resourceType: 'Questionnaire',
+          status: 'active',
+          item: [
+            colors,
+            count,
+            time,
+            { linkId: 'code', type: 'choice', answerOption: [{ valueCoding: { system: 'x', code: 'a' } }] },
+            { linkId: 'vs', type: 'choice', answerValueSet: 'http://hl7.org/fhir/ValueSet/administrative-gender' },
+          ],
+        })
+      );
+      expect(exported.item?.[0].answerOption).toStrictEqual([
+        { initialSelected: false, valueString: 'Red' },
+        { initialSelected: true, valueString: 'Blue' },
+      ]);
+      expect(exported.item?.[1].answerOption?.map((option) => option.valueInteger)).toStrictEqual([1, 2]);
+      expect(exported.item?.[2].answerOption?.map((option) => option.valueTime)).toStrictEqual([
+        '09:00:00',
+        '17:30:00',
+      ]);
+      expect(exported.item?.[3].answerOption).toStrictEqual([
+        { initialSelected: false, valueCoding: { system: 'x', code: 'a' } },
+      ]);
+      expect(exported.item?.[4].answerValueSet).toBe('http://hl7.org/fhir/ValueSet/administrative-gender');
+      expect(exported.item?.[4].answerOption).toBeUndefined();
+    });
+
+    test('answers are written with the value type of their option; typed answers as strings', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [colors, count, time, { ...colors, linkId: 'open', type: 'open-choice' }],
+      });
+      // The initially selected plain option is the initial answer
+      expect(values.item[0].answer).toStrictEqual([{ value: 'Blue' }]);
+      values.item[1].answer = [{ value: 2 }];
+      values.item[2].answer = [{ value: '17:30:00' }];
+      values.item[3].answer = [{ value: 'Green' }];
+      expect(toFhirQuestionnaireResponse(values).item?.map((item) => item.answer)).toStrictEqual([
+        [{ valueString: 'Blue' }],
+        [{ valueInteger: 2 }],
+        [{ valueTime: '17:30:00' }],
+        [{ valueString: 'Green' }],
+      ]);
+    });
+
+    test('prefilled choice answers match their options', () => {
+      const questionnaire: Questionnaire = { resourceType: 'Questionnaire', status: 'active', item: [time, count] };
+      const item = fromFhirQuestionnaireItem(time, questionnaire, 0, [
+        { linkId: 'time', answer: [{ valueTime: '17:30:00' }] },
+      ]);
+      expect(item.answer).toStrictEqual([{ value: '17:30:00' }]);
+      const rebuilt = rebuildFormItems({
+        ...questionnaire,
+        item: [
+          item,
+          fromFhirQuestionnaireItem(count, questionnaire, 1, [{ linkId: 'count', answer: [{ valueInteger: 2 }] }]),
+        ],
+      });
+      expect(rebuilt[0].answer).toStrictEqual([{ value: '17:30:00' }]);
+      expect(rebuilt[1].answer).toStrictEqual([{ value: 2 }]);
+    });
+
+    test('number conditions compare numbers, and ignore unanswered questions', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          { linkId: 'children', type: 'integer' },
+          { linkId: 'many', type: 'string', enableWhen: [{ question: 'children', operator: '>', answerInteger: 9 }] },
+          { linkId: 'none', type: 'string', enableWhen: [{ question: 'children', operator: '<', answerInteger: 1 }] },
+        ],
+      });
+      // Typed into a text field, answers are strings
+      values.item[0].answer = [{ value: '10' }];
+      expect(evaluateEnableWhen(values, values.item[1])).toBe(true);
+      values.item[0].answer = [{ value: '' }];
+      expect(evaluateEnableWhen(values, values.item[1])).toBe(false);
+      expect(evaluateEnableWhen(values, values.item[2])).toBe(false);
+      values.item[0].answer = [{ value: '0' }];
+      expect(evaluateEnableWhen(values, values.item[2])).toBe(true);
+    });
+
+    test('conditions on plain-value options are typed and evaluated by value', () => {
+      const questionnaire: Questionnaire = {
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          colors,
+          count,
+          {
+            linkId: 'why-red',
+            type: 'string',
+            enableWhen: [{ question: 'color', operator: '=', answerString: 'Red' }],
+          },
+          { linkId: 'two', type: 'string', enableWhen: [{ question: 'count', operator: '!=', answerInteger: 2 }] },
+        ],
+      };
+      const values = toFormValues(questionnaire);
+      expect(toFhirQuestionnaire(values).item?.[2].enableWhen).toStrictEqual([
+        { question: 'color', operator: '=', answerString: 'Red' },
+      ]);
+      expect(toFhirQuestionnaire(values).item?.[3].enableWhen).toStrictEqual([
+        { question: 'count', operator: '!=', answerInteger: 2 },
+      ]);
+
+      expect(evaluateEnableWhen(values, values.item[2])).toBe(false);
+      values.item[0].answer = [{ value: 'Red' }];
+      expect(evaluateEnableWhen(values, values.item[2])).toBe(true);
+
+      values.item[1].answer = [{ value: 2 }];
+      expect(evaluateEnableWhen(values, values.item[3])).toBe(false);
+      values.item[1].answer = [{ value: 1 }];
+      expect(evaluateEnableWhen(values, values.item[3])).toBe(true);
+    });
+  });
+
+  describe('quantity answers', () => {
+    const kg = { system: 'http://unitsofmeasure.org', code: 'kg', display: 'kilogram' };
+    const lb = { system: 'http://unitsofmeasure.org', code: '[lb_av]', display: 'pound' };
+
+    test('answers keep their comparator and unit through prefill, rebuild and the response', () => {
+      const weight: QuestionnaireItem = {
+        linkId: 'weight',
+        type: 'quantity',
+        text: 'Weight',
+        extension: [
+          { url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-unitOption', valueCoding: kg },
+          { url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-unitOption', valueCoding: lb },
+        ],
+      };
+      const questionnaire: Questionnaire = { resourceType: 'Questionnaire', status: 'active', item: [weight] };
+      const answer = { comparator: '<' as const, value: 80, unit: 'kilogram', system: kg.system, code: 'kg' };
+      const item = fromFhirQuestionnaireItem(weight, questionnaire, 0, [
+        { linkId: 'weight', answer: [{ valueQuantity: answer }] },
+      ]);
+      expect(item.answer).toStrictEqual([{ value: answer }]);
+      const rebuilt = rebuildFormItems({ ...questionnaire, item: [item] });
+      expect(rebuilt[0].answer).toStrictEqual([{ value: answer }]);
+      expect(toFhirQuestionnaireResponse({ ...questionnaire, item: rebuilt }).item?.[0].answer).toStrictEqual([
+        { valueQuantity: answer },
+      ]);
+    });
+
+    test('a typed value is written as a number; without a chosen unit the fixed unit is used', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          { linkId: 'free', type: 'quantity' },
+          {
+            linkId: 'fixed',
+            type: 'quantity',
+            extension: [{ url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-unit', valueCoding: kg }],
+          },
+        ],
+      });
+      values.item[0].answer = [{ value: { value: '1.5', unit: 'cups' } }];
+      values.item[1].answer = [{ value: { value: '72' } }];
+      expect(toFhirQuestionnaireResponse(values).item?.map((item) => item.answer)).toStrictEqual([
+        [{ valueQuantity: { value: 1.5, unit: 'cups' } }],
+        [{ valueQuantity: { value: 72, unit: 'kilogram', system: 'http://unitsofmeasure.org', code: 'kg' } }],
+      ]);
+    });
+
+    test('a quantity with only a unit is unanswered; ranges and conditions use its value', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          {
+            linkId: 'weight',
+            type: 'quantity',
+            text: 'Weight',
+            required: true,
+            extension: [{ url: 'http://hl7.org/fhir/StructureDefinition/minValue', valueDecimal: 2 }],
+          },
+          {
+            linkId: 'heavy',
+            type: 'string',
+            enableWhen: [{ question: 'weight', operator: '>', answerQuantity: { value: 100 } }],
+          },
+        ],
+      });
+      values.item[0].answer = [{ value: { value: undefined, unit: 'kg' } }];
+      expect(isEmptyAnswerValue(values.item[0].answer[0].value)).toBe(true);
+      expect(validateFormAnswers(values)).toStrictEqual({ 'item.0.answer.0.value': 'This field is required' });
+
+      values.item[0].answer = [{ value: { value: '120', unit: 'kg' } }];
+      expect(validateFormAnswers(values)).toStrictEqual({});
+      expect(evaluateEnableWhen(values, values.item[1])).toBe(true);
+      values.item[0].answer = [{ value: { value: '1', unit: 'kg' } }];
+      expect(validateFormAnswers(values)).toStrictEqual({ 'item.0.answer.0.value': 'Weight must be at least 2' });
+      expect(evaluateEnableWhen(values, values.item[1])).toBe(false);
+    });
+
+    test('with one allowed unit, that unit is the unit of the answer', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          {
+            linkId: 'weight',
+            type: 'quantity',
+            extension: [{ url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-unitOption', valueCoding: kg }],
+          },
+        ],
+      });
+      values.item[0].answer = [{ value: { value: '70' } }];
+      expect(toFhirQuestionnaireResponse(values).item?.[0].answer).toStrictEqual([
+        { valueQuantity: { value: 70, unit: 'kilogram', system: 'http://unitsofmeasure.org', code: 'kg' } },
+      ]);
+    });
+
+    test('quantity ranges are saved as decimals (R4 minValue/maxValue take no Quantity)', () => {
+      const item = fromFhirQuestionnaireItem(
+        {
+          linkId: 'weight',
+          type: 'quantity',
+          extension: [
+            { url: 'http://hl7.org/fhir/StructureDefinition/minValue', valueQuantity: { value: 2 } },
+            { url: 'http://hl7.org/fhir/StructureDefinition/maxValue', valueDecimal: 300 },
+          ],
+        },
+        null,
+        0
+      );
+      expect([item.minValue, item.maxValue]).toStrictEqual([2, 300]);
+      expect(toFhirQuestionnaireItem(item).extension).toEqual(
+        expect.arrayContaining([
+          { url: 'http://hl7.org/fhir/StructureDefinition/minValue', valueDecimal: 2 },
+          { url: 'http://hl7.org/fhir/StructureDefinition/maxValue', valueDecimal: 300 },
+        ])
+      );
+    });
+  });
+
+  describe('content the builder does not edit', () => {
+    const xhtml = (div: string): any => ({
+      extension: [{ url: 'http://hl7.org/fhir/StructureDefinition/rendering-xhtml', valueString: div }],
+    });
+    // Primitive extensions (`_text`) are valid FHIR JSON, but not in Medplum's FHIR types.
+    const item = {
+      id: 'item-1',
+      linkId: 'weight',
+      definition: 'http://example.com/StructureDefinition/weight#Observation.value',
+      type: 'choice',
+      text: 'Weight',
+      _text: xhtml('<div><b>Weight</b></div>'),
+      code: [{ system: 'http://loinc.org', version: '2.77', code: '29463-7', display: 'Body weight' }],
+      extension: [
+        {
+          url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-unitValueSet',
+          valueCanonical: 'http://example.com/vs',
+        },
+        {
+          url: 'http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-calculatedExpression',
+          valueExpression: { language: 'text/fhirpath', expression: '1 + 1' },
+        },
+      ],
+      answerOption: [
+        {
+          valueCoding: { system: 'http://example.com/cs', version: '1', code: 'none', display: 'None of these' },
+          extension: [
+            {
+              url: 'http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-optionExclusive',
+              valueBoolean: true,
+            },
+            { url: 'http://hl7.org/fhir/StructureDefinition/ordinalValue', valueDecimal: 0 },
+          ],
+        },
+      ],
+      item: [
+        {
+          linkId: 'weight-help',
+          type: 'display',
+          text: 'Without shoes',
+          _text: xhtml('<div>Without <i>shoes</i></div>'),
+          extension: [
+            {
+              url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl',
+              valueCodeableConcept: {
+                coding: [{ system: 'http://hl7.org/fhir/questionnaire-item-control', code: 'help' }],
+              },
+            },
+          ],
+        },
+      ],
+    } as unknown as QuestionnaireItem & Record<string, any>;
+
+    test('is kept on save', () => {
+      let values = toFormValues({ resourceType: 'Questionnaire', status: 'active', item: [item] });
+      // Save and load twice
+      for (let i = 0; i < 2; i++) {
+        values = toFormValues(toFhirQuestionnaire(values));
+      }
+      values.item[0].help = 'Without shoes or coat';
+      const saved = toFhirQuestionnaire(values).item?.[0] as QuestionnaireItem;
+
+      expect(saved.id).toBe('item-1');
+      expect(saved.definition).toBe(item.definition);
+      expect((saved as Record<string, any>)._text).toStrictEqual(item._text);
+      expect(saved.code).toStrictEqual(item.code);
+      expect(saved.extension).toEqual(expect.arrayContaining(item.extension ?? []));
+      expect(saved.answerOption).toStrictEqual([
+        {
+          initialSelected: false,
+          valueCoding: { system: 'http://example.com/cs', version: '1', code: 'none', display: 'None of these' },
+          extension: [
+            { url: 'http://hl7.org/fhir/StructureDefinition/ordinalValue', valueDecimal: 0 },
+            {
+              url: 'http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-optionExclusive',
+              valueBoolean: true,
+            },
+          ],
+        },
+      ]);
+      // The help item keeps everything but its text
+      expect(saved.item).toStrictEqual([{ ...item.item?.[0], text: 'Without shoes or coat' }]);
+    });
+  });
+
+  describe('reference questions', () => {
+    const referenceResource = 'http://hl7.org/fhir/StructureDefinition/questionnaire-referenceResource';
+    const referenceFilter = 'http://hl7.org/fhir/StructureDefinition/questionnaire-referenceFilter';
+
+    test('resource types are written as Medplum does: one as a code, several as a CodeableConcept', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          {
+            linkId: 'doctor',
+            type: 'reference',
+            extension: [
+              { url: referenceResource, valueCode: 'Practitioner' },
+              { url: referenceFilter, valueString: 'active=true' },
+            ],
+          },
+        ],
+      });
+      expect(values.item[0].referenceResource).toStrictEqual(['Practitioner']);
+      expect(toFhirQuestionnaire(values).item?.[0].extension).toEqual(
+        expect.arrayContaining([
+          { url: referenceResource, valueCode: 'Practitioner' },
+          { url: referenceFilter, valueString: 'active=true' },
+        ])
+      );
+
+      values.item[0].referenceResource = ['Practitioner', '', 'Organization'];
+      const saved = toFhirQuestionnaire(values).item?.[0];
+      expect(saved?.extension?.filter((ext) => ext.url === referenceResource)).toStrictEqual([
+        {
+          url: referenceResource,
+          valueCodeableConcept: { coding: [{ code: 'Practitioner' }, { code: 'Organization' }] },
+        },
+      ]);
+      expect(
+        toFormValues({ resourceType: 'Questionnaire', status: 'active', item: [saved as QuestionnaireItem] }).item[0]
+          .referenceResource
+      ).toStrictEqual(['Practitioner', 'Organization']);
+
+      values.item[0].referenceResource = [];
+      expect(toFhirQuestionnaire(values).item?.[0].extension?.some((ext) => ext.url === referenceResource)).toBe(false);
+    });
+
+    test('answers are references', () => {
+      const questionnaire: Questionnaire = {
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [{ linkId: 'doctor', type: 'reference', text: 'Doctor' }],
+      };
+      const answer = { reference: 'Practitioner/123', display: 'Dr. Alice Smith' };
+      const item = fromFhirQuestionnaireItem(questionnaire.item?.[0] as QuestionnaireItem, questionnaire, 0, [
+        { linkId: 'doctor', answer: [{ valueReference: answer }] },
+      ]);
+      expect(item.answer).toStrictEqual([{ value: answer }]);
+      const rebuilt = rebuildFormItems({ ...questionnaire, item: [item] });
+      expect(toFhirQuestionnaireResponse({ ...questionnaire, item: rebuilt }).item?.[0].answer).toStrictEqual([
+        { valueReference: answer },
+      ]);
+    });
+  });
+
+  describe('attachment questions', () => {
+    test('answers are attachments, and are required like any answer', () => {
+      const questionnaire: Questionnaire = {
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [{ linkId: 'photo', type: 'attachment', text: 'Photo', required: true }],
+      };
+      const attachment = { contentType: 'image/png', url: 'Binary/123', title: 'photo.png' };
+      const empty = toFormValues(questionnaire);
+      expect(validateFormAnswers(empty)).toStrictEqual({ 'item.0.answer.0.value': 'This field is required' });
+
+      const item = fromFhirQuestionnaireItem(questionnaire.item?.[0] as QuestionnaireItem, questionnaire, 0, [
+        { linkId: 'photo', answer: [{ valueAttachment: attachment }] },
+      ]);
+      expect(item.answer).toStrictEqual([{ value: attachment }]);
+      const rebuilt = rebuildFormItems({ ...questionnaire, item: [item] });
+      expect(validateFormAnswers({ ...questionnaire, item: rebuilt })).toStrictEqual({});
+      expect(toFhirQuestionnaireResponse({ ...questionnaire, item: rebuilt }).item?.[0].answer).toStrictEqual([
+        { valueAttachment: attachment },
+      ]);
     });
   });
 

@@ -30,6 +30,8 @@ import {
   IconFolders,
   IconGripVertical,
   IconHelp,
+  IconLayoutBottombar,
+  IconLayoutNavbar,
 } from '@tabler/icons-react';
 import cx from 'clsx';
 import type { CSSProperties, JSX, MouseEvent } from 'react';
@@ -41,6 +43,7 @@ import {
   getFormItemDropTarget,
   getPageItems,
   hasFollowUpItems,
+  isHeaderOrFooterItem,
   isPageItem,
   isQuestionItem,
   moveFormItem,
@@ -139,7 +142,7 @@ export function QuestionnaireItemTree(props: QuestionnaireItemTreeProps): JSX.El
               depth={row.item.linkId === drag?.activeLinkId && dropTarget ? dropTarget.depth : row.depth}
               treeController={tree}
               selected={selectedItem?.linkId === row.item.linkId}
-              notShown={hasPages && row.depth === 0 && !isPageItem(row.item)}
+              notShown={hasPages && row.depth === 0 && !isPageItem(row.item) && !isHeaderOrFooterItem(row.item)}
               onSelectItem={onSelectItem}
             />
           ))}
@@ -291,6 +294,12 @@ function ItemTypeIcon(props: { readonly item: ExtendedQuestionnaireItem }): JSX.
   const { item } = props;
   if (isPageItem(item)) {
     return <IconFiles size={16} />;
+  }
+  if (item.itemControl?.code === 'header' && item.type === 'group') {
+    return <IconLayoutNavbar size={16} />;
+  }
+  if (item.itemControl?.code === 'footer' && item.type === 'group') {
+    return <IconLayoutBottombar size={16} />;
   }
   if (item.type === 'group') {
     return <IconFolders size={16} />;

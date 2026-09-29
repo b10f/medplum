@@ -4,8 +4,13 @@ import type { Questionnaire, QuestionnaireItem, QuestionnaireResponse, Reference
 import { useResource } from '@medplum/react-hooks';
 import type { JSX } from 'react';
 import { useEffect } from 'react';
-import type { ExtendedQuestionnaireItem } from './QuestionnaireBuilderV2.utils';
-import { addFormAnswer, fromFhirQuestionnaireItem, toFhirQuestionnaireResponse } from './QuestionnaireBuilderV2.utils';
+import type { ExtendedQuestionnaireItem, QuestionnaireMode } from './QuestionnaireBuilderV2.utils';
+import {
+  addFormAnswer,
+  fromFhirQuestionnaireItem,
+  getResponseSignature,
+  toFhirQuestionnaireResponse,
+} from './QuestionnaireBuilderV2.utils';
 import { QuestionnaireFormProvider, useQuestionnaireForm } from './QuestionnaireFormContext';
 import { QuestionnairePreview } from './QuestionnairePreview';
 
@@ -17,6 +22,8 @@ export interface QuestionnaireFormV2Props {
   /** Hides the Submit (and, when paginated, Back/Next) buttons, e.g. for a read-only preview. */
   readonly excludeButtons?: boolean;
   readonly onSubmit?: (response: QuestionnaireResponse) => void;
+  /** Fill in the form (the default), or view the response's answers read-only. */
+  readonly mode?: QuestionnaireMode;
 }
 
 /**
@@ -59,7 +66,9 @@ export function QuestionnaireFormV2(props: QuestionnaireFormV2Props): JSX.Elemen
         addAnswer={(item, original) => addFormAnswer(form, item, original)}
         submitButtonText={props.submitButtonText}
         excludeButtons={props.excludeButtons}
-        onSubmit={() => props.onSubmit?.(toFhirQuestionnaireResponse(form.getValues()))}
+        defaultSignature={getResponseSignature(questionnaireResponse)}
+        mode={props.mode}
+        onSubmit={(signature) => props.onSubmit?.(toFhirQuestionnaireResponse(form.getValues(), signature))}
       />
     </QuestionnaireFormProvider>
   );

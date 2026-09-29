@@ -1,19 +1,24 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
+import type { TextInputProps } from '@mantine/core';
 import {
   ActionIcon,
+  Alert,
   Anchor,
   Autocomplete,
   Button,
   Card,
+  Center,
   Checkbox,
   Divider,
   Group,
   Input,
   MultiSelect,
   NativeSelect,
+  NumberInput,
   Popover,
   Radio,
+  Select,
   Slider,
   Stack,
   Switch,
@@ -25,23 +30,26 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import type { Coding, Quantity, QuestionnaireItem, ValueSetExpansionContains } from '@medplum/fhirtypes';
+import type { Coding, Quantity, QuestionnaireItem, Signature, ValueSetExpansionContains } from '@medplum/fhirtypes';
 import type { QuestionnaireFormPaginationState } from '@medplum/react-hooks';
 import { getQuestionnaireItemReferenceFilter } from '@medplum/react-hooks';
-import { IconExternalLink, IconInfoCircle, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconExternalLink, IconHelp, IconInfoCircle, IconLock, IconPlus, IconTrash } from '@tabler/icons-react';
 import cx from 'clsx';
 import type { JSX, ReactNode, WheelEvent } from 'react';
-import { Fragment, useEffect, useState } from 'react';
+import { createContext, Fragment, useContext, useEffect, useState } from 'react';
 import { AttachmentInput } from '../AttachmentInput/AttachmentInput';
 import { Form } from '../Form/Form';
 import { SubmitButton } from '../Form/SubmitButton';
 import { QuestionnaireFormStepper } from '../QuestionnaireForm/QuestionnaireFormStepper';
 import { ReferenceInput } from '../ReferenceInput/ReferenceInput';
+import { SignatureInput } from '../SignatureInput/SignatureInput';
 import { ValueSetAutocomplete } from '../ValueSetAutocomplete/ValueSetAutocomplete';
 import type {
   ExtendedQuestionnaireItem,
   ExtendedQuestionnaireItemAnswer,
   ExtendedQuestionnaireItemAnswerOption,
+  QuestionDisplayText,
+  QuestionnaireMode,
 } from './QuestionnaireBuilderV2.utils';
 import {
   evaluateEnableWhen,
@@ -51,12 +59,16 @@ import {
   getChoiceValueKey,
   getPageItems,
   getRequiredGroupError,
+  getRequiredSignatureType,
   getValueByPath,
   isEmptyAnswerValue,
+  isHeaderOrFooterItem,
   isHorizontalChoiceLayout,
   isQuantityAnswer,
   isQuestionItem,
   isReadOnlyFormItem,
+  isShownInMode,
+  isUsedInMode,
   rebuildAnswerItems,
   toQuantityUnit,
   validateAnswerValue,
@@ -76,15 +88,38 @@ export interface QuestionnairePreviewProps {
   readonly submitButtonText?: string;
   /** Hides the Submit (and, when paginated, Back/Next) buttons, e.g. for a read-only preview. */
   readonly excludeButtons?: boolean;
-  /** Called on submit once all shown answers are valid. */
-  readonly onSubmit?: () => void;
+  /** The signature to show, e.g. from a QuestionnaireResponse being edited. */
+  readonly defaultSignature?: Signature;
+  /** Called on submit once all shown answers are valid (and the form is signed, if a signature is required). */
+  readonly onSubmit?: (signature?: Signature) => void;
+  /**
+   * Fill in the form (capture, the default), or view its answers read-only (display). Items appear in either by their
+   * usage mode (questionnaire-usageMode).
+   */
+  readonly mode?: QuestionnaireMode;
 }
 
+/** The mode the preview renders in, for the items deep in its tree. */
+const PreviewModeContext = createContext<QuestionnaireMode>('capture');
+
 export function QuestionnairePreview(props: QuestionnairePreviewProps): JSX.Element {
-  const { items, selectedItem, addAnswer, ignoreValidation, submitButtonText, excludeButtons, onSubmit } = props;
+  const {
+    items,
+    selectedItem,
+    addAnswer,
+    ignoreValidation,
+    submitButtonText,
+    excludeButtons,
+    defaultSignature,
+    onSubmit,
+    mode = 'capture',
+  } = props;
   const form = useQuestionnaireFormContext();
+  const viewing = mode === 'display';
   // With pages, only pages are shown, and of those only the pages that are not hidden and whose conditions are met.
-  const pageItems = getPageItems(items)?.filter((page) => !page.hidden && evaluateEnableWhen(form.getValues(), page));
+  const pageItems = getPageItems(items)?.filter(
+    (page) => !page.hidden && evaluateEnableWhen(form.getValues(), page) && isShownInMode(form.getValues(), page, mode)
+  );
   const selectedLinkId = selectedItem?.linkId;
   const [activePage, setActivePage] = useState(0);
   const [prevSelectedLinkId, setPrevSelectedLinkId] = useState(selectedLinkId);
@@ -100,6 +135,15 @@ export function QuestionnairePreview(props: QuestionnairePreviewProps): JSX.Elem
   }
 
   const currentPage = pageItems ? Math.max(0, Math.min(activePage, pageItems.length - 1)) : 0;
+  // Headers and footers stay in view above and below the form, on every page.
+  const headerItems = items.filter((item) => isHeaderOrFooterItem(item) && item.itemControl?.code === 'header');
+  const footerItems = items.filter((item) => isHeaderOrFooterItem(item) && item.itemControl?.code === 'footer');
+  const bodyItems = items.filter((item) => !isHeaderOrFooterItem(item));
+  const fixedItemProps = { selectedItem, addAnswer, ignoreValidation, viewing };
+  // As in Medplum's QuestionnaireForm: one signature for the whole form, below its last page.
+  const signatureRequired = !!getRequiredSignatureType(form.getValues());
+  const [signature, setSignature] = useState<Signature | undefined>(defaultSignature);
+  const [signatureMissing, setSignatureMissing] = useState(false);
 
   /**
    * Validates the given items, shows their errors and reports whether they are valid.
@@ -116,7 +160,8 @@ export function QuestionnairePreview(props: QuestionnairePreviewProps): JSX.Elem
   };
 
   const handleNextPage = (): void => {
-    if (pageItems && validate([pageItems[currentPage]])) {
+    // Viewing answers pages through them without checking.
+    if (pageItems && (viewing || validate([pageItems[currentPage]]))) {
       setActivePage(currentPage + 1);
     }
   };
@@ -128,11 +173,38 @@ export function QuestionnairePreview(props: QuestionnairePreviewProps): JSX.Elem
         setActivePage(invalidPage);
         return;
       }
+      if (!validate([...headerItems, ...footerItems])) {
+        return;
+      }
     } else if (!validate(items)) {
       return;
     }
-    onSubmit?.();
+    if (signatureRequired && !signature && !ignoreValidation) {
+      setSignatureMissing(true);
+      return;
+    }
+    onSubmit?.(signatureRequired ? signature : undefined);
   };
+
+  const signatureSection = signatureRequired && !viewing && (!pageItems || currentPage === pageItems.length - 1) && (
+    <Stack mt="md" gap={4}>
+      <Text size="sm" fw={500}>
+        Signature
+      </Text>
+      <SignatureInput
+        defaultValue={signature}
+        onChange={(value) => {
+          setSignature(value);
+          setSignatureMissing(false);
+        }}
+      />
+      {signatureMissing && (
+        <Text c="red" size="sm">
+          Signature is required.
+        </Text>
+      )}
+    </Stack>
+  );
 
   useEffect(() => {
     if (!selectedItem) {
@@ -158,78 +230,148 @@ export function QuestionnairePreview(props: QuestionnairePreviewProps): JSX.Elem
 
   return (
     <div className={classes.root}>
-      <Card withBorder>
+      {/* Visible overflow lets a header or footer stick to the scrolling view. */}
+      <Card withBorder style={headerItems.length + footerItems.length > 0 ? { overflow: 'visible' } : undefined}>
         <Card.Section withBorder inheritPadding py="md">
           <Title order={3} ta="center">
             {form.getValues().title || 'Untitled'}
           </Title>
         </Card.Section>
         <Card.Section inheritPadding py="md">
-          <Form onSubmit={handleSubmit}>
-            {pageItems?.length === 0 && (
-              <Text c="dimmed" ta="center">
-                No pages are shown.
-              </Text>
-            )}
-            {pageItems && pageItems.length > 0 && (
-              <>
-                <QuestionnaireFormStepper
-                  excludeButtons
-                  formState={
-                    {
-                      pages: pageItems.map((page, index) => ({
-                        linkId: page.linkId,
-                        title: [page.prefix, page.text].filter(Boolean).join(' ') || `Page ${index + 1}`,
-                        group: page as unknown as QuestionnaireItem & { type: 'group' },
-                      })),
-                      activePage: currentPage,
-                    } as QuestionnaireFormPaginationState
-                  }
-                >
-                  <PreviewPage
-                    key={pageItems[currentPage].linkId}
-                    page={pageItems[currentPage]}
-                    selectedItem={selectedItem}
-                    addAnswer={addAnswer}
-                    ignoreValidation={ignoreValidation}
-                  />
-                </QuestionnaireFormStepper>
-                {/* Same layout as QuestionnaireFormStepper's buttons, with our validation instead of reportValidity. */}
-                {!excludeButtons && (
-                  <Group justify="flex-end" mt="xl" gap="xs">
-                    {currentPage > 0 && <Button onClick={() => setActivePage(currentPage - 1)}>Back</Button>}
-                    {currentPage < pageItems.length - 1 && <Button onClick={handleNextPage}>Next</Button>}
-                    {currentPage === pageItems.length - 1 && (
+          <PreviewModeContext.Provider value={mode}>
+            <Form onSubmit={handleSubmit}>
+              {pageItems?.length === 0 && (
+                <Text c="dimmed" ta="center">
+                  No pages are shown.
+                </Text>
+              )}
+              <PreviewFixedItems items={headerItems} position="header" {...fixedItemProps} />
+              {pageItems && pageItems.length > 0 && (
+                <>
+                  <QuestionnaireFormStepper
+                    excludeButtons
+                    formState={
+                      {
+                        pages: pageItems.map((page, index) => ({
+                          linkId: page.linkId,
+                          title: [page.prefix, page.text].filter(Boolean).join(' ') || `Page ${index + 1}`,
+                          group: page as unknown as QuestionnaireItem & { type: 'group' },
+                        })),
+                        activePage: currentPage,
+                      } as QuestionnaireFormPaginationState
+                    }
+                  >
+                    <ViewOnly viewing={viewing}>
+                      <PreviewPage
+                        key={pageItems[currentPage].linkId}
+                        page={pageItems[currentPage]}
+                        selectedItem={selectedItem}
+                        addAnswer={addAnswer}
+                        ignoreValidation={ignoreValidation}
+                      />
+                    </ViewOnly>
+                  </QuestionnaireFormStepper>
+                  <PreviewFixedItems items={footerItems} position="footer" {...fixedItemProps} />
+                  {signatureSection}
+                  {/* Same layout as QuestionnaireFormStepper's buttons, with our validation instead of reportValidity. */}
+                  {!excludeButtons && (
+                    <Group justify="flex-end" mt="xl" gap="xs">
+                      {currentPage > 0 && <Button onClick={() => setActivePage(currentPage - 1)}>Back</Button>}
+                      {currentPage < pageItems.length - 1 && <Button onClick={handleNextPage}>Next</Button>}
+                      {currentPage === pageItems.length - 1 && !viewing && (
+                        <SubmitButton>{submitButtonText ?? 'Submit'}</SubmitButton>
+                      )}
+                    </Group>
+                  )}
+                </>
+              )}
+              {!pageItems && (
+                <Stack gap="md">
+                  <ViewOnly viewing={viewing}>
+                    <Stack gap="md">
+                      {bodyItems.map((item: ExtendedQuestionnaireItem, index: number) => (
+                        <PreviewItem
+                          key={`${item.linkId}-${index}`}
+                          item={item}
+                          original={item}
+                          selectedItem={selectedItem}
+                          index={index}
+                          addAnswer={addAnswer}
+                          ignoreValidation={ignoreValidation}
+                        />
+                      ))}
+                    </Stack>
+                  </ViewOnly>
+                  <PreviewFixedItems items={footerItems} position="footer" {...fixedItemProps} />
+                  {signatureSection}
+                  {!excludeButtons && !viewing && (
+                    <Group justify="flex-end" mt="xl">
                       <SubmitButton>{submitButtonText ?? 'Submit'}</SubmitButton>
-                    )}
-                  </Group>
-                )}
-              </>
-            )}
-            {!pageItems && (
-              <Stack gap="md">
-                {items.map((item: ExtendedQuestionnaireItem, index: number) => (
-                  <PreviewItem
-                    key={`${item.linkId}-${index}`}
-                    item={item}
-                    original={item}
-                    selectedItem={selectedItem}
-                    index={index}
-                    addAnswer={addAnswer}
-                    ignoreValidation={ignoreValidation}
-                  />
-                ))}
-                {!excludeButtons && (
-                  <Group justify="flex-end" mt="xl">
-                    <SubmitButton>{submitButtonText ?? 'Submit'}</SubmitButton>
-                  </Group>
-                )}
-              </Stack>
-            )}
-          </Form>
+                    </Group>
+                  )}
+                </Stack>
+              )}
+            </Form>
+          </PreviewModeContext.Provider>
         </Card.Section>
       </Card>
     </div>
+  );
+}
+
+interface PreviewFixedItemsProps {
+  readonly items: ExtendedQuestionnaireItem[];
+  readonly position: 'header' | 'footer';
+  readonly selectedItem: ExtendedQuestionnaireItem | undefined;
+  readonly addAnswer: AddAnswer;
+  readonly ignoreValidation?: boolean;
+  readonly viewing: boolean;
+}
+
+/**
+ * Header or footer groups (item control `header`/`footer`), kept in view at the top or bottom of the scrolling form.
+ * @param props - The PreviewFixedItems props.
+ * @returns The PreviewFixedItems React node, or null without such groups.
+ */
+function PreviewFixedItems(props: PreviewFixedItemsProps): JSX.Element | null {
+  const { items, position, selectedItem, addAnswer, ignoreValidation, viewing } = props;
+  if (items.length === 0) {
+    return null;
+  }
+  return (
+    <div className={cx(classes.fixedItems, position === 'header' ? classes.header : classes.footer)}>
+      <ViewOnly viewing={viewing}>
+        {items.map((item, index) => (
+          <PreviewItem
+            key={item.linkId}
+            item={item}
+            original={item}
+            selectedItem={selectedItem}
+            index={index}
+            addAnswer={addAnswer}
+            ignoreValidation={ignoreValidation}
+          />
+        ))}
+      </ViewOnly>
+    </div>
+  );
+}
+
+/**
+ * Makes everything inside read-only when viewing answers: a disabled fieldset disables all its inputs and buttons.
+ * @param props - The ViewOnly props.
+ * @param props.viewing - True when viewing answers.
+ * @param props.children - The content.
+ * @returns The content, read-only when viewing.
+ */
+function ViewOnly(props: { readonly viewing: boolean; readonly children: ReactNode }): JSX.Element {
+  if (!props.viewing) {
+    return <>{props.children}</>;
+  }
+  return (
+    <fieldset disabled className={classes.viewOnly}>
+      {props.children}
+    </fieldset>
   );
 }
 
@@ -302,12 +444,13 @@ interface PreviewItemProps {
 function PreviewItem(props: PreviewItemProps): JSX.Element | null {
   const { item, original, selectedItem, index, addAnswer, ignoreValidation } = props;
   const form = useQuestionnaireFormContext();
+  const mode = useContext(PreviewModeContext);
 
   if (!original) {
     return null;
   }
 
-  if (original.hidden || !evaluateEnableWhen(form.getValues(), item)) {
+  if (original.hidden || !evaluateEnableWhen(form.getValues(), item) || !isShownInMode(form.getValues(), item, mode)) {
     return null;
   }
 
@@ -325,8 +468,7 @@ function PreviewItem(props: PreviewItemProps): JSX.Element | null {
   } else if (original.type === 'display') {
     return (
       <PreviewSelectedItem item={item} selectedItem={selectedItem} index={index}>
-        <PreviewQuestion item={item} original={original} index={index} addAnswer={addAnswer} />
-        <Divider my="md" />
+        <PreviewDisplay item={item} original={original} index={index} addAnswer={addAnswer} />
       </PreviewSelectedItem>
     );
   }
@@ -338,13 +480,16 @@ function PreviewItem(props: PreviewItemProps): JSX.Element | null {
     return (
       <PreviewSelectedItem item={item} selectedItem={selectedItem} index={index}>
         <Stack gap="md">
-          <PreviewRepeatingChoice
-            item={item}
-            original={original}
-            answerIndex={0}
-            addAnswer={addAnswer}
-            readOnly={readOnly}
-          />
+          <Stack gap={4}>
+            <PreviewRepeatingChoice
+              item={item}
+              original={original}
+              answerIndex={0}
+              addAnswer={addAnswer}
+              readOnly={readOnly}
+            />
+            <PreviewAttachedTexts original={original} />
+          </Stack>
           {/* Each selected option has its own follow-up items. */}
           {(item.answer ?? []).map((answer, answerIndex) => (
             <PreviewFollowUpItems
@@ -373,7 +518,10 @@ function PreviewItem(props: PreviewItemProps): JSX.Element | null {
           };
           return (
             <Fragment key={`${item.linkId}-${answerIndex}`}>
-              <PreviewAnswer {...answerProps} />
+              <Stack gap={4}>
+                <PreviewAnswer {...answerProps} />
+                <PreviewAttachedTexts original={original} />
+              </Stack>
               <PreviewFollowUpItems answer={answer} {...followUpProps} />
             </Fragment>
           );
@@ -407,6 +555,115 @@ function PreviewAnswer(props: PreviewAnswerProps): JSX.Element | null {
   return null;
 }
 
+/**
+ * Display text, styled by its display category (questionnaire-displayCategory): instructions and security notices as
+ * boxes, help as muted text; other text as before.
+ * @param props - The PreviewDisplay props.
+ * @param props.item - The display item.
+ * @param props.original - Its definition.
+ * @param props.index - Its index.
+ * @param props.addAnswer - Adds an answer (unused by display text; passed on to its title).
+ * @returns The PreviewDisplay React node.
+ */
+function PreviewDisplay(props: {
+  readonly item: ExtendedQuestionnaireItem;
+  readonly original: ExtendedQuestionnaireItem;
+  readonly index: number;
+  readonly addAnswer: AddAnswer;
+}): JSX.Element {
+  const { item, original, index, addAnswer } = props;
+  const title = <PreviewQuestion item={item} original={original} index={index} addAnswer={addAnswer} />;
+
+  switch (original.displayCategory?.code) {
+    case 'instructions':
+      return (
+        <Alert variant="light" color="blue" icon={<IconInfoCircle size={20} />}>
+          {title}
+        </Alert>
+      );
+    case 'security':
+      return (
+        <Alert variant="light" color="orange" icon={<IconLock size={20} />}>
+          {title}
+        </Alert>
+      );
+    case 'help':
+      return (
+        <Group gap="xs" wrap="nowrap" c="dimmed" fz="sm">
+          <IconHelp size={16} />
+          {title}
+        </Group>
+      );
+    default:
+      return (
+        <>
+          {title}
+          <Divider my="md" />
+        </>
+      );
+  }
+}
+
+/**
+ * Returns the text of a display item that belongs to a question by its item control (prompt, unit, lower, upper,
+ * flyover): shown with the question, rather than as an item of its own.
+ * @param original - The question's definition.
+ * @param code - The item control code.
+ * @returns The text, or undefined.
+ */
+function getAttachedText(original: ExtendedQuestionnaireItem, code: QuestionDisplayText): string | undefined {
+  return original.displayTexts?.[code] || undefined;
+}
+
+function getUnitSection(
+  unit: string | undefined
+): Pick<TextInputProps, 'rightSection' | 'rightSectionWidth' | 'rightSectionProps'> {
+  if (!unit) {
+    return {};
+  }
+  return {
+    rightSection: <Text size="sm">{unit}</Text>,
+    rightSectionWidth: 'auto',
+    rightSectionProps: { style: { paddingInline: 'var(--mantine-spacing-sm)' } },
+  };
+}
+
+/**
+ * A question's lower and upper bound labels (e.g. "Strongly disagree" / "Strongly agree"), at either end below its
+ * answer, and its prompt below them.
+ * @param props - The question's definition.
+ * @param props.original - The question's definition.
+ * @returns The texts, or null without any.
+ */
+function PreviewAttachedTexts(props: { readonly original: ExtendedQuestionnaireItem }): JSX.Element | null {
+  const { original } = props;
+  const lower = getAttachedText(original, 'lower');
+  const upper = getAttachedText(original, 'upper');
+  const prompt = getAttachedText(original, 'prompt');
+  if (!lower && !upper && !prompt) {
+    return null;
+  }
+  return (
+    <>
+      {(lower || upper) && (
+        <Group justify="space-between" gap="md" wrap="nowrap">
+          <Text size="sm" c="dimmed">
+            {lower}
+          </Text>
+          <Text size="sm" c="dimmed" ta="right">
+            {upper}
+          </Text>
+        </Group>
+      )}
+      {prompt && (
+        <Text size="sm" c="dimmed">
+          {prompt}
+        </Text>
+      )}
+    </>
+  );
+}
+
 interface PreviewFollowUpItemsProps {
   readonly answer: ExtendedQuestionnaireItemAnswer;
   /** Names the answer the items belong to, when a question has several answers. */
@@ -424,6 +681,7 @@ interface PreviewFollowUpItemsProps {
 function PreviewFollowUpItems(props: PreviewFollowUpItemsProps): JSX.Element | null {
   const { answer, label, selectedItem, addAnswer, ignoreValidation } = props;
   const form = useQuestionnaireFormContext();
+  const mode = useContext(PreviewModeContext);
   const values = form.getValues();
 
   if (isEmptyAnswerValue(answer.value)) {
@@ -432,7 +690,7 @@ function PreviewFollowUpItems(props: PreviewFollowUpItemsProps): JSX.Element | n
 
   const shownItems = (answer.item ?? []).filter((child) => {
     const original: ExtendedQuestionnaireItem | undefined = getValueByPath(values, child.path);
-    return original && !original.hidden && evaluateEnableWhen(values, child);
+    return original && !original.hidden && evaluateEnableWhen(values, child) && isShownInMode(values, child, mode);
   });
 
   if (shownItems.length === 0) {
@@ -507,7 +765,14 @@ function PreviewGroup(props: PreviewGroupProps): JSX.Element {
               </>
             )}
 
-            {Array.isArray(answerGroup) && (
+            {Array.isArray(answerGroup) && isChoiceTable(original) && (
+              <PreviewChoiceTable
+                answerGroup={answerGroup}
+                transposed={original.itemControl?.code === 'htable'}
+                ignoreValidation={ignoreValidation}
+              />
+            )}
+            {Array.isArray(answerGroup) && !isChoiceTable(original) && (
               <div className={classes.groupAnswers}>
                 {answerGroup.map((answer: ExtendedQuestionnaireItem, answerItemIndex: number) => (
                   <PreviewItem
@@ -531,6 +796,157 @@ function PreviewGroup(props: PreviewGroupProps): JSX.Element {
 }
 
 /**
+ * A choice table (`table`, `atable` or `htable` item control) has only choice questions with answer options: their
+ * answers are picked in a grid of questions and options.
+ * @param group - The group's definition.
+ * @returns True if the group is rendered as a choice table.
+ */
+function isChoiceTable(group: ExtendedQuestionnaireItem): boolean {
+  const code = group.itemControl?.code;
+  return (
+    (code === 'table' || code === 'atable' || code === 'htable') &&
+    (group.item ?? []).length > 0 &&
+    group.item.every((child) => isChoiceType(child.type) && (child.answerOption ?? []).length > 0)
+  );
+}
+
+interface PreviewChoiceTableProps {
+  /** One repetition of the group: copies of its questions. */
+  readonly answerGroup: ExtendedQuestionnaireItem[];
+  /** False: questions are rows and options columns (`table`, `atable`); true: the other way round (`htable`). */
+  readonly transposed: boolean;
+  readonly ignoreValidation?: boolean;
+}
+
+/**
+ * The choice questions of a table group as a grid: one radio button (or checkbox, for a repeating question) per
+ * question and option. Options are the questions' own, in the order they first appear.
+ * @param props - The PreviewChoiceTable props.
+ * @returns The PreviewChoiceTable React node.
+ */
+function PreviewChoiceTable(props: PreviewChoiceTableProps): JSX.Element {
+  const { answerGroup, transposed } = props;
+  const form = useQuestionnaireFormContext();
+  const mode = useContext(PreviewModeContext);
+  const values = form.getValues();
+  const questions = answerGroup
+    .map((copy) => ({ copy, original: getValueByPath(values, copy.path) as ExtendedQuestionnaireItem | undefined }))
+    .filter(
+      ({ copy, original }) =>
+        original && !original.hidden && evaluateEnableWhen(values, copy) && isShownInMode(values, copy, mode)
+    ) as { copy: ExtendedQuestionnaireItem; original: ExtendedQuestionnaireItem }[];
+
+  const options: ExtendedQuestionnaireItemAnswerOption[] = [];
+  for (const { original } of questions) {
+    for (const option of original.answerOption ?? []) {
+      if (!options.some((known) => getChoiceValueKey(known.value) === getChoiceValueKey(option.value))) {
+        options.push(option);
+      }
+    }
+  }
+
+  const cell = (
+    copy: ExtendedQuestionnaireItem,
+    original: ExtendedQuestionnaireItem,
+    option: ExtendedQuestionnaireItemAnswerOption
+  ): JSX.Element | null => {
+    const own = findAnswerOption(original.answerOption, option.value);
+    if (!own) {
+      return null;
+    }
+    const answersPath = `${copy.answerPath}.answer`;
+    const answers: ExtendedQuestionnaireItemAnswer[] = getValueByPath(values, answersPath) ?? [];
+    const checked = answers.some((answer) => getChoiceValueKey(answer.value) === getChoiceValueKey(own.value));
+    const readOnly = isReadOnlyFormItem(values, copy);
+    const label = `${original.text ?? ''}: ${getAnswerOptionLabel(own)}`;
+
+    if (original.repeats) {
+      return (
+        <Checkbox
+          aria-label={label}
+          checked={checked}
+          disabled={readOnly}
+          onChange={(e) => {
+            const others = answers.filter(
+              (answer) =>
+                !isEmptyAnswerValue(answer.value) && getChoiceValueKey(answer.value) !== getChoiceValueKey(own.value)
+            );
+            form.setFieldValue(answersPath, e.currentTarget.checked ? [...others, { value: own.value }] : others);
+            rebuildAnswerItems(form, original);
+          }}
+        />
+      );
+    }
+    return (
+      <Radio
+        aria-label={label}
+        checked={checked}
+        disabled={readOnly}
+        onChange={() => form.setFieldValue(`${answersPath}.0.value`, own.value)}
+      />
+    );
+  };
+
+  const questionHeader = (copy: ExtendedQuestionnaireItem, original: ExtendedQuestionnaireItem): JSX.Element => {
+    const errorPath = original.repeats ? `${copy.answerPath}.answer` : `${copy.answerPath}.answer.0.value`;
+    return (
+      <>
+        {[original.prefix, original.text].filter(Boolean).join(' ')}
+        {original.required && (
+          <Text component="span" c="red">
+            {' '}
+            *
+          </Text>
+        )}
+        {form.errors[errorPath] && <Input.Error>{form.errors[errorPath]}</Input.Error>}
+      </>
+    );
+  };
+
+  return (
+    <Table withTableBorder withColumnBorders mt="xs">
+      <Table.Thead>
+        <Table.Tr>
+          <Table.Th />
+          {transposed
+            ? questions.map(({ copy, original }) => (
+                <Table.Th key={copy.answerPath}>{questionHeader(copy, original)}</Table.Th>
+              ))
+            : options.map((option) => (
+                <Table.Th key={getChoiceValueKey(option.value)} ta="center">
+                  {getAnswerOptionLabel(option)}
+                </Table.Th>
+              ))}
+        </Table.Tr>
+      </Table.Thead>
+      <Table.Tbody>
+        {transposed
+          ? options.map((option) => (
+              <Table.Tr key={getChoiceValueKey(option.value)}>
+                <Table.Th>{getAnswerOptionLabel(option)}</Table.Th>
+                {questions.map(({ copy, original }) => (
+                  <Table.Td key={copy.answerPath}>
+                    <Center>{cell(copy, original, option)}</Center>
+                  </Table.Td>
+                ))}
+              </Table.Tr>
+            ))
+          : questions.map(({ copy, original }) => (
+              <Table.Tr key={copy.answerPath}>
+                <Table.Td>{questionHeader(copy, original)}</Table.Td>
+                {options.map((option) => (
+                  <Table.Td key={getChoiceValueKey(option.value)}>
+                    <Center>{cell(copy, original, option)}</Center>
+                  </Table.Td>
+                ))}
+              </Table.Tr>
+            ))}
+      </Table.Tbody>
+    </Table>
+  );
+}
+
+/**
  * A group table (`gtable` item control) has only questions: each question is a column, each repetition a row.
  * @param group - The group's definition.
  * @returns True if the group is rendered as a table.
@@ -549,7 +965,8 @@ function PreviewGroupTable(props: PreviewGroupProps): JSX.Element {
   const form = useQuestionnaireFormContext();
   const values = form.getValues();
   const readOnly = isReadOnlyFormItem(values, item);
-  const columns = original.item.filter((column) => !column.hidden);
+  const mode = useContext(PreviewModeContext);
+  const columns = original.item.filter((column) => !column.hidden && isUsedInMode(column.usageMode, mode));
   const rows = ((item.answer ?? []) as unknown as ExtendedQuestionnaireItem[][]).filter(Array.isArray);
   const canRemove = original.repeats && !readOnly && rows.length > (+original.minOccurs || 1);
   const canAdd = original.repeats && !readOnly && (!original.maxOccurs || rows.length < +original.maxOccurs);
@@ -700,7 +1117,17 @@ function PreviewQuestion(props: PreviewQuestionProps): JSX.Element {
   const form = useQuestionnaireFormContext();
   const readOnly = isReadOnlyFormItem(form.getValues(), item);
 
-  const title = original.prefix ? `${original.prefix} ${original.text}` : original.text;
+  const text = original.prefix ? `${original.prefix} ${original.text}` : original.text;
+  // Help is shown behind a help button, when the question text is hovered, or below the question.
+  const helpDisplay = original.help ? (original.helpDisplay ?? 'help') : undefined;
+  const title =
+    helpDisplay === 'flyover' ? (
+      <Tooltip label={original.help} multiline maw={300} withArrow>
+        <span className={classes.flyover}>{text}</span>
+      </Tooltip>
+    ) : (
+      text
+    );
   const repeatIndex = original.type === 'group' ? groupIndex : index;
   // A repeating choice question holds one answer per selected option, not one per repetition.
   const showIndex = item.answer?.length > 1 && !isChoiceType(original.type) ? repeatIndex + 1 : null;
@@ -741,7 +1168,7 @@ function PreviewQuestion(props: PreviewQuestionProps): JSX.Element {
         </Tooltip>
       )}
 
-      {original.help && (
+      {helpDisplay === 'help' && (
         <Popover width={256} position="bottom" withArrow>
           <Popover.Target>
             <Tooltip label="Help">
@@ -776,6 +1203,11 @@ function PreviewQuestion(props: PreviewQuestionProps): JSX.Element {
             </ActionIcon>
           )}
         </Group>
+      )}
+      {helpDisplay === 'inline' && (
+        <Text size="sm" c="dimmed" w="100%" fw={400}>
+          {original.help}
+        </Text>
       )}
     </Group>
   );
@@ -869,6 +1301,22 @@ function PreviewInput(props: PreviewAnswerProps): JSX.Element {
     );
   }
 
+  if ((type === 'integer' || type === 'decimal') && original.itemControl?.code === 'spinner') {
+    return (
+      <NumberInput
+        {...labelProps}
+        disabled={readOnly}
+        allowDecimal={type === 'decimal'}
+        {...getUnitSection(unit ? (unit.display ?? unit.code) : getAttachedText(original, 'unit'))}
+        min={original.minValue === null || original.minValue === '' ? undefined : Number(original.minValue)}
+        max={original.maxValue === null || original.maxValue === '' ? undefined : Number(original.maxValue)}
+        value={value ?? ''}
+        error={form.errors[fieldPath]}
+        onChange={(val) => setAnswerValue(form, fieldPath, original, val, ignoreValidation)}
+      />
+    );
+  }
+
   if ((type === 'integer' && unit) || (type === 'decimal' && unit)) {
     return (
       <TextInput
@@ -896,6 +1344,7 @@ function PreviewInput(props: PreviewAnswerProps): JSX.Element {
       step={type === 'decimal' ? 'any' : undefined}
       placeholder={original.entryFormat}
       maxLength={!ignoreValidation && original.maxLength ? original.maxLength : undefined}
+      {...getUnitSection(getAttachedText(original, 'unit'))}
       value={value ?? ''}
       error={form.errors[fieldPath]}
       onChange={(e) => setAnswerValue(form, fieldPath, original, e.currentTarget.value, ignoreValidation)}
@@ -1076,10 +1525,42 @@ function PreviewTextarea(props: PreviewAnswerProps): JSX.Element {
 }
 
 function PreviewBoolean(props: PreviewAnswerProps): JSX.Element {
-  const { item, answerIndex, readOnly } = props;
+  const { item, original, answerIndex, readOnly } = props;
   const form = useQuestionnaireFormContext();
   const fieldPath = getFieldPath(item, answerIndex);
   const labelProps = getAnswerLabel(props);
+  const value = getValueByPath(form.getValues(), fieldPath);
+
+  if (original.itemControl?.code === 'check-box') {
+    return (
+      <Stack gap="xs">
+        {labelProps.label}
+        <Checkbox
+          aria-label={labelProps['aria-label'] ?? original.text}
+          disabled={readOnly}
+          checked={value === true}
+          onChange={(e) => form.setFieldValue(fieldPath, e.currentTarget.checked)}
+        />
+      </Stack>
+    );
+  }
+
+  if (original.itemControl?.code === 'radio-button') {
+    // Yes and No as buttons: until one is picked, the question is unanswered.
+    return (
+      <Radio.Group
+        {...labelProps}
+        value={typeof value === 'boolean' ? String(value) : null}
+        error={form.errors[fieldPath]}
+        onChange={(picked) => form.setFieldValue(fieldPath, picked === 'true')}
+      >
+        <Group gap="xl" mt="xs">
+          <Radio value="true" label="Yes" disabled={readOnly} />
+          <Radio value="false" label="No" disabled={readOnly} />
+        </Group>
+      </Radio.Group>
+    );
+  }
 
   return (
     <Group justify="space-between">
@@ -1137,7 +1618,7 @@ function PreviewChoice(props: PreviewAnswerProps): JSX.Element {
     return <PreviewValueSetChoice {...props} values={isEmptyAnswerValue(value) ? [] : [value]} />;
   }
 
-  if (original.itemControl?.code === 'drop-down') {
+  if (original.itemControl?.code === 'drop-down' || original.itemControl?.code === 'autocomplete') {
     if (isOpen) {
       // Suggests the options, and takes any other text as the answer.
       return (
@@ -1149,6 +1630,21 @@ function PreviewChoice(props: PreviewAnswerProps): JSX.Element {
           value={toChoiceText(answerOption, value)}
           error={form.errors[fieldPath]}
           onChange={(text) => setValue(fromChoiceText(answerOption, text))}
+        />
+      );
+    }
+    if (original.itemControl?.code === 'autocomplete') {
+      return (
+        <Select
+          {...labelProps}
+          disabled={readOnly}
+          searchable
+          clearable
+          placeholder="Type to search"
+          data={toOptionData(answerOption)}
+          value={isEmptyAnswerValue(value) ? null : getChoiceValueKey(value)}
+          error={form.errors[fieldPath]}
+          onChange={(key) => setValue(findOptionValue(answerOption, key))}
         />
       );
     }
@@ -1244,7 +1740,7 @@ function PreviewRepeatingChoice(props: PreviewAnswerProps): JSX.Element {
     return <PreviewValueSetChoice {...props} values={values} multiple />;
   }
 
-  if (original.itemControl?.code === 'drop-down') {
+  if (['drop-down', 'multi-select', 'autocomplete'].includes(original.itemControl?.code as string)) {
     if (isOpen) {
       return (
         <TagsInput
@@ -1262,7 +1758,8 @@ function PreviewRepeatingChoice(props: PreviewAnswerProps): JSX.Element {
       <MultiSelect
         {...labelProps}
         disabled={readOnly}
-        placeholder="Select items"
+        searchable={original.itemControl?.code === 'autocomplete'}
+        placeholder={original.itemControl?.code === 'autocomplete' ? 'Type to search' : 'Select items'}
         data={toOptionData(answerOption)}
         value={values.map(getChoiceValueKey)}
         error={form.errors[answersPath]}

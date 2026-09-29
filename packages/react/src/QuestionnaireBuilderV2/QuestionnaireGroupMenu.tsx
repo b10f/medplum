@@ -8,7 +8,9 @@ import {
   IconFileText,
   IconFolders,
   IconHelp,
+  IconLayoutBottombar,
   IconLayoutGrid,
+  IconLayoutNavbar,
   IconPlus,
   IconSearch,
 } from '@tabler/icons-react';
@@ -18,8 +20,10 @@ import { killEvent } from '../utils/dom';
 import type { ExtendedQuestionnaireItem } from './QuestionnaireBuilderV2.utils';
 import {
   createFollowUpEnableWhen,
+  FOOTER_ITEM_CONTROL,
   fromFhirQuestionnaireItem,
   getValueByPath,
+  HEADER_ITEM_CONTROL,
   isQuestionItem,
   PAGE_ITEM_CONTROL,
   rebuildFormItems,
@@ -44,15 +48,20 @@ export function QuestionnaireGroupMenu(props: QuestionnaireGroupMenuProps): JSX.
 
   const addItem = useCallback(
     (
-      type: 'group' | 'display' | 'question' | 'page',
+      type: 'group' | 'display' | 'question' | 'page' | 'header' | 'footer',
       context?: ExtendedQuestionnaireItem,
       fhirItem?: QuestionnaireItem
     ) => {
       const path: string = context ? `${context.path}.item` : 'item';
-      const newItem =
-        type === 'page'
-          ? { linkId: generateId(), type: 'group', text: 'New Page', itemControl: PAGE_ITEM_CONTROL }
-          : { linkId: generateId(), type: type === 'question' ? 'string' : type, text: 'New Item' };
+      // Pages, headers and footers are top-level groups whose item control makes them what they are.
+      const fixedControls = { page: PAGE_ITEM_CONTROL, header: HEADER_ITEM_CONTROL, footer: FOOTER_ITEM_CONTROL };
+      let newItem: Record<string, any>;
+      if (type === 'page' || type === 'header' || type === 'footer') {
+        const itemControl = fixedControls[type];
+        newItem = { linkId: generateId(), type: 'group', text: `New ${itemControl.display}`, itemControl };
+      } else {
+        newItem = { linkId: generateId(), type: type === 'question' ? 'string' : type, text: 'New Item' };
+      }
 
       // A ready-made FHIR item (e.g. from LOINC) is already in FHIR form; converting it again would drop its extensions.
       const extendedQuestionnaireItem = fhirItem ?? toFhirQuestionnaireItem(newItem);
@@ -63,16 +72,18 @@ export function QuestionnaireGroupMenu(props: QuestionnaireGroupMenuProps): JSX.
         added.enableWhen = [createFollowUpEnableWhen(context)];
       }
 
-      form.setFieldValue(path, [...currentItems, added]);
+      // A header goes first, as it is shown; everything else is added last.
+      const atStart = type === 'header';
+      form.setFieldValue(path, atStart ? [added, ...currentItems] : [...currentItems, added]);
 
-      if (context) {
-        // to rebuild the parent item reference chain, and give each answer of a question its follow-up items
+      if (context || atStart) {
+        // to rebuild the paths and parent item reference chain, and give each answer of a question its follow-up items
         form.setFieldValue('item', rebuildFormItems(form.getValues()));
       }
 
       const updatedItems = getValueByPath(form.getValues(), path) || [];
 
-      onAddItem?.(updatedItems.at(-1));
+      onAddItem?.(atStart ? updatedItems[0] : updatedItems.at(-1));
     },
     [form, onAddItem]
   );
@@ -136,6 +147,28 @@ export function QuestionnaireGroupMenu(props: QuestionnaireGroupMenuProps): JSX.
               }}
             >
               Add Page
+            </Menu.Item>
+          )}
+          {!item && (
+            <Menu.Item
+              leftSection={<IconLayoutNavbar size={16} />}
+              onClick={(e) => {
+                e.stopPropagation();
+                addItem('header');
+              }}
+            >
+              Add Header
+            </Menu.Item>
+          )}
+          {!item && (
+            <Menu.Item
+              leftSection={<IconLayoutBottombar size={16} />}
+              onClick={(e) => {
+                e.stopPropagation();
+                addItem('footer');
+              }}
+            >
+              Add Footer
             </Menu.Item>
           )}
           <Menu.Divider />

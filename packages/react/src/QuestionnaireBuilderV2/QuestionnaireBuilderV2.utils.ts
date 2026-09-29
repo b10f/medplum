@@ -13,6 +13,7 @@ import type {
   QuestionnaireResponse,
   QuestionnaireResponseItem,
   QuestionnaireResponseItemAnswer,
+  Signature,
   ValueSet,
   ValueSetExpansionContains,
 } from '@medplum/fhirtypes';
@@ -21,6 +22,8 @@ import {
   QUESTIONNAIRE_HIDDEN_URL,
   QUESTIONNAIRE_ITEM_CONTROL_URL,
   QUESTIONNAIRE_REFERENCE_RESOURCE_URL,
+  QUESTIONNAIRE_SIGNATURE_REQUIRED_URL,
+  QUESTIONNAIRE_SIGNATURE_RESPONSE_URL,
   setQuestionnaireItemReferenceTargetTypes,
 } from '@medplum/react-hooks';
 import type { QuestionnaireForm } from './QuestionnaireFormContext';
@@ -50,9 +53,17 @@ export interface ExtendedQuestionnaireItem extends Omit<QuestionnaireItem, 'enab
   usageMode: string;
   supportLink: string;
   sliderStepValue: number;
+  /** A note for authors (designNote), never shown to respondents. */
+  designNote: string;
   help: string;
+  /** How the help text is shown: behind a help button, on hover, or below the question. */
+  helpDisplay: HelpDisplay;
   /** The help item as loaded, so its linkId and anything else on it are kept on save; only its text is edited. */
   helpItem: QuestionnaireItem | undefined;
+  /** A question's texts shown with its answer (prompt, unit, lower, upper), by item control. */
+  displayTexts: Partial<Record<QuestionDisplayText, string>>;
+  /** Those texts' display items as loaded, so their linkIds and anything else on them are kept on save. */
+  displayTextItems: Partial<Record<QuestionDisplayText, QuestionnaireItem>>;
   /** What the builder does not edit (other fields and extensions), written back unchanged on save. */
   preserved: PreservedItemContent | undefined;
   itemControl: Record<string, any>;
@@ -118,15 +129,43 @@ const EXTENSION_URLS = {
   supportLink: `${STRUCTURE_DEFINITION_URL}/questionnaire-supportLink`,
   sliderStepValue: `${STRUCTURE_DEFINITION_URL}/questionnaire-sliderStepValue`,
   referenceResource: QUESTIONNAIRE_REFERENCE_RESOURCE_URL,
+  designNote: `${STRUCTURE_DEFINITION_URL}/designNote`,
   ordinalValue: `${STRUCTURE_DEFINITION_URL}/ordinalValue`,
 } as const;
 
 const QUESTIONNAIRE_ITEM_CONTROL_SYSTEM = `${HTTP_HL7_ORG}/fhir/questionnaire-item-control`;
 
-/** The extensions the builder reads into its own fields and writes back from them. */
-const MODELED_EXTENSION_URLS: string[] = Object.entries(EXTENSION_URLS)
-  .filter(([name]) => name !== 'ordinalValue')
-  .map(([, url]) => url);
+/**
+ * The extensions the builder reads into its own fields (and writes back from them), by the kind of item they are read
+ * for. Others, including these on an item kind they are not read for, are kept unchanged.
+ */
+const MODELED_EXTENSIONS = {
+  all: ['hidden', 'usageMode', 'supportLink', 'designNote', 'displayCategory', 'itemControl'],
+  questionsAndGroups: ['minOccurs', 'maxOccurs'],
+  questions: [
+    'minLength',
+    'minValue',
+    'maxValue',
+    'entryFormat',
+    'regex',
+    'choiceOrientation',
+    'unit',
+    'unitOption',
+    'sliderStepValue',
+    'referenceResource',
+  ],
+} satisfies Record<string, (keyof typeof EXTENSION_URLS)[]>;
+
+function getModeledExtensionUrls(type: string | undefined): string[] {
+  const names: (keyof typeof EXTENSION_URLS)[] = [...MODELED_EXTENSIONS.all];
+  if (type !== 'display') {
+    names.push(...MODELED_EXTENSIONS.questionsAndGroups);
+  }
+  if (type !== 'display' && type !== 'group') {
+    names.push(...MODELED_EXTENSIONS.questions);
+  }
+  return names.map((name) => EXTENSION_URLS[name]);
+}
 
 /** The FHIR QuestionnaireItem fields the builder does not edit. */
 const PRESERVED_ITEM_FIELDS = ['id', 'definition', 'modifierExtension'];
@@ -140,7 +179,8 @@ function getPreservedItemContent(item: QuestionnaireItem): PreservedItemContent 
   const fields = Object.fromEntries(
     Object.entries(item).filter(([key]) => PRESERVED_ITEM_FIELDS.includes(key) || key.startsWith('_'))
   );
-  const extension = (item.extension ?? []).filter((ext) => !MODELED_EXTENSION_URLS.includes(ext.url));
+  const modeled = getModeledExtensionUrls(item.type);
+  const extension = (item.extension ?? []).filter((ext) => !modeled.includes(ext.url));
   if (Object.keys(fields).length === 0 && extension.length === 0) {
     return undefined;
   }
@@ -172,6 +212,170 @@ export function isPageItem(item: ExtendedQuestionnaireItem | undefined): boolean
   return item?.type === 'group' && item.itemControl?.code === PAGE_ITEM_CONTROL.code;
 }
 
+/** A top-level group kept visible above the questionnaire (item control `header`). */
+export const HEADER_ITEM_CONTROL: Coding = {
+  system: QUESTIONNAIRE_ITEM_CONTROL_SYSTEM,
+  code: 'header',
+  display: 'Header',
+};
+
+/** A top-level group kept visible below the questionnaire (item control `footer`). */
+export const FOOTER_ITEM_CONTROL: Coding = {
+  system: QUESTIONNAIRE_ITEM_CONTROL_SYSTEM,
+  code: 'footer',
+  display: 'Footer',
+};
+
+/**
+ * Returns true if the builder form item is a header or footer: a group with the `header` or `footer` item control.
+ * @param item - The builder form item.
+ * @returns True if the item is a header or footer.
+ */
+export function isHeaderOrFooterItem(item: ExtendedQuestionnaireItem | undefined): boolean {
+  const code = item?.itemControl?.code;
+  return item?.type === 'group' && (code === HEADER_ITEM_CONTROL.code || code === FOOTER_ITEM_CONTROL.code);
+}
+
+/**
+ * Returns true if a group's item control is fixed by what the group is (a page, header or footer), so it is not
+ * edited as a setting.
+ * @param item - The builder form item.
+ * @returns True for pages, headers and footers.
+ */
+export function hasFixedItemControl(item: ExtendedQuestionnaireItem | undefined): boolean {
+  return isPageItem(item) || isHeaderOrFooterItem(item);
+}
+
+/** The item controls of FHIR's item control code system, by the kind of item they are for (its top-level codes). */
+export interface ItemControlCodes {
+  readonly group: Coding[];
+  readonly text: Coding[];
+  readonly question: Coding[];
+}
+
+/**
+ * The ways a question's (or group's) help text is shown, by the item control of its display item: behind a help button,
+ * on hover (flyover), or below it (inline). In this order, the first one found is the help text.
+ */
+export const HELP_DISPLAYS = ['help', 'flyover', 'inline'] as const;
+export type HelpDisplay = (typeof HELP_DISPLAYS)[number];
+
+/** A question's texts shown with its answer, by the item control of their display items. */
+export const QUESTION_DISPLAY_TEXTS = ['prompt', 'unit', 'lower', 'upper'] as const;
+export type QuestionDisplayText = (typeof QUESTION_DISPLAY_TEXTS)[number];
+
+const DISPLAY_CONTROL_NAMES: Record<string, string> = {
+  help: 'Help-Button',
+  flyover: 'Fly-over',
+  inline: 'In-line',
+  prompt: 'Prompt',
+  unit: 'Unit',
+  lower: 'Lower-bound',
+  upper: 'Upper-bound',
+};
+
+/**
+ * Returns the item control of a display item, e.g. `help`.
+ * @param item - The FHIR QuestionnaireItem.
+ * @returns The item control code, or undefined for other items.
+ */
+function getDisplayControl(item: QuestionnaireItem): string | undefined {
+  if (item.type !== 'display') {
+    return undefined;
+  }
+  return item.extension
+    ?.find((ext: Extension) => ext.url === EXTENSION_URLS.itemControl)
+    ?.valueCodeableConcept?.coding?.find(
+      (coding) => !coding.system || coding.system === QUESTIONNAIRE_ITEM_CONTROL_SYSTEM
+    )?.code;
+}
+
+/**
+ * Finds the help text among an item's children: the first display item shown behind a help button, on hover, or
+ * below it (in that order).
+ * @param items - The FHIR child items.
+ * @returns The help item, or undefined.
+ */
+function findHelpItem(items: QuestionnaireItem[]): QuestionnaireItem | undefined {
+  for (const code of HELP_DISPLAYS) {
+    const found = items.find((item) => getDisplayControl(item) === code);
+    if (found) {
+      return found;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Returns a display item with the given item control, keeping everything else on it.
+ * @param item - The FHIR display item.
+ * @param code - The item control code.
+ * @returns The display item with the control.
+ */
+function withDisplayControl(item: QuestionnaireItem, code: string): QuestionnaireItem {
+  if (getDisplayControl(item) === code) {
+    return item;
+  }
+  const display = DISPLAY_CONTROL_NAMES[code];
+  return {
+    ...item,
+    extension: [
+      ...(item.extension ?? []).filter((ext) => ext.url !== EXTENSION_URLS.itemControl),
+      {
+        url: EXTENSION_URLS.itemControl,
+        valueCodeableConcept: { coding: [{ system: QUESTIONNAIRE_ITEM_CONTROL_SYSTEM, code, display }], text: display },
+      },
+    ],
+  };
+}
+
+/**
+ * The question controls that suit each question type, from the item control code system's definitions: numbers are
+ * typed, spun or slid; choices are picked from buttons, boxes or lists; yes/no is a box or two buttons. `lookup` (a
+ * dialog tuned to one choice list) is not offered.
+ * @param type - The question type.
+ * @param repeats - True if the question repeats.
+ * @returns The suitable question control codes.
+ */
+function getQuestionControlCodes(type: string, repeats: boolean): string[] {
+  switch (type) {
+    case 'boolean':
+      return ['check-box', 'radio-button'];
+    case 'integer':
+    case 'decimal':
+      return ['text-box', 'spinner', 'slider'];
+    case 'choice':
+    case 'open-choice':
+      return repeats
+        ? ['check-box', 'drop-down', 'multi-select', 'autocomplete']
+        : ['radio-button', 'drop-down', 'autocomplete'];
+    default:
+      return [];
+  }
+}
+
+/**
+ * Returns the item controls an item can take, from the item control code system: group controls for groups (not
+ * page, header or footer, which are added as such), and the question controls that suit a question's type. Text
+ * controls are edited as the question's help and display texts.
+ * @param codes - The item control codes, by kind.
+ * @param item - The builder form item.
+ * @returns The item controls, in the code system's order.
+ */
+export function getItemControlOptions(codes: ItemControlCodes, item: ExtendedQuestionnaireItem): Coding[] {
+  if (item.type === 'group') {
+    return codes.group.filter(
+      (code) => code.code !== HEADER_ITEM_CONTROL.code && code.code !== FOOTER_ITEM_CONTROL.code
+    );
+  }
+  if (item.type === 'display') {
+    // Text controls are the question's help and texts shown with its answer, edited as such.
+    return [];
+  }
+  const suitable = getQuestionControlCodes(item.type, !!item.repeats);
+  return codes.question.filter((code) => suitable.includes(code.code as string));
+}
+
 /**
  * Returns the pages of a questionnaire: its top-level page groups. When a questionnaire has pages, top-level items
  * outside a page are not rendered.
@@ -184,22 +388,22 @@ export function getPageItems(items: ExtendedQuestionnaireItem[]): ExtendedQuesti
 }
 
 /**
+ * Returns the top-level items a respondent fills in: all of them, or with pages, the pages and any header or footer.
+ * @param items - The top-level builder form items.
+ * @returns The items that are shown and answered.
+ */
+export function getRespondedItems(items: ExtendedQuestionnaireItem[]): ExtendedQuestionnaireItem[] {
+  return getPageItems(items) ? items.filter((item) => isPageItem(item) || isHeaderOrFooterItem(item)) : items;
+}
+
+/**
  * Returns true if a FHIR item is help text: a display item with the `help` item control. Help is shown by its
  * question or group, not as an item of its own.
  * @param item - The FHIR QuestionnaireItem.
  * @returns True if the item is help text.
  */
 export function isHelpItem(item: QuestionnaireItem): boolean {
-  return (
-    item.type === 'display' &&
-    !!item.extension?.some(
-      (ext: Extension) =>
-        ext.url === EXTENSION_URLS.itemControl &&
-        ext.valueCodeableConcept?.coding?.some(
-          (coding: Coding) => coding.code === 'help' && coding.system === QUESTIONNAIRE_ITEM_CONTROL_SYSTEM
-        )
-    )
-  );
+  return HELP_DISPLAYS.includes(getDisplayControl(item) as HelpDisplay);
 }
 
 /**
@@ -329,7 +533,7 @@ export function flattenFormItems(
 /**
  * Projects where a dragged tree row lands. The row it is dragged over sets the position; the horizontal drag offset
  * sets the depth, within what the neighbouring rows allow: only groups and questions that already have follow-up items
- * take children, and pages stay top level.
+ * take children, and pages, headers and footers stay top level.
  * @param rows - The tree rows, without the dragged item's children.
  * @param activeLinkId - The linkId of the dragged item.
  * @param overLinkId - The linkId of the row it is dragged over.
@@ -357,7 +561,8 @@ export function getFormItemDropTarget(
   const next = reordered[overIndex + 1] as FlattenedFormItem | undefined;
 
   let maxDepth = 0;
-  if (previous && !isPageItem(active.item)) {
+  // Pages, headers and footers stay top level.
+  if (previous && !hasFixedItemControl(active.item)) {
     const takesChildren = previous.item.type === 'group' || hasFollowUpItems(previous.item);
     maxDepth = takesChildren ? previous.depth + 1 : previous.depth;
   }
@@ -508,9 +713,13 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
     usageMode,
     supportLink,
     sliderStepValue,
+    designNote,
     referenceResource,
     help,
+    helpDisplay,
     helpItem,
+    displayTexts,
+    displayTextItems,
     preserved,
     itemControl,
     enableWhen,
@@ -798,6 +1007,13 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
     });
   }
 
+  if (designNote) {
+    extensions.push({
+      url: EXTENSION_URLS.designNote,
+      valueMarkdown: designNote,
+    });
+  }
+
   if (supportLink) {
     extensions.push({
       url: EXTENSION_URLS.supportLink,
@@ -816,30 +1032,17 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
   const processedChildItems: QuestionnaireItem[] =
     item.type === 'display' ? [] : (childItems ?? []).map((childItem: any) => toFhirQuestionnaireItem(childItem));
 
+  // A question's display texts, and its help first: loaded ones keep everything but their text and control.
+  for (const code of [...QUESTION_DISPLAY_TEXTS].reverse()) {
+    const text = displayTexts?.[code];
+    if (text) {
+      const base = displayTextItems?.[code] ?? { linkId: `${item.linkId}_${code}`, type: 'display' };
+      processedChildItems.unshift(withDisplayControl({ ...base, text }, code));
+    }
+  }
   if (help) {
-    // A loaded help item keeps everything but its text; a new one is a help-button display item.
-    processedChildItems.unshift({
-      ...(helpItem ?? {
-        linkId: `${item.linkId}_help`,
-        type: 'display',
-        extension: [
-          {
-            url: EXTENSION_URLS.itemControl,
-            valueCodeableConcept: {
-              coding: [
-                {
-                  system: QUESTIONNAIRE_ITEM_CONTROL_SYSTEM,
-                  code: 'help',
-                  display: 'Help-Button',
-                },
-              ],
-              text: 'Help-Button',
-            },
-          },
-        ],
-      }),
-      text: help,
-    });
+    const base = helpItem ?? { linkId: `${item.linkId}_help`, type: 'display' };
+    processedChildItems.unshift(withDisplayControl({ ...base, text: help }, helpDisplay || 'help'));
   }
 
   extensions.push(...(preserved?.extension ?? []));
@@ -893,9 +1096,21 @@ export function fromFhirQuestionnaireItem(
   basePath: string = 'item',
   baseAnswerPath: string = 'item'
 ): any {
-  // Help is not an item of its own: it is read into `help` below.
-  const childItems = ((item.item ?? []) as QuestionnaireItem[]).filter((childItem) => !isHelpItem(childItem));
-  const helpItem = ((item.item ?? []) as QuestionnaireItem[]).find(isHelpItem);
+  // Help and a question's display texts are not items of their own: they are read into `help` and `displayTexts`.
+  const allChildItems = (item.item ?? []) as QuestionnaireItem[];
+  const helpItem = item.type === 'display' ? undefined : findHelpItem(allChildItems);
+  const displayTextItems: Partial<Record<QuestionDisplayText, QuestionnaireItem>> = {};
+  if (item.type !== 'display' && item.type !== 'group') {
+    for (const code of QUESTION_DISPLAY_TEXTS) {
+      const found = allChildItems.find((child) => child !== helpItem && getDisplayControl(child) === code);
+      if (found) {
+        displayTextItems[code] = found;
+      }
+    }
+  }
+  const childItems = allChildItems.filter(
+    (child) => child !== helpItem && !Object.values(displayTextItems).includes(child)
+  );
   const extensions: Extension[] = item.extension ?? [];
   const minOccurs = extensions.find((ext) => ext.url === EXTENSION_URLS.minOccurs)?.valueInteger ?? 1;
   const maxOccurs = extensions.find((ext) => ext.url === EXTENSION_URLS.maxOccurs)?.valueInteger ?? null;
@@ -934,7 +1149,16 @@ export function fromFhirQuestionnaireItem(
     supportLink:
       extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.supportLink)?.valueUri ?? '',
     usageMode: extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.usageMode)?.valueCode ?? '',
+    designNote:
+      extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.designNote)?.valueMarkdown ?? '',
+    displayCategory:
+      extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.displayCategory)?.valueCodeableConcept
+        ?.coding?.[0] ?? {},
     parent: parentRef,
+    // Groups, questions and display text all have item controls.
+    itemControl:
+      extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.itemControl)?.valueCodeableConcept
+        ?.coding?.[0] ?? {},
     preserved: getPreservedItemContent(item as QuestionnaireItem),
   };
 
@@ -946,10 +1170,12 @@ export function fromFhirQuestionnaireItem(
     formData.repeats = item.repeats ?? false;
     formData.readOnly = item.readOnly ?? false;
     formData.help = helpItem?.text ?? '';
+    formData.helpDisplay = (helpItem && getDisplayControl(helpItem)) ?? 'help';
     formData.helpItem = helpItem;
-    formData.itemControl =
-      extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.itemControl)?.valueCodeableConcept
-        ?.coding?.[0] ?? {};
+    formData.displayTexts = Object.fromEntries(
+      Object.entries(displayTextItems).map(([code, child]) => [code, child.text ?? ''])
+    );
+    formData.displayTextItems = displayTextItems;
     formData.minOccurs = minOccurs;
     formData.maxOccurs = maxOccurs;
   }
@@ -1254,7 +1480,15 @@ function fromQuestionnaireItemInitialToAnswer(item: QuestionnaireItem): { value:
     answers = initialSelected;
   }
 
-  const defaultValue = getDefaultAnswerValue(item.type);
+  // Yes/no as two radio buttons starts with neither picked; a switch or check-box starts off (false).
+  const isYesNoButtons =
+    item.type === 'boolean' &&
+    extensions.some(
+      (extension: Extension) =>
+        extension.url === EXTENSION_URLS.itemControl &&
+        extension.valueCodeableConcept?.coding?.some((coding) => coding.code === 'radio-button')
+    );
+  const defaultValue = isYesNoButtons ? null : getDefaultAnswerValue(item.type);
 
   // If minOccurs is greater, add empty values to fulfill minOccurs requirement
   while (answers.length < minOccurs) {
@@ -1751,8 +1985,9 @@ export function addFormAnswer(
   const childItems = questionnaireItem.item ?? [];
 
   if (item.type === 'group') {
+    const groupHelpItem = findHelpItem(childItems);
     const newGroupAnswer = childItems
-      .filter((childItem: QuestionnaireItem) => !isHelpItem(childItem))
+      .filter((childItem: QuestionnaireItem) => childItem !== groupHelpItem)
       .map((childItem: QuestionnaireItem, childIndex: number) =>
         fromFhirQuestionnaireItem(
           childItem,
@@ -1948,7 +2183,12 @@ export function validateFormAnswers(
 
   const visit = (item: ExtendedQuestionnaireItem): void => {
     const original: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
-    if (original.hidden || !evaluateEnableWhen(values, item) || original.type === 'display') {
+    if (
+      original.hidden ||
+      !evaluateEnableWhen(values, item) ||
+      !isShownInMode(values, item, 'capture') ||
+      original.type === 'display'
+    ) {
       return;
     }
 
@@ -1991,15 +2231,136 @@ export function validateFormAnswers(
   return errors;
 }
 
+/** The signature type Medplum's documentation uses for a signature-required questionnaire. */
+export const DEFAULT_SIGNATURE_TYPE: Coding = {
+  system: 'urn:iso-astm:E1762-95:2013',
+  code: '1.2.840.10065.1.12.1.1',
+  display: "Author's Signature",
+};
+
+/**
+ * Returns the signature a questionnaire requires (questionnaire-signatureRequired on the Questionnaire itself, as
+ * Medplum's QuestionnaireForm reads it), or undefined when none is required.
+ * @param values - The builder form values (the questionnaire).
+ * @returns The required signature type, or undefined.
+ */
+export function getRequiredSignatureType(values: Record<string, any>): Coding | undefined {
+  const extension = (values.extension as Extension[] | undefined)?.find(
+    (ext) => ext.url === QUESTIONNAIRE_SIGNATURE_REQUIRED_URL
+  );
+  if (!extension) {
+    return undefined;
+  }
+  return extension.valueCodeableConcept?.coding?.[0] ?? {};
+}
+
+/**
+ * Sets or removes the questionnaire's required signature.
+ * @param form - The questionnaire form.
+ * @param signatureType - The required signature type, or undefined for none.
+ */
+export function setRequiredSignatureType(form: QuestionnaireForm, signatureType: Coding | undefined): void {
+  const others = ((form.getValues().extension ?? []) as Extension[]).filter(
+    (ext) => ext.url !== QUESTIONNAIRE_SIGNATURE_REQUIRED_URL
+  );
+  const extension = signatureType
+    ? [...others, { url: QUESTIONNAIRE_SIGNATURE_REQUIRED_URL, valueCodeableConcept: { coding: [signatureType] } }]
+    : others;
+  form.setFieldValue('extension', extension.length > 0 ? extension : undefined);
+}
+
+/** How a questionnaire is rendered: filled in (capture), or its answers viewed (display). */
+export type QuestionnaireMode = 'capture' | 'display';
+
+/**
+ * Returns true if an item's usage mode (questionnaire-usageMode) includes a mode, regardless of answers. Without a usage
+ * mode, an item is used in both.
+ * @param usageMode - The item's usage mode code.
+ * @param mode - The mode the questionnaire is rendered in.
+ * @returns True if the item is used in the mode.
+ */
+export function isUsedInMode(usageMode: string | undefined, mode: QuestionnaireMode): boolean {
+  const code = usageMode || 'capture-display';
+  return mode === 'capture' ? code.startsWith('capture') : code !== 'capture';
+}
+
+/**
+ * Returns true if an item is shown in a mode: its usage mode includes the mode and, for the `-non-empty` usage modes
+ * when viewing answers, it is answered.
+ * @param values - The current form values.
+ * @param item - The item (or its answer copy).
+ * @param mode - The mode the questionnaire is rendered in.
+ * @returns True if the item is shown.
+ */
+export function isShownInMode(
+  values: Record<string, any>,
+  item: ExtendedQuestionnaireItem,
+  mode: QuestionnaireMode
+): boolean {
+  const definition: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
+  if (!isUsedInMode(definition.usageMode, mode)) {
+    return false;
+  }
+  if (mode === 'display' && definition.usageMode?.endsWith('non-empty')) {
+    return isAnsweredItem(values, item);
+  }
+  return true;
+}
+
+function isAnsweredItem(values: Record<string, any>, item: ExtendedQuestionnaireItem): boolean {
+  const definition: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
+  if (definition.type === 'group') {
+    return ((item.answer ?? []) as unknown as ExtendedQuestionnaireItem[][])
+      .filter(Array.isArray)
+      .some((repetition) => toSubmittedResponseItems(values, repetition).some(hasResponseAnswer));
+  }
+  return (item.answer ?? []).some((answer) => !isEmptyAnswerValue(answer.value));
+}
+
+/**
+ * Returns the questionnaire's design note (designNote on the Questionnaire itself).
+ * @param values - The builder form values (the questionnaire).
+ * @returns The design note, or an empty string.
+ */
+export function getQuestionnaireDesignNote(values: Record<string, any>): string {
+  return (
+    (values.extension as Extension[] | undefined)?.find((ext) => ext.url === EXTENSION_URLS.designNote)
+      ?.valueMarkdown ?? ''
+  );
+}
+
+/**
+ * Sets or removes the questionnaire's design note.
+ * @param form - The questionnaire form.
+ * @param note - The design note; empty removes it.
+ */
+export function setQuestionnaireDesignNote(form: QuestionnaireForm, note: string): void {
+  const others = ((form.getValues().extension ?? []) as Extension[]).filter(
+    (ext) => ext.url !== EXTENSION_URLS.designNote
+  );
+  const extension = note.trim() ? [...others, { url: EXTENSION_URLS.designNote, valueMarkdown: note }] : others;
+  form.setFieldValue('extension', extension.length > 0 ? extension : undefined);
+}
+
+/**
+ * Returns the signature on a QuestionnaireResponse (questionnaireresponse-signature), e.g. to prefill a form.
+ * @param response - The QuestionnaireResponse.
+ * @returns The signature, or undefined.
+ */
+export function getResponseSignature(response: QuestionnaireResponse | undefined): Signature | undefined {
+  return response?.extension?.find((ext) => ext.url === QUESTIONNAIRE_SIGNATURE_RESPONSE_URL)?.valueSignature;
+}
+
 /**
  * Converts the answers in the builder form values into a FHIR QuestionnaireResponse. Display items, hidden items, items
  * disabled by enableWhen, unanswered questions and, in a questionnaire with pages, top-level items outside a page are
  * left out.
  * Each group repetition is a separate item with the group's linkId; follow-up items are answered under their answer.
  * @param values - The current form values (the questionnaire with its answers).
+ * @param signature - The respondent's signature, when the questionnaire requires one.
  * @returns The QuestionnaireResponse.
  */
-export function toFhirQuestionnaireResponse(values: Record<string, any>): QuestionnaireResponse {
+export function toFhirQuestionnaireResponse(values: Record<string, any>, signature?: Signature): QuestionnaireResponse {
   const questionnaire = values as Questionnaire;
   let questionnaireCanonical: string | undefined = questionnaire.url;
   if (!questionnaireCanonical && questionnaire.id) {
@@ -2011,7 +2372,9 @@ export function toFhirQuestionnaireResponse(values: Record<string, any>): Questi
     ...(questionnaireCanonical && { questionnaire: questionnaireCanonical }),
     status: 'completed',
     authored: new Date().toISOString(),
-    item: toSubmittedResponseItems(values, getPageItems(values.item ?? []) ?? values.item ?? []),
+    // Stored as Medplum's QuestionnaireForm stores it.
+    ...(signature && { extension: [{ url: QUESTIONNAIRE_SIGNATURE_RESPONSE_URL, valueSignature: signature }] }),
+    item: toSubmittedResponseItems(values, getRespondedItems(values.item ?? [])),
   };
 }
 
@@ -2021,7 +2384,8 @@ function toSubmittedResponseItems(
 ): QuestionnaireResponseItem[] {
   return items.flatMap((item): QuestionnaireResponseItem[] => {
     const original: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
-    if (original.hidden || !evaluateEnableWhen(values, item)) {
+    // Items only shown when viewing answers are not filled in.
+    if (original.hidden || !evaluateEnableWhen(values, item) || !isShownInMode(values, item, 'capture')) {
       return [];
     }
 

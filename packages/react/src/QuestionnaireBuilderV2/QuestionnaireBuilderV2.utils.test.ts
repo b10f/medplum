@@ -4,16 +4,23 @@ import type { Questionnaire, QuestionnaireItem, QuestionnaireResponse } from '@m
 import {
   createFollowUpEnableWhen,
   createManualAnswerOption,
+  DEFAULT_SIGNATURE_TYPE,
   evaluateEnableWhen,
   findFormItemByLinkId,
   flattenFormItems,
   fromFhirQuestionnaireItem,
   getAnswerOptionProblems,
   getFormItemDropTarget,
+  getItemControlOptions,
   getLocalAnswerOptionSystem,
   getPageItems,
+  getQuestionnaireDesignNote,
   getRequiredGroupError,
+  getRequiredSignatureType,
+  getRespondedItems,
+  getResponseSignature,
   getValueByPath,
+  hasFixedItemControl,
   hasFollowUpItems,
   isEmptyAnswerValue,
   isHelpItem,
@@ -21,9 +28,13 @@ import {
   isManualAnswerOption,
   isPageItem,
   isReadOnlyFormItem,
+  isShownInMode,
+  isUsedInMode,
   moveFormItem,
   PAGE_ITEM_CONTROL,
   rebuildFormItems,
+  setQuestionnaireDesignNote,
+  setRequiredSignatureType,
   toFhirAnswerOptionsFromValueSet,
   toFhirQuestionnaire,
   toFhirQuestionnaireItem,
@@ -1595,6 +1606,335 @@ describe('QuestionnaireBuilderV2.utils', () => {
       expect(validateFormAnswers({ ...questionnaire, item: rebuilt })).toStrictEqual({});
       expect(toFhirQuestionnaireResponse({ ...questionnaire, item: rebuilt }).item?.[0].answer).toStrictEqual([
         { valueAttachment: attachment },
+      ]);
+    });
+  });
+
+  describe('signature', () => {
+    const signatureRequired = 'http://hl7.org/fhir/StructureDefinition/questionnaire-signatureRequired';
+
+    test('the required signature is set on the questionnaire, as Medplum reads it', () => {
+      const values: Record<string, any> = {
+        resourceType: 'Questionnaire',
+        status: 'active',
+        extension: [{ url: 'http://example.com/other', valueString: 'kept' }],
+        item: [],
+      };
+      const form = {
+        getValues: () => values,
+        setFieldValue: (path: string, value: any) => (values[path] = value),
+      } as any;
+      expect(getRequiredSignatureType(values)).toBeUndefined();
+
+      setRequiredSignatureType(form, DEFAULT_SIGNATURE_TYPE);
+      expect(values.extension).toStrictEqual([
+        { url: 'http://example.com/other', valueString: 'kept' },
+        { url: signatureRequired, valueCodeableConcept: { coding: [DEFAULT_SIGNATURE_TYPE] } },
+      ]);
+      expect(getRequiredSignatureType(values)).toStrictEqual(DEFAULT_SIGNATURE_TYPE);
+      expect(toFhirQuestionnaire(values).extension).toHaveLength(2);
+
+      setRequiredSignatureType(form, undefined);
+      expect(values.extension).toStrictEqual([{ url: 'http://example.com/other', valueString: 'kept' }]);
+    });
+
+    test('the signature is written to the response as Medplum writes it, and read back', () => {
+      const signature = {
+        type: [{ code: 'ProofOfOrigin' }],
+        when: '2026-09-29T10:00:00.000Z',
+        who: { reference: 'Practitioner/1' },
+        data: 'abc',
+      };
+      const response = toFhirQuestionnaireResponse(
+        { resourceType: 'Questionnaire', status: 'active', item: [] },
+        signature
+      );
+      expect(response.extension).toStrictEqual([
+        { url: 'http://hl7.org/fhir/StructureDefinition/questionnaireresponse-signature', valueSignature: signature },
+      ]);
+      expect(getResponseSignature(response)).toStrictEqual(signature);
+      expect(
+        toFhirQuestionnaireResponse({ resourceType: 'Questionnaire', status: 'active', item: [] }).extension
+      ).toBeUndefined();
+    });
+  });
+
+  describe('design notes', () => {
+    const designNote = 'http://hl7.org/fhir/StructureDefinition/designNote';
+
+    test('an item design note is edited and saved as designNote', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [{ linkId: 'q', type: 'string', extension: [{ url: designNote, valueMarkdown: 'Asked by *legal*' }] }],
+      });
+      expect(values.item[0].designNote).toBe('Asked by *legal*');
+      expect(values.item[0].preserved).toBeUndefined();
+      values.item[0].designNote = 'Asked by legal, see ticket 12';
+      expect(toFhirQuestionnaire(values).item?.[0].extension).toContainEqual({
+        url: designNote,
+        valueMarkdown: 'Asked by legal, see ticket 12',
+      });
+      values.item[0].designNote = '';
+      expect(toFhirQuestionnaire(values).item?.[0].extension?.some((ext) => ext.url === designNote)).toBe(false);
+    });
+
+    test('the questionnaire design note is set on the questionnaire', () => {
+      const values: Record<string, any> = { resourceType: 'Questionnaire', status: 'active', item: [] };
+      const form = {
+        getValues: () => values,
+        setFieldValue: (path: string, value: any) => (values[path] = value),
+      } as any;
+      setQuestionnaireDesignNote(form, 'Draft for the intake team');
+      expect(getQuestionnaireDesignNote(values)).toBe('Draft for the intake team');
+      expect(toFhirQuestionnaire(values).extension).toStrictEqual([
+        { url: designNote, valueMarkdown: 'Draft for the intake team' },
+      ]);
+      setQuestionnaireDesignNote(form, '  ');
+      expect(values.extension).toBeUndefined();
+    });
+  });
+
+  describe('usage mode', () => {
+    const usageMode = (code: string): any => ({
+      url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-usageMode',
+      valueCode: code,
+    });
+
+    function createValues(): Record<string, any> {
+      return toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          { linkId: 'both', type: 'string' },
+          { linkId: 'capture', type: 'string', required: true, extension: [usageMode('capture')] },
+          {
+            linkId: 'display',
+            type: 'string',
+            required: true,
+            extension: [usageMode('display')],
+            initial: [{ valueString: 'summary' }],
+          },
+          { linkId: 'display-non-empty', type: 'string', extension: [usageMode('display-non-empty')] },
+          { linkId: 'capture-display-non-empty', type: 'string', extension: [usageMode('capture-display-non-empty')] },
+        ],
+      });
+    }
+
+    test('which items are shown when filling in and when viewing answers', () => {
+      const values = createValues();
+      const shown = (mode: 'capture' | 'display'): string[] =>
+        values.item.filter((item: any) => isShownInMode(values, item, mode)).map((item: any) => item.linkId);
+
+      expect(shown('capture')).toStrictEqual(['both', 'capture', 'capture-display-non-empty']);
+      expect(shown('display')).toStrictEqual(['both', 'display']);
+
+      values.item[3].answer = [{ value: 'a' }];
+      values.item[4].answer = [{ value: 'b' }];
+      expect(shown('display')).toStrictEqual(['both', 'display', 'display-non-empty', 'capture-display-non-empty']);
+      expect(isUsedInMode(undefined, 'display')).toBe(true);
+    });
+
+    test('items not filled in are not validated and not in the response', () => {
+      const values = createValues();
+      expect(validateFormAnswers(values)).toStrictEqual({ 'item.1.answer.0.value': 'This field is required' });
+      values.item[1].answer = [{ value: 'captured' }];
+      expect(toFhirQuestionnaireResponse(values).item?.map((item) => item.linkId)).toStrictEqual(['capture']);
+    });
+  });
+
+  describe('display category', () => {
+    const displayCategory = 'http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory';
+    const itemControl = 'http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl';
+    const security = {
+      system: 'http://hl7.org/fhir/questionnaire-display-category',
+      code: 'security',
+      display: 'Security',
+    };
+
+    test('is read, edited and saved', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          {
+            linkId: 'notice',
+            type: 'display',
+            text: 'Your answers are confidential',
+            extension: [{ url: displayCategory, valueCodeableConcept: { coding: [security] } }],
+          },
+        ],
+      });
+      expect(values.item[0].displayCategory).toStrictEqual(security);
+      expect(toFhirQuestionnaire(values).item?.[0].extension).toContainEqual({
+        url: displayCategory,
+        valueCodeableConcept: { coding: [security], text: 'Security' },
+      });
+      values.item[0].displayCategory = {};
+      expect(toFhirQuestionnaire(values).item?.[0].extension?.some((ext) => ext.url === displayCategory)).toBe(false);
+    });
+
+    test('an item control on display text is kept (the builder only edits it on questions and groups)', () => {
+      const flyover = { url: itemControl, valueCodeableConcept: { coding: [{ code: 'flyover' }] } };
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [{ linkId: 'tip', type: 'display', text: 'Tip', extension: [flyover] }],
+      });
+      expect(toFhirQuestionnaire(values).item?.[0].extension).toContainEqual(flyover);
+    });
+  });
+
+  describe('item controls', () => {
+    const coding = (code: string): { system: string; code: string } => ({
+      system: 'http://hl7.org/fhir/questionnaire-item-control',
+      code,
+    });
+    const codes = {
+      group: ['list', 'table', 'htable', 'gtable', 'atable', 'header', 'footer'].map(coding),
+      text: ['inline', 'prompt', 'unit', 'lower', 'upper', 'flyover', 'help'].map(coding),
+      question: [
+        'autocomplete',
+        'drop-down',
+        'multi-select',
+        'check-box',
+        'lookup',
+        'radio-button',
+        'slider',
+        'spinner',
+        'text-box',
+      ].map(coding),
+    };
+    const control = (code: string): any => ({
+      url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl',
+      valueCodeableConcept: { coding: [coding(code)] },
+    });
+
+    test('options come from the code system, by item kind and question type', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          { linkId: 'group', type: 'group', item: [{ linkId: 'intro', type: 'display', text: 'Hi' }] },
+          { linkId: 'count', type: 'integer', item: [{ linkId: 'count-unit', type: 'display', text: 'per day' }] },
+          { linkId: 'smoker', type: 'boolean' },
+          { linkId: 'color', type: 'choice' },
+          { linkId: 'colors', type: 'choice', repeats: true },
+          { linkId: 'name', type: 'string' },
+        ],
+      });
+      const options = (item: any): string[] =>
+        getItemControlOptions(codes, item).map((option) => option.code as string);
+      expect(options(values.item[0])).toStrictEqual(['list', 'table', 'htable', 'gtable', 'atable']);
+      // Display text directly in a group has no controls; after a question it can attach to it
+      expect(options(values.item[0].item[0])).toStrictEqual([]);
+      // Nor after a question: its help and display texts are edited as such
+      expect(options(values.item[1].item[0])).toStrictEqual([]);
+      expect(options(values.item[1])).toStrictEqual(['slider', 'spinner', 'text-box']);
+      expect(options(values.item[2])).toStrictEqual(['check-box', 'radio-button']);
+      expect(options(values.item[3])).toStrictEqual(['autocomplete', 'drop-down', 'radio-button']);
+      expect(options(values.item[4])).toStrictEqual(['autocomplete', 'drop-down', 'multi-select', 'check-box']);
+      expect(options(values.item[5])).toStrictEqual([]);
+    });
+
+    test('headers and footers are answered with pages, and stay top level', () => {
+      const pageExtension = control('page');
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          { linkId: 'header', type: 'group', extension: [control('header')], item: [{ linkId: 'id', type: 'string' }] },
+          { linkId: 'page', type: 'group', extension: [pageExtension], item: [{ linkId: 'q', type: 'string' }] },
+          { linkId: 'orphan', type: 'string' },
+          {
+            linkId: 'footer',
+            type: 'group',
+            extension: [control('footer')],
+            item: [{ linkId: 'sig', type: 'string' }],
+          },
+        ],
+      });
+      expect(values.item.map((item: any) => hasFixedItemControl(item))).toStrictEqual([true, true, false, true]);
+      expect(getRespondedItems(values.item).map((item) => item.linkId)).toStrictEqual(['header', 'page', 'footer']);
+
+      values.item[0].answer[0][0].answer = [{ value: 'A-1' }];
+      expect(toFhirQuestionnaireResponse(values).item?.map((item) => item.linkId)).toStrictEqual(['header']);
+
+      const rows = flattenFormItems(values.item, { page: true });
+      expect(getFormItemDropTarget(rows, 'footer', 'q', 24 * 3, 24)?.depth).toBe(0);
+    });
+
+    test('yes/no radio buttons start unanswered; a switch starts off', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          { linkId: 'buttons', type: 'boolean', extension: [control('radio-button')] },
+          { linkId: 'switch', type: 'boolean' },
+        ],
+      });
+      expect(values.item[0].answer).toStrictEqual([{ value: null }]);
+      expect(values.item[1].answer).toStrictEqual([{ value: false }]);
+    });
+
+    test('help is shown behind a button, on hover or below; loaded help keeps its item', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          {
+            linkId: 'q',
+            type: 'string',
+            item: [
+              { linkId: 'hover', type: 'display', text: 'Hover text', extension: [control('flyover')] },
+              { linkId: 'note', type: 'display', text: 'A follow-up note' },
+            ],
+          },
+        ],
+      });
+      expect(values.item[0].help).toBe('Hover text');
+      expect(values.item[0].helpDisplay).toBe('flyover');
+      expect(values.item[0].item.map((item: any) => item.linkId)).toStrictEqual(['note']);
+      // Unchanged, it is saved exactly as loaded
+      expect(toFhirQuestionnaire(values).item?.[0].item?.[0]).toStrictEqual({
+        linkId: 'hover',
+        type: 'display',
+        text: 'Hover text',
+        extension: [control('flyover')],
+      });
+
+      values.item[0].helpDisplay = 'inline';
+      expect(toFhirQuestionnaire(values).item?.[0].item?.[0]).toMatchObject({
+        linkId: 'hover',
+        extension: [{ valueCodeableConcept: { coding: [{ code: 'inline' }] } }],
+      });
+    });
+
+    test('prompt, unit, lower and upper are question texts, saved as display items with those controls', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          {
+            linkId: 'pain',
+            type: 'integer',
+            item: [{ linkId: 'pain-low', type: 'display', text: 'No pain', extension: [control('lower')] }],
+          },
+        ],
+      });
+      expect(values.item[0].displayTexts).toStrictEqual({ lower: 'No pain' });
+      expect(values.item[0].item).toStrictEqual([]);
+
+      values.item[0].displayTexts = { lower: 'No pain', upper: 'Worst pain', unit: 'points' };
+      values.item[0].help = 'Think of today';
+      const saved = toFhirQuestionnaire(values).item?.[0].item ?? [];
+      expect(
+        saved.map((item) => [item.linkId, item.text, item.extension?.[0]?.valueCodeableConcept?.coding?.[0]?.code])
+      ).toStrictEqual([
+        ['pain_help', 'Think of today', 'help'],
+        ['pain_unit', 'points', 'unit'],
+        ['pain-low', 'No pain', 'lower'],
+        ['pain_upper', 'Worst pain', 'upper'],
       ]);
     });
   });

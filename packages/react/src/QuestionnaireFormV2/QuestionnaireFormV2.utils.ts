@@ -1562,7 +1562,12 @@ function getNumericAnswer(value: any): any {
   return isQuantityAnswer(value) ? value.value : value;
 }
 
-function isChoiceItemType(type: string | undefined): boolean {
+/**
+ * Returns true for a choice or open-choice question type.
+ * @param type - The item type.
+ * @returns True for a choice type.
+ */
+export function isChoiceItemType(type: string | undefined): boolean {
   return type === 'choice' || type === 'open-choice';
 }
 

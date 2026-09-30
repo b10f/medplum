@@ -31,23 +31,13 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
-import { deepEquals, normalizeErrorString } from '@medplum/core';
-import type {
-  Coding,
-  Quantity,
-  QuestionnaireItem,
-  QuestionnaireResponse,
-  QuestionnaireResponseItem,
-  QuestionnaireResponseItemAnswer,
-  Signature,
-  ValueSetExpansionContains,
-} from '@medplum/fhirtypes';
+import { normalizeErrorString } from '@medplum/core';
+import type { Coding, Quantity, QuestionnaireItem, QuestionnaireResponse, Signature } from '@medplum/fhirtypes';
 import type { QuestionnaireFormPaginationState } from '@medplum/react-hooks';
-import { applyOptionExclusive } from '@medplum/react-hooks';
 import { IconExternalLink, IconHelp, IconInfoCircle, IconLock, IconPlus, IconTrash } from '@tabler/icons-react';
 import cx from 'clsx';
-import type { JSX, ReactNode, RefObject, WheelEvent } from 'react';
-import { createContext, Fragment, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { JSX, ReactNode, WheelEvent } from 'react';
+import { Fragment, useContext, useEffect, useState } from 'react';
 import { AttachmentInput } from '../AttachmentInput/AttachmentInput';
 import { Form } from '../Form/Form';
 import { SubmitButton } from '../Form/SubmitButton';
@@ -55,7 +45,6 @@ import { QuestionnaireFormStepper } from '../QuestionnaireForm/QuestionnaireForm
 import { ReferenceInput } from '../ReferenceInput/ReferenceInput';
 import { SignatureInput } from '../SignatureInput/SignatureInput';
 import { ValueSetAutocomplete } from '../ValueSetAutocomplete/ValueSetAutocomplete';
-import type { QuestionnaireForm } from './QuestionnaireFormContext';
 import {
   QuestionnaireResponseFormProvider,
   useQuestionnaireFormContext,
@@ -65,7 +54,6 @@ import {
 import type {
   ExtendedQuestionnaireItem,
   ExtendedQuestionnaireItemAnswerOption,
-  QuestionDisplayText,
   QuestionnaireMode,
 } from './QuestionnaireFormV2.utils';
 import {
@@ -75,10 +63,8 @@ import {
   getAnswerOptionDisplay,
   getAnswerOptionLabel,
   getAnswerValue,
-  getCalculatedAnswers,
   getChoiceValueKey,
   getGroupErrorKey,
-  getInitialAnswerKeys,
   getNewAnswer,
   getPageItems,
   getReferenceSearchCriteria,
@@ -87,25 +73,41 @@ import {
   getResponseItemIndexes,
   getResponseSignature,
   getValueByPath,
+  isChoiceItemType,
   isEmptyAnswerValue,
   isHeaderOrFooterItem,
   isHorizontalChoiceLayout,
   isQuantityAnswer,
-  isQuestionItem,
   isReadOnlyFormItem,
   isShownInMode,
   isUsedInMode,
-  removeResponseItems,
-  syncResponseItems,
-  toDraftAnswer,
   toDraftResponse,
-  toFhirQuestionnaireItem,
   toFhirQuestionnaireResponse,
   toQuantityUnit,
-  validateAnswerValue,
   validateFormAnswers,
 } from './QuestionnaireFormV2.utils';
+import { QuestionnaireModeContext } from './QuestionnaireModeContext';
 import classes from './QuestionnaireRenderer.module.css';
+import {
+  addRepetition,
+  findOptionValue,
+  fromChoiceText,
+  getAnswers,
+  getAttachedText,
+  getDecimalPlaces,
+  isChoiceTable,
+  isGroupTable,
+  isTypedAnswer,
+  setAnswerValue,
+  setChoiceAnswers,
+  toChoiceText,
+  toOptionData,
+  toValueSetContains,
+} from './QuestionnaireRenderer.utils';
+import { useAnswer } from './useAnswer';
+import { useCalculatedAnswers } from './useCalculatedAnswers';
+import { useNumberText } from './useNumberText';
+import { useSyncedResponse } from './useSyncedResponse';
 
 export interface QuestionnaireRendererProps {
   readonly items: ExtendedQuestionnaireItem[];
@@ -123,111 +125,6 @@ export interface QuestionnaireRendererProps {
    * usage mode (questionnaire-usageMode).
    */
   readonly mode?: QuestionnaireMode;
-}
-
-/**
- * Keeps the draft response in line with the items it answers (see syncResponseItems) as they are edited in the
- * builder, before the form is painted. A question whose initial answers change starts over from them.
- * @param responseForm - The draft response form.
- * @param items - The form items.
- */
-function useSyncedResponse(responseForm: QuestionnaireForm, items: ExtendedQuestionnaireItem[]): void {
-  const initialAnswerKeys = useRef<Map<string, string>>(undefined);
-
-  useLayoutEffect(() => {
-    const keys = getInitialAnswerKeys(items);
-    const previous = initialAnswerKeys.current;
-    initialAnswerKeys.current = keys;
-    const changed = new Set(
-      [...keys].filter(([linkId, key]) => previous?.has(linkId) && previous.get(linkId) !== key).map(([id]) => id)
-    );
-
-    const current: QuestionnaireResponseItem[] = responseForm.getValues().item ?? [];
-    const synced = syncResponseItems(items, changed.size > 0 ? removeResponseItems(current, changed) : current);
-    if (!deepEquals(synced, current)) {
-      responseForm.setFieldValue('item', synced);
-    }
-  });
-}
-
-interface CalculationState {
-  /** The form values the answers were last calculated from. */
-  values?: Record<string, any>;
-  /** The draft response the answers were last calculated from. */
-  evaluated?: Record<string, any>;
-  /** The draft response after the calculated answers were last written. */
-  written?: Record<string, any>;
-  /** How many calculations in a row were caused only by calculated answers. */
-  rounds: number;
-  /** Expressions that failed, by the response path of their answer. */
-  errors: Record<string, string>;
-}
-
-/** Stops calculated answers that depend on each other in a loop from being recalculated forever. */
-const MAX_CALCULATION_ROUNDS = 10;
-
-/**
- * Keeps the answers of questions with a calculatedExpression up to date: after every change, recalculates them and
- * writes those that changed. Answers calculated from other calculated answers follow in the next round. Failed
- * expressions are shown as their answer's error.
- * @param form - The questionnaire form.
- * @param responseForm - The draft response form.
- * @param enabled - False to leave the answers as they are.
- * @returns The calculation state, with the current expression errors.
- */
-function useCalculatedAnswers(
-  form: QuestionnaireForm,
-  responseForm: QuestionnaireForm,
-  enabled: boolean
-): RefObject<CalculationState> {
-  const state = useRef<CalculationState>({ rounds: 0, errors: {} });
-
-  useEffect(() => {
-    const current = state.current;
-    const values = form.getValues();
-    const response = responseForm.getValues();
-    if (!enabled || (values === current.values && response === current.evaluated)) {
-      return;
-    }
-    current.rounds = values === current.values && response === current.written ? current.rounds + 1 : 0;
-    current.values = values;
-    current.evaluated = response;
-    if (current.rounds >= MAX_CALCULATION_ROUNDS) {
-      return;
-    }
-
-    const errors: Record<string, string> = {};
-    for (const { answerPath, answer, error } of getCalculatedAnswers(values, response as QuestionnaireResponse)) {
-      if (error) {
-        errors[answerPath] = error;
-        continue;
-      }
-      const existing: QuestionnaireResponseItemAnswer | undefined = getValueByPath(
-        responseForm.getValues(),
-        answerPath
-      );
-      const calculated = { ...(existing?.item && { item: existing.item }), ...answer };
-      if (!deepEquals(existing ?? {}, calculated)) {
-        responseForm.setFieldValue(answerPath, calculated);
-      }
-    }
-    for (const answerPath of Object.keys(current.errors)) {
-      if (!errors[answerPath]) {
-        responseForm.clearFieldError(answerPath);
-      }
-    }
-    for (const [answerPath, error] of Object.entries(errors)) {
-      if (responseForm.errors[answerPath] !== error) {
-        responseForm.setFieldError(answerPath, error);
-      }
-    }
-    current.errors = errors;
-    if (responseForm.getValues() !== response) {
-      current.written = responseForm.getValues();
-    }
-  });
-
-  return state;
 }
 
 interface RenderedSignatureProps {
@@ -261,9 +158,6 @@ function RenderedSignature(props: RenderedSignatureProps): JSX.Element {
     </Stack>
   );
 }
-
-/** The mode the form renders in, for the items deep in its tree. */
-const RendererModeContext = createContext<QuestionnaireMode>('capture');
 
 /**
  * Renders a questionnaire's items to be filled in (or their answers viewed). The answers are kept in a draft
@@ -418,7 +312,7 @@ export function QuestionnaireRenderer(props: QuestionnaireRendererProps): JSX.El
             </Title>
           </Card.Section>
           <Card.Section inheritPadding py="md">
-            <RendererModeContext.Provider value={mode}>
+            <QuestionnaireModeContext.Provider value={mode}>
               <Form onSubmit={handleSubmit}>
                 {pageItems?.length === 0 && (
                   <Text c="dimmed" ta="center">
@@ -490,7 +384,7 @@ export function QuestionnaireRenderer(props: QuestionnaireRendererProps): JSX.El
                   </Stack>
                 )}
               </Form>
-            </RendererModeContext.Provider>
+            </QuestionnaireModeContext.Provider>
           </Card.Section>
         </Card>
       </div>
@@ -550,77 +444,6 @@ function ViewOnly(props: { readonly viewing: boolean; readonly children: ReactNo
       {props.children}
     </fieldset>
   );
-}
-
-/**
- * Returns the answers at a response path of the draft response.
- * @param responseForm - The draft response form.
- * @param answersPath - The response path of a question's answers.
- * @returns The answers.
- */
-function getAnswers(responseForm: QuestionnaireForm, answersPath: string): QuestionnaireResponseItemAnswer[] {
-  return getValueByPath(responseForm.getValues(), answersPath) ?? [];
-}
-
-/**
- * Adds a repetition of a group, after its last one. useSyncedResponse fills it with the group's items.
- * @param responseForm - The draft response form.
- * @param context - The response path of the response items the group is answered in.
- * @param linkId - The group's linkId.
- */
-function addRepetition(responseForm: QuestionnaireForm, context: string, linkId: string): void {
-  const responseItems: QuestionnaireResponseItem[] = getValueByPath(responseForm.getValues(), context) ?? [];
-  const lastRepetition = responseItems.map((responseItem) => responseItem.linkId).lastIndexOf(linkId);
-  responseForm.insertListItem(context, { linkId }, lastRepetition + 1);
-}
-
-/**
- * Writes an answer value and shows its constraint error (length, regex, range) right away. The answer keeps its
- * follow-up items.
- * @param responseForm - The draft response form.
- * @param item - The question.
- * @param answerPath - The response path of the answer.
- * @param value - The new value.
- * @param ignoreValidation - Skips validation when true.
- */
-function setAnswerValue(
-  responseForm: QuestionnaireForm,
-  item: ExtendedQuestionnaireItem,
-  answerPath: string,
-  value: any,
-  ignoreValidation?: boolean
-): void {
-  const existing: QuestionnaireResponseItemAnswer | undefined = getValueByPath(responseForm.getValues(), answerPath);
-  const answer = { ...(existing?.item && { item: existing.item }), ...toDraftAnswer(item, value) };
-  responseForm.setFieldValue(answerPath, answer);
-  const message = ignoreValidation ? undefined : validateAnswerValue(item, getAnswerValue(item, answer));
-  if (message) {
-    responseForm.setFieldError(answerPath, message);
-  }
-}
-
-/**
- * Sets the selected options (or typed answers) of a repeating choice question. Answers that stay selected keep their
- * follow-up items. As in Medplum's QuestionnaireForm, "None of the above" and other exclusive options clear the other
- * answers, and the other way round (questionnaire-optionExclusive).
- * @param responseForm - The draft response form.
- * @param item - The question.
- * @param answersPath - The response path of its answers.
- * @param values - The selected values.
- */
-function setChoiceAnswers(
-  responseForm: QuestionnaireForm,
-  item: ExtendedQuestionnaireItem,
-  answersPath: string,
-  values: any[]
-): void {
-  const answers = getAnswers(responseForm, answersPath);
-  const requested = values.map(
-    (value) =>
-      answers.find((answer) => getChoiceValueKey(getAnswerValue(item, answer)) === getChoiceValueKey(value)) ??
-      toDraftAnswer(item, value)
-  );
-  responseForm.setFieldValue(answersPath, applyOptionExclusive(toFhirQuestionnaireItem(item), answers, requested));
 }
 
 interface RenderedPageProps {
@@ -689,7 +512,7 @@ function RenderedItem(props: RenderedItemProps): JSX.Element | null {
   const { item, context, selectedItem, index, ignoreValidation } = props;
   const form = useQuestionnaireFormContext();
   const responseForm = useQuestionnaireResponseFormContext();
-  const mode = useContext(RendererModeContext);
+  const mode = useContext(QuestionnaireModeContext);
   const values = form.getValues();
   const response = responseForm.getValues() as QuestionnaireResponse;
 
@@ -729,7 +552,7 @@ function RenderedItem(props: RenderedItemProps): JSX.Element | null {
   const followUpProps = { item, selectedItem, ignoreValidation };
   const readOnly = isReadOnlyFormItem(values, item);
 
-  if (isChoiceType(item.type) && item.repeats) {
+  if (isChoiceItemType(item.type) && item.repeats) {
     return (
       <RenderedSelectedItem item={item} selectedItem={selectedItem} index={index}>
         <Stack gap="md">
@@ -783,7 +606,7 @@ function RenderedItem(props: RenderedItemProps): JSX.Element | null {
 
 function RenderedAnswer(props: RenderedAnswerProps): JSX.Element | null {
   const type = props.item.type;
-  if (isChoiceType(type) && props.item.repeats) {
+  if (isChoiceItemType(type) && props.item.repeats) {
     return <RenderedRepeatingChoice {...props} />;
   } else if (type === 'quantity') {
     return <RenderedQuantity {...props} />;
@@ -799,7 +622,7 @@ function RenderedAnswer(props: RenderedAnswerProps): JSX.Element | null {
     return <RenderedTextarea {...props} />;
   } else if (['date', 'dateTime', 'time'].includes(type)) {
     return <RenderedDateTime {...props} />;
-  } else if (isChoiceType(type)) {
+  } else if (isChoiceItemType(type)) {
     return <RenderedChoice {...props} />;
   }
   return null;
@@ -844,22 +667,6 @@ function RenderedDisplay(props: { readonly item: ExtendedQuestionnaireItem }): J
         </>
       );
   }
-}
-
-/**
- * Returns the text of a display item that belongs to a question by its item control (prompt, unit, lower, upper,
- * flyover): shown with the question, rather than as an item of its own.
- * @param item - The question.
- * @param code - The item control code.
- * @returns The text, or undefined.
- */
-function getAttachedText(item: ExtendedQuestionnaireItem, code: QuestionDisplayText): string | undefined {
-  return item.displayTexts?.[code] || undefined;
-}
-
-function getDecimalPlaces(item: ExtendedQuestionnaireItem): number | undefined {
-  const places = item.maxDecimalPlaces;
-  return places === null || places === undefined || (places as any) === '' ? undefined : Number(places);
 }
 
 function getUnitSection(
@@ -931,7 +738,7 @@ function RenderedFollowUpItems(props: RenderedFollowUpItemsProps): JSX.Element |
   const { item, answerPath, label, selectedItem, ignoreValidation } = props;
   const form = useQuestionnaireFormContext();
   const responseForm = useQuestionnaireResponseFormContext();
-  const mode = useContext(RendererModeContext);
+  const mode = useContext(QuestionnaireModeContext);
   const values = form.getValues();
   const response = responseForm.getValues() as QuestionnaireResponse;
 
@@ -1049,21 +856,6 @@ function RenderedGroup(props: RenderedGroupProps): JSX.Element {
   );
 }
 
-/**
- * A choice table (`table`, `atable` or `htable` item control) has only choice questions with answer options: their
- * answers are picked in a grid of questions and options.
- * @param group - The group.
- * @returns True if the group is rendered as a choice table.
- */
-function isChoiceTable(group: ExtendedQuestionnaireItem): boolean {
-  const code = group.itemControl?.code;
-  return (
-    (code === 'table' || code === 'atable' || code === 'htable') &&
-    (group.item ?? []).length > 0 &&
-    group.item.every((child) => isChoiceType(child.type) && (child.answerOption ?? []).length > 0)
-  );
-}
-
 interface RenderedChoiceTableProps {
   readonly group: ExtendedQuestionnaireItem;
   /** The response path of the response items of one repetition of the group. */
@@ -1083,7 +875,7 @@ function RenderedChoiceTable(props: RenderedChoiceTableProps): JSX.Element {
   const { group, context, transposed, ignoreValidation } = props;
   const form = useQuestionnaireFormContext();
   const responseForm = useQuestionnaireResponseFormContext();
-  const mode = useContext(RendererModeContext);
+  const mode = useContext(QuestionnaireModeContext);
   const values = form.getValues();
   const response = responseForm.getValues() as QuestionnaireResponse;
   const questions = (group.item ?? [])
@@ -1211,15 +1003,6 @@ function RenderedChoiceTable(props: RenderedChoiceTableProps): JSX.Element {
 }
 
 /**
- * A group table (`gtable` item control) has only questions: each question is a column, each repetition a row.
- * @param group - The group.
- * @returns True if the group is rendered as a table.
- */
-function isGroupTable(group: ExtendedQuestionnaireItem): boolean {
-  return group.itemControl?.code === 'gtable' && (group.item ?? []).length > 0 && group.item.every(isQuestionItem);
-}
-
-/**
  * A group rendered as a table: its questions are the columns and each repetition is a row.
  * @param props - The RenderedGroup props.
  * @returns The RenderedGroupTable React node.
@@ -1228,7 +1011,7 @@ function RenderedGroupTable(props: RenderedGroupProps): JSX.Element {
   const { item, context, selectedItem, index, ignoreValidation } = props;
   const form = useQuestionnaireFormContext();
   const responseForm = useQuestionnaireResponseFormContext();
-  const mode = useContext(RendererModeContext);
+  const mode = useContext(QuestionnaireModeContext);
   const values = form.getValues();
   const response = responseForm.getValues() as QuestionnaireResponse;
   const readOnly = isReadOnlyFormItem(values, item);
@@ -1385,7 +1168,7 @@ function RenderedQuestion(props: RenderedQuestionProps): JSX.Element {
       text
     );
   // A repeating choice question holds one answer per selected option, not one per repetition.
-  const showIndex = repeat && repeat.count > 1 && !isChoiceType(item.type) ? repeat.index + 1 : null;
+  const showIndex = repeat && repeat.count > 1 && !isChoiceItemType(item.type) ? repeat.index + 1 : null;
   const canRemove = !!repeat && repeat.count > item.minOccurs;
   const canAdd = !!repeat && repeat.index + 1 === repeat.count && (!item.maxOccurs || repeat.count < +item.maxOccurs);
 
@@ -1437,7 +1220,7 @@ function RenderedQuestion(props: RenderedQuestionProps): JSX.Element {
         </Popover>
       )}
 
-      {repeat && item.repeats && !readOnly && !isChoiceType(item.type) && (
+      {repeat && item.repeats && !readOnly && !isChoiceItemType(item.type) && (
         <Group gap="xs">
           {canRemove && (
             <ActionIcon variant="filled" color="red" size="sm" aria-label="Remove answer" onClick={repeat.onRemove}>
@@ -1493,46 +1276,6 @@ function getAnswerLabel(props: RenderedAnswerProps): {
     // Full width, so the question's buttons sit on the right as in a group header.
     labelProps: { className: classes.answerLabel },
   };
-}
-
-interface Answer {
-  readonly responseForm: QuestionnaireForm;
-  /** The response path of the answer. */
-  readonly answerPath: string;
-  /** The answer's value, as its input holds it. */
-  readonly value: any;
-  readonly error: ReactNode;
-  /** Writes a new value, and shows its constraint error. */
-  readonly setValue: (value: any) => void;
-}
-
-/**
- * Reads the answer an input shows and writes.
- * @param props - The rendered answer props.
- * @returns The answer.
- */
-function useAnswer(props: RenderedAnswerProps): Answer {
-  const { item, answersPath, answerIndex, ignoreValidation } = props;
-  const responseForm = useQuestionnaireResponseFormContext();
-  const answerPath = `${answersPath}.${answerIndex}`;
-  return {
-    responseForm,
-    answerPath,
-    value: getAnswerValue(item, getValueByPath(responseForm.getValues(), answerPath)),
-    error: responseForm.errors[answerPath],
-    setValue: (value) => setAnswerValue(responseForm, item, answerPath, value, ignoreValidation),
-  };
-}
-
-/**
- * Keeps what is typed into a number field, e.g. "1." on the way to "1.5", while the answer holds its number.
- * @param value - The answer's number.
- * @returns The field's value, and the setter for what is typed.
- */
-function useNumberText(value: number | undefined): [string | number, (text: string | number) => void] {
-  const [text, setText] = useState<string | number>(value ?? '');
-  const typed = text !== '' && (Number(text) === value || (value === undefined && Number.isNaN(Number(text))));
-  return [typed ? text : (value ?? ''), setText];
 }
 
 function RenderedInput(props: RenderedAnswerProps): JSX.Element {
@@ -2139,60 +1882,4 @@ function RenderedValueSetChoice(props: RenderedValueSetChoiceProps): JSX.Element
       }}
     />
   );
-}
-
-function toValueSetContains(value: any): ValueSetExpansionContains {
-  if (value && typeof value === 'object') {
-    return { system: value.system, code: value.code, display: value.display };
-  }
-  return { code: String(value), display: String(value) };
-}
-
-function isChoiceType(type: string | undefined): boolean {
-  return type === 'choice' || type === 'open-choice';
-}
-
-/**
- * Returns true if an answer was typed by the respondent (an open-choice answer that is none of the options).
- * @param answerOption - The item's answer options.
- * @param value - The answer value.
- * @returns True for a typed answer.
- */
-function isTypedAnswer(answerOption: ExtendedQuestionnaireItemAnswerOption[], value: any): boolean {
-  return typeof value === 'string' && value !== '' && !findAnswerOption(answerOption, value);
-}
-
-function findOptionValue(answerOption: ExtendedQuestionnaireItemAnswerOption[], key: string | null): any {
-  return answerOption.find((option) => getChoiceValueKey(option.value) === key)?.value ?? '';
-}
-
-/**
- * The text of a choice answer in a free-text field: the selected option's label, or the typed answer.
- * @param answerOption - The item's answer options.
- * @param value - The answer value.
- * @returns The text.
- */
-function toChoiceText(answerOption: ExtendedQuestionnaireItemAnswerOption[], value: any): string {
-  const option = findAnswerOption(answerOption, value);
-  if (option) {
-    return getAnswerOptionLabel(option);
-  }
-  return typeof value === 'string' ? value : String(value?.display ?? value?.code ?? '');
-}
-
-/**
- * The answer for text entered in a free-text field: the option with that label, or the text itself.
- * @param answerOption - The item's answer options.
- * @param text - The text.
- * @returns The answer value.
- */
-function fromChoiceText(answerOption: ExtendedQuestionnaireItemAnswerOption[], text: string): any {
-  return answerOption.find((option) => getAnswerOptionLabel(option) === text)?.value ?? text;
-}
-
-function toOptionData(answerOption: ExtendedQuestionnaireItemAnswerOption[]): { value: string; label: string }[] {
-  return answerOption.map((option) => ({
-    value: getChoiceValueKey(option.value),
-    label: getAnswerOptionDisplay(option),
-  }));
 }

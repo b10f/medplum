@@ -5,9 +5,9 @@ import type { QuestionnaireItemAnswerOption } from '@medplum/fhirtypes';
 import { IconCheck, IconSearch } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { useState } from 'react';
-import type { LoincAnswerList } from './QuestionnaireLoinc.utils';
-import { searchLoincAnswerLists, toFhirAnswerOptionsFromLoincAnswerList } from './QuestionnaireLoinc.utils';
-import { useLoincSearch } from './useLoincSearch';
+import type { LoincAnswerList } from '../QuestionnaireLoinc.utils';
+import { searchLoincAnswerLists, toFhirAnswerOptionsFromLoincAnswerList } from '../QuestionnaireLoinc.utils';
+import { useLoincSearch } from '../useLoincSearch';
 
 export interface QuestionnaireLoincAnswerListDrawerProps {
   readonly opened: boolean;

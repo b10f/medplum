@@ -7,9 +7,9 @@ import { useMedplum } from '@medplum/react-hooks';
 import { IconCheck } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { forwardRef, useEffect, useRef, useState } from 'react';
-import type { AsyncAutocompleteOption } from '../AsyncAutocomplete/AsyncAutocomplete';
-import { ResourceInput } from '../ResourceInput/ResourceInput';
-import { toFhirAnswerOptionsFromValueSet } from './QuestionnaireBuilderV2.utils';
+import type { AsyncAutocompleteOption } from '../../AsyncAutocomplete/AsyncAutocomplete';
+import { ResourceInput } from '../../ResourceInput/ResourceInput';
+import { toFhirAnswerOptionsFromValueSet } from '../QuestionnaireBuilderV2.utils';
 
 /** The most codes copied from one value set; answer options are meant for short lists. */
 const MAX_ANSWER_OPTIONS = 1000;

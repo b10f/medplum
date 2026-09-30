@@ -30,7 +30,7 @@ import {
   setRequiredSignatureType,
 } from './QuestionnaireBuilderV2.utils';
 import { QuestionnaireGroupMenu } from './QuestionnaireGroupMenu';
-import { QuestionnaireItemSettings } from './QuestionnaireItemSettings';
+import { QuestionnaireItemSettings } from './QuestionnaireItemSettings/QuestionnaireItemSettings';
 import { QuestionnaireItemTree } from './QuestionnaireItemTree';
 
 export interface QuestionnaireBuilderV2Props {

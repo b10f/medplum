@@ -43,6 +43,7 @@ import type {
   ValueSetExpansionContains,
 } from '@medplum/fhirtypes';
 import type { QuestionnaireFormPaginationState } from '@medplum/react-hooks';
+import { applyOptionExclusive } from '@medplum/react-hooks';
 import { IconExternalLink, IconHelp, IconInfoCircle, IconLock, IconPlus, IconTrash } from '@tabler/icons-react';
 import cx from 'clsx';
 import type { JSX, ReactNode, RefObject, WheelEvent } from 'react';
@@ -68,7 +69,6 @@ import type {
   QuestionnaireMode,
 } from './QuestionnaireFormV2.utils';
 import {
-  applyExclusiveOptions,
   evaluateEnableWhen,
   findAnswerOption,
   findRootItem,
@@ -99,6 +99,7 @@ import {
   syncResponseItems,
   toDraftAnswer,
   toDraftResponse,
+  toFhirQuestionnaireItem,
   toFhirQuestionnaireResponse,
   toQuantityUnit,
   validateAnswerValue,
@@ -600,7 +601,8 @@ function setAnswerValue(
 
 /**
  * Sets the selected options (or typed answers) of a repeating choice question. Answers that stay selected keep their
- * follow-up items.
+ * follow-up items. As in Medplum's QuestionnaireForm, "None of the above" and other exclusive options clear the other
+ * answers, and the other way round (questionnaire-optionExclusive).
  * @param responseForm - The draft response form.
  * @param item - The question.
  * @param answersPath - The response path of its answers.
@@ -613,14 +615,12 @@ function setChoiceAnswers(
   values: any[]
 ): void {
   const answers = getAnswers(responseForm, answersPath);
-  responseForm.setFieldValue(
-    answersPath,
-    values.map(
-      (value) =>
-        answers.find((answer) => getChoiceValueKey(getAnswerValue(item, answer)) === getChoiceValueKey(value)) ??
-        toDraftAnswer(item, value)
-    )
+  const requested = values.map(
+    (value) =>
+      answers.find((answer) => getChoiceValueKey(getAnswerValue(item, answer)) === getChoiceValueKey(value)) ??
+      toDraftAnswer(item, value)
   );
+  responseForm.setFieldValue(answersPath, applyOptionExclusive(toFhirQuestionnaireItem(item), answers, requested));
 }
 
 interface RenderedPageProps {
@@ -1135,11 +1135,7 @@ function RenderedChoiceTable(props: RenderedChoiceTableProps): JSX.Element {
               responseForm,
               question,
               answersPath,
-              applyExclusiveOptions(
-                question.answerOption,
-                selected,
-                e.currentTarget.checked ? [...others, own.value] : others
-              )
+              e.currentTarget.checked ? [...others, own.value] : others
             );
           }}
         />
@@ -2018,10 +2014,8 @@ function RenderedRepeatingChoice(props: RenderedAnswerProps): JSX.Element {
   const [otherChecked, setOtherChecked] = useState(typedValues.length > 0);
   const error = responseForm.errors[answersPath];
 
-  const setValues = (requestedValues: any[]): void => {
-    // "None of the above" and other exclusive options clear the other answers (and the other way round).
-    setChoiceAnswers(responseForm, item, answersPath, applyExclusiveOptions(answerOption, values, requestedValues));
-  };
+  const setValues = (requestedValues: any[]): void =>
+    setChoiceAnswers(responseForm, item, answersPath, requestedValues);
 
   if (item.answerValueSet && answerOption.length === 0) {
     return <RenderedValueSetChoice {...props} values={values} multiple />;

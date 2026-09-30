@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { TypedValue } from '@medplum/core';
 import {
+  capitalize,
   evalFhirPathTyped,
   generateId,
   getReferenceString,
   HTTP_HL7_ORG,
   normalizeErrorString,
+  PropertyType,
   toJsBoolean,
   toTypedValue,
   UCUM,
@@ -28,8 +30,12 @@ import type {
   Signature,
 } from '@medplum/fhirtypes';
 import {
+  getItemAnswerOptionValue,
+  getItemEnableWhenValueAnswer,
+  getItemInitialValue,
   getQuestionnaireItemReferenceFilter,
   getQuestionnaireItemReferenceTargetTypes,
+  getResponseItemAnswerValue,
   QUESTIONNAIRE_CALCULATED_EXPRESSION_URL,
   QUESTIONNAIRE_ENABLED_WHEN_EXPRESSION_URL,
   QUESTIONNAIRE_HIDDEN_URL,
@@ -1107,68 +1113,43 @@ function fromFhirQuestionnaireItemEnableWhen(
     operator: enableWhen.operator === 'exists' && enableWhen.answerBoolean === false ? 'empty' : enableWhen.operator,
   };
 
-  // Detect and add the appropriate answer[x] property
-  if ('answerBoolean' in enableWhen) {
-    formData.answer = enableWhen.answerBoolean;
-  } else if ('answerDecimal' in enableWhen) {
-    formData.answer = enableWhen.answerDecimal;
-  } else if ('answerInteger' in enableWhen) {
-    formData.answer = enableWhen.answerInteger;
-  } else if ('answerDate' in enableWhen) {
-    formData.answer = enableWhen.answerDate;
-  } else if ('answerDateTime' in enableWhen) {
-    formData.answer = toLocalDateTime(enableWhen.answerDateTime);
-  } else if ('answerTime' in enableWhen) {
-    formData.answer = enableWhen.answerTime?.split(':').slice(0, 2).join(':');
-  } else if ('answerString' in enableWhen) {
-    formData.answer = enableWhen.answerString;
-  } else if ('answerCoding' in enableWhen) {
-    formData.answer = enableWhen.answerCoding;
-  } else if ('answerQuantity' in enableWhen) {
-    formData.answer = enableWhen.answerQuantity?.value;
-    formData.unit = {
-      code: enableWhen.answerQuantity?.code,
-      display: enableWhen.answerQuantity?.unit,
-      system: enableWhen.answerQuantity?.system,
-    };
-  } else if ('answerReference' in enableWhen) {
-    formData.answer = enableWhen.answerReference;
+  const answer = getItemEnableWhenValueAnswer(enableWhen);
+  if (answer?.type === PropertyType.Quantity) {
+    formData.answer = answer.value?.value;
+    formData.unit = { code: answer.value?.code, display: answer.value?.unit, system: answer.value?.system };
+  } else if (answer) {
+    formData.answer = fromTypedValue(answer, false);
   }
 
   return formData;
 }
 
-function fromQuestionnaireItemInitial(initial: QuestionnaireItemInitial): any {
-  const formData: any = {};
-
-  // Detect and add the appropriate value[x] property
-  if ('valueBoolean' in initial) {
-    formData.value = initial.valueBoolean;
-  } else if ('valueDecimal' in initial) {
-    formData.value = initial.valueDecimal;
-  } else if ('valueInteger' in initial) {
-    formData.value = initial.valueInteger;
-  } else if ('valueDate' in initial) {
-    formData.value = initial.valueDate;
-  } else if ('valueDateTime' in initial) {
-    formData.value = toLocalDateTime(initial.valueDateTime);
-  } else if ('valueTime' in initial) {
-    formData.value = initial.valueTime?.split(':').slice(0, 2).join(':');
-  } else if ('valueString' in initial) {
-    formData.value = initial.valueString;
-  } else if ('valueUri' in initial) {
-    formData.value = initial.valueUri;
-  } else if ('valueAttachment' in initial) {
-    formData.value = initial.valueAttachment;
-  } else if ('valueCoding' in initial) {
-    formData.value = initial.valueCoding;
-  } else if ('valueQuantity' in initial) {
-    formData.value = initial.valueQuantity?.value;
-  } else if ('valueReference' in initial) {
-    formData.value = initial.valueReference;
+/**
+ * Converts a FHIR value (of an initial value, an answer or a condition), as Medplum's typed value helpers read it, into
+ * the value an input holds: a dateTime in local time, a time without seconds, a quantity or only its number.
+ * @param typed - The typed value.
+ * @param keepQuantity - True to keep a quantity whole (for a quantity question), false for its number.
+ * @returns The value, or undefined without one.
+ */
+function fromTypedValue(typed: TypedValue | undefined, keepQuantity: boolean): any {
+  if (!typed) {
+    return undefined;
   }
+  switch (typed.type) {
+    case PropertyType.dateTime:
+      return toLocalDateTime(typed.value);
+    case PropertyType.time:
+      return typed.value?.split(':').slice(0, 2).join(':');
+    case PropertyType.Quantity:
+      return keepQuantity ? { ...typed.value } : typed.value?.value;
+    default:
+      return typed.value;
+  }
+}
 
-  return formData;
+function fromQuestionnaireItemInitial(initial: QuestionnaireItemInitial): any {
+  const value = fromTypedValue(getItemInitialValue(initial), false);
+  return value === undefined ? {} : { value };
 }
 
 function fromQuestionnaireResponseItemAnswer(
@@ -1176,53 +1157,17 @@ function fromQuestionnaireResponseItemAnswer(
   itemType: string
 ): { value: any }[] {
   return answers.map((answer: QuestionnaireResponseItemAnswer) => {
-    let value: any;
-
+    const typed = getResponseItemAnswerValue(answer);
+    if (!typed) {
+      return { value: getDefaultAnswerValue(itemType) };
+    }
     // A choice answer is one of the options' values, which are kept as they are.
-    if ((itemType === 'choice' || itemType === 'open-choice') && (answer.valueTime || answer.valueDateTime)) {
-      return { value: answer.valueTime ?? answer.valueDateTime };
+    if (itemType === 'choice' || itemType === 'open-choice') {
+      return { value: typed.value };
     }
-
-    if ('valueBoolean' in answer) {
-      value = answer.valueBoolean;
-    } else if ('valueDecimal' in answer) {
-      value = answer.valueDecimal;
-    } else if ('valueInteger' in answer) {
-      value = answer.valueInteger;
-    } else if ('valueDate' in answer) {
-      value = answer.valueDate;
-    } else if ('valueDateTime' in answer) {
-      value = toLocalDateTime(answer.valueDateTime);
-    } else if ('valueTime' in answer) {
-      value = answer.valueTime?.split(':').slice(0, 2).join(':');
-    } else if ('valueString' in answer) {
-      value = answer.valueString;
-    } else if ('valueUri' in answer) {
-      value = answer.valueUri;
-    } else if ('valueAttachment' in answer) {
-      value = answer.valueAttachment;
-    } else if ('valueCoding' in answer) {
-      value = answer.valueCoding;
-    } else if ('valueQuantity' in answer) {
-      value = itemType === 'quantity' ? { ...answer.valueQuantity } : answer.valueQuantity?.value;
-    } else if ('valueReference' in answer) {
-      value = answer.valueReference;
-    } else {
-      value = getDefaultAnswerValue(itemType);
-    }
-
-    return { value };
+    return { value: fromTypedValue(typed, itemType === 'quantity') };
   });
 }
-
-const ANSWER_OPTION_VALUE_TYPES = [
-  'valueCoding',
-  'valueString',
-  'valueInteger',
-  'valueDate',
-  'valueTime',
-  'valueReference',
-] as const;
 
 /**
  * Returns true if an answer option is a coding (hand-written, LOINC, value set), rather than a plain value.
@@ -1302,39 +1247,6 @@ export function findAnswerOption(
   return (answerOptions ?? []).find((option) => getChoiceValueKey(option.value) === key);
 }
 
-/**
- * Applies exclusive answer options (questionnaire-optionExclusive) to a change of a repeating choice question's
- * answers, as Medplum's QuestionnaireForm does: selecting an exclusive option clears the other answers, and selecting
- * another option clears a selected exclusive one. Removing answers changes nothing else.
- * @param answerOptions - The question's answer options.
- * @param previousValues - The answer values before the change.
- * @param newValues - The answer values the change asks for.
- * @returns The answer values to keep.
- */
-export function applyExclusiveOptions(
-  answerOptions: ExtendedQuestionnaireItemAnswerOption[] | undefined,
-  previousValues: any[],
-  newValues: any[]
-): any[] {
-  const exclusiveKeys = (answerOptions ?? [])
-    .filter((option) => option.exclusive)
-    .map((option) => getChoiceValueKey(option.value));
-  if (exclusiveKeys.length === 0) {
-    return newValues;
-  }
-  const isExclusive = (value: any): boolean => exclusiveKeys.includes(getChoiceValueKey(value));
-  const previousKeys = previousValues.map(getChoiceValueKey);
-  const added = newValues.filter((value) => !previousKeys.includes(getChoiceValueKey(value)));
-  const addedExclusive = added.find(isExclusive);
-  if (addedExclusive !== undefined) {
-    return [addedExclusive];
-  }
-  if (added.some((value) => !isExclusive(value))) {
-    return newValues.filter((value) => !isExclusive(value));
-  }
-  return newValues;
-}
-
 function matchesChoiceValue(value: any, expected: any): boolean {
   const key = getChoiceValueKey(expected);
   return (Array.isArray(value) ? value : [value]).some((entry) => getChoiceValueKey(entry) === key);
@@ -1406,9 +1318,9 @@ function fromQuestionnaireItemAnswerOption(answerOption: QuestionnaireItemAnswer
     id: generateId(),
     initialSelected: answerOption.initialSelected ?? false,
   };
-  const valueType = ANSWER_OPTION_VALUE_TYPES.find((key) => key in answerOption);
-  if (valueType && valueType !== 'valueCoding') {
-    formData.valueType = valueType;
+  const optionValue = getItemAnswerOptionValue(answerOption);
+  if (optionValue && optionValue.type !== PropertyType.Coding) {
+    formData.valueType = `value${capitalize(optionValue.type)}`;
   }
   if (extensions.some((extension) => extension.url === QUESTIONNAIRE_OPTION_EXCLUSIVE_URL && extension.valueBoolean)) {
     formData.exclusive = true;
@@ -1429,23 +1341,14 @@ function fromQuestionnaireItemAnswerOption(answerOption: QuestionnaireItemAnswer
     formData.preservedExtension = preservedExtension;
   }
 
-  // Detect and add the appropriate value[x] property
-  if ('valueInteger' in answerOption) {
-    formData.value = answerOption.valueInteger;
-  } else if ('valueDate' in answerOption) {
-    formData.value = answerOption.valueDate;
-  } else if ('valueTime' in answerOption) {
-    formData.value = answerOption.valueTime;
-  } else if ('valueString' in answerOption) {
-    formData.value = answerOption.valueString;
-  } else if ('valueCoding' in answerOption) {
+  if (optionValue?.type === PropertyType.Coding) {
     // The whole coding, so fields the builder does not edit (e.g. version) are kept.
     formData.value = {
-      ...answerOption.valueCoding,
+      ...optionValue.value,
       score: extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.ordinalValue)?.valueDecimal,
     };
-  } else if ('valueReference' in answerOption) {
-    formData.value = answerOption.valueReference;
+  } else if (optionValue) {
+    formData.value = optionValue.value;
   }
 
   return formData;
@@ -2322,10 +2225,14 @@ function toFhirResponseAnswer(item: ExtendedQuestionnaireItem, value: any): Ques
     }
     case 'choice':
     case 'open-choice': {
-      // Written with the value type of the option it was selected from.
+      // Written as the option it was selected from: its value type, or its whole coding.
       const option = findAnswerOption(item.answerOption, value);
       if (option && !isCodedAnswerOption(option)) {
         return { [option.valueType as string]: option.value };
+      }
+      const optionCoding = option && toFhirAnswerOption(option)?.valueCoding;
+      if (optionCoding) {
+        return { valueCoding: optionCoding };
       }
       if (value && typeof value === 'object') {
         if (value.reference) {

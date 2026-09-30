@@ -6,9 +6,9 @@ import type {
   QuestionnaireResponse,
   QuestionnaireResponseItem,
 } from '@medplum/fhirtypes';
+import { applyOptionExclusive } from '@medplum/react-hooks';
 import type { ExtendedQuestionnaireItem } from './QuestionnaireFormV2.utils';
 import {
-  applyExclusiveOptions,
   evaluateEnableWhen,
   findFormItemByLinkId,
   fromFhirQuestionnaireItem,
@@ -1945,11 +1945,14 @@ describe('QuestionnaireFormV2.utils', () => {
       expect(options.map((option: any) => !!option.exclusive)).toStrictEqual([false, false, true]);
       expect(toFhirQuestionnaire(values).item?.[0].answerOption?.[2].extension).toStrictEqual([exclusive]);
 
-      const [fever, cough, none] = options.map((option: any) => option.value);
-      expect(applyExclusiveOptions(options, [fever, cough], [fever, cough, none])).toStrictEqual([none]);
-      expect(applyExclusiveOptions(options, [none], [none, fever])).toStrictEqual([fever]);
-      expect(applyExclusiveOptions(options, [fever, cough], [fever])).toStrictEqual([fever]);
-      expect(applyExclusiveOptions([], [none], [none, fever])).toStrictEqual([none, fever]);
+      // Answers are written as their options, so Medplum's applyOptionExclusive recognizes the exclusive one.
+      const item = toFhirQuestionnaireItem(values.item[0]);
+      const [fever, cough, none] = options.map((option: any) => toDraftAnswer(values.item[0], option.value));
+      expect(none).toStrictEqual({ valueCoding: { code: 'none', display: 'None of the above' } });
+      expect(applyOptionExclusive(item, [fever, cough], [fever, cough, none])).toStrictEqual([none]);
+      expect(applyOptionExclusive(item, [none], [none, fever])).toStrictEqual([fever]);
+      expect(applyOptionExclusive(item, [fever, cough], [fever])).toStrictEqual([fever]);
+      expect(applyOptionExclusive({ ...item, answerOption: [] }, [none], [none, fever])).toStrictEqual([none, fever]);
     });
 
     test('reference profiles are saved as questionnaire-referenceProfile on reference questions', () => {

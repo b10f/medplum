@@ -1,38 +1,26 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
-import { Alert, Button, Drawer, Group, Paper, ScrollArea, Stack, Switch, Textarea } from '@mantine/core';
-import { useDebouncedCallback } from '@mantine/hooks';
+import { Alert, Button, Group, Paper, ScrollArea } from '@mantine/core';
 import { showNotification } from '@mantine/notifications';
 import type { Questionnaire, QuestionnaireItem, Reference } from '@medplum/fhirtypes';
 import { useResource } from '@medplum/react-hooks';
 import { IconSettings } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
-import { CodingInput } from '../CodingInput/CodingInput';
-import {
-  QuestionnaireFormProvider,
-  useQuestionnaireEditorForm,
-  useQuestionnaireFormContext,
-} from '../QuestionnaireFormV2/QuestionnaireFormContext';
+import { QuestionnaireFormProvider, useQuestionnaireEditorForm } from '../QuestionnaireFormV2/QuestionnaireFormContext';
 import type { ExtendedQuestionnaireItem } from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import {
   findFormItemByLinkId,
   fromFhirQuestionnaireItem,
-  getRequiredSignatureType,
   toFhirQuestionnaire,
 } from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import { QuestionnaireRenderer } from '../QuestionnaireFormV2/QuestionnaireRenderer';
 import classes from './QuestionnaireBuilderV2.module.css';
-import {
-  DEFAULT_SIGNATURE_TYPE,
-  getQuestionnaireDesignNote,
-  setQuestionnaireDesignNote,
-  setRequiredSignatureType,
-} from './QuestionnaireBuilderV2.utils';
 import { QuestionnaireGroupMenu } from './QuestionnaireGroupMenu';
 import { QuestionnaireItemSettings } from './QuestionnaireItemSettings/QuestionnaireItemSettings';
 import { useItemSettingsCodes } from './QuestionnaireItemSettings/useItemSettingsCodes';
 import { QuestionnaireItemTree } from './QuestionnaireItemTree';
+import { QuestionnaireSettingsDrawer } from './QuestionnaireSettingsDrawer';
 
 export interface QuestionnaireBuilderV2Props {
   readonly questionnaire: Partial<Questionnaire> | Reference<Questionnaire>;
@@ -131,83 +119,5 @@ export function QuestionnaireBuilderV2(props: QuestionnaireBuilderV2Props): JSX.
         </div>
       </div>
     </QuestionnaireFormProvider>
-  );
-}
-
-const SIGNATURE_TYPE_VALUE_SET = 'http://hl7.org/fhir/ValueSet/signature-type';
-
-interface QuestionnaireSettingsDrawerProps {
-  readonly opened: boolean;
-  readonly onClose: () => void;
-  /** Saves the questionnaire, as the Save button above the item tree does. */
-  readonly onSave: () => void;
-}
-
-/**
- * Settings of the questionnaire itself, rather than of one item. Like item changes, they apply once saved.
- * @param props - The QuestionnaireSettingsDrawer React props.
- * @returns The QuestionnaireSettingsDrawer React node.
- */
-function QuestionnaireSettingsDrawer(props: QuestionnaireSettingsDrawerProps): JSX.Element {
-  const { opened, onClose, onSave } = props;
-  return (
-    <Drawer opened={opened} onClose={onClose} position="left" title="Questionnaire settings">
-      {/* Remounted on every opening, so it starts from the current values. */}
-      {opened && <QuestionnaireSettings onSave={onSave} />}
-    </Drawer>
-  );
-}
-
-function QuestionnaireSettings(props: { readonly onSave: () => void }): JSX.Element {
-  const form = useQuestionnaireFormContext();
-  const signatureType = getRequiredSignatureType(form.getValues());
-  // Typed text is kept here and written to the form shortly after typing stops, not on every keystroke.
-  const [designNote, setDesignNote] = useState(() => getQuestionnaireDesignNote(form.getValues()));
-  const writeDesignNote = useDebouncedCallback((note: string) => setQuestionnaireDesignNote(form, note), 300);
-
-  return (
-    <Stack gap="md">
-      <Switch
-        label="Signature required"
-        description="The respondent signs below the form, and cannot submit it unsigned."
-        checked={!!signatureType}
-        onChange={(e) => setRequiredSignatureType(form, e.currentTarget.checked ? DEFAULT_SIGNATURE_TYPE : undefined)}
-      />
-      {signatureType && (
-        <CodingInput
-          // A new signature requirement starts from its default type.
-          key={signatureType.code ?? 'none'}
-          label="Signature type"
-          name="signature-type"
-          path=""
-          binding={SIGNATURE_TYPE_VALUE_SET}
-          creatable={false}
-          defaultValue={signatureType.code ? signatureType : undefined}
-          onChange={(coding) => setRequiredSignatureType(form, coding ?? DEFAULT_SIGNATURE_TYPE)}
-        />
-      )}
-      <Textarea
-        label="Design note"
-        description="For the people building this questionnaire; never shown to respondents."
-        autosize
-        minRows={4}
-        value={designNote}
-        onChange={(e) => {
-          setDesignNote(e.currentTarget.value);
-          writeDesignNote(e.currentTarget.value);
-        }}
-      />
-      <Group justify="flex-end">
-        <Button
-          onClick={() => {
-            // The note typed last may not be written yet.
-            setQuestionnaireDesignNote(form, designNote);
-            props.onSave();
-          }}
-        >
-          Save
-        </Button>
-      </Group>
-    </Stack>
   );
 }

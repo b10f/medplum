@@ -30,14 +30,14 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { normalizeErrorString } from '@medplum/core';
+import { deepEquals, normalizeErrorString } from '@medplum/core';
 import type { Coding, Quantity, QuestionnaireItem, Signature, ValueSetExpansionContains } from '@medplum/fhirtypes';
 import type { QuestionnaireFormPaginationState } from '@medplum/react-hooks';
 import { getQuestionnaireItemReferenceFilter } from '@medplum/react-hooks';
 import { IconExternalLink, IconHelp, IconInfoCircle, IconLock, IconPlus, IconTrash } from '@tabler/icons-react';
 import cx from 'clsx';
-import type { JSX, ReactNode, WheelEvent } from 'react';
-import { createContext, Fragment, useContext, useEffect, useState } from 'react';
+import type { JSX, ReactNode, RefObject, WheelEvent } from 'react';
+import { createContext, Fragment, useContext, useEffect, useRef, useState } from 'react';
 import { AttachmentInput } from '../AttachmentInput/AttachmentInput';
 import { Form } from '../Form/Form';
 import { SubmitButton } from '../Form/SubmitButton';
@@ -59,6 +59,7 @@ import {
   findRootItem,
   getAnswerOptionDisplay,
   getAnswerOptionLabel,
+  getCalculatedAnswers,
   getChoiceValueKey,
   getPageItems,
   getRequiredGroupError,
@@ -100,6 +101,70 @@ export interface QuestionnairePreviewProps {
    * usage mode (questionnaire-usageMode).
    */
   readonly mode?: QuestionnaireMode;
+}
+
+interface CalculationState {
+  /** The values the answers were last calculated from. */
+  evaluated?: Record<string, any>;
+  /** The values after the calculated answers were last written. */
+  written?: Record<string, any>;
+  /** How many calculations in a row were caused only by calculated answers. */
+  rounds: number;
+  /** Expressions that failed, by the form path of their answer value. */
+  errors: Record<string, string>;
+}
+
+/** Stops calculated answers that depend on each other in a loop from being recalculated forever. */
+const MAX_CALCULATION_ROUNDS = 10;
+
+/**
+ * Keeps the answers of questions with a calculatedExpression up to date: after every change, recalculates them and
+ * writes those that changed. Answers calculated from other calculated answers follow in the next round. Failed
+ * expressions are shown as their answer's error.
+ * @param form - The questionnaire form.
+ * @param enabled - False to leave the answers as they are.
+ * @returns The calculation state, with the current expression errors.
+ */
+function useCalculatedAnswers(form: QuestionnaireForm, enabled: boolean): RefObject<CalculationState> {
+  const state = useRef<CalculationState>({ rounds: 0, errors: {} });
+
+  useEffect(() => {
+    const current = state.current;
+    const values = form.getValues();
+    if (!enabled || values === current.evaluated) {
+      return;
+    }
+    current.rounds = values === current.written ? current.rounds + 1 : 0;
+    current.evaluated = values;
+    if (current.rounds >= MAX_CALCULATION_ROUNDS) {
+      return;
+    }
+
+    const errors: Record<string, string> = {};
+    for (const { fieldPath, value, error } of getCalculatedAnswers(values)) {
+      if (error) {
+        errors[fieldPath] = error;
+      } else if (!deepEquals(getValueByPath(form.getValues(), fieldPath), value)) {
+        form.setFieldValue(fieldPath, value);
+      }
+    }
+    for (const fieldPath of Object.keys(current.errors)) {
+      if (!errors[fieldPath]) {
+        form.clearFieldError(fieldPath);
+      }
+    }
+    for (const [fieldPath, error] of Object.entries(errors)) {
+      if (form.errors[fieldPath] !== error) {
+        form.setFieldError(fieldPath, error);
+      }
+    }
+    current.errors = errors;
+    if (form.getValues() !== values) {
+      current.written = form.getValues();
+    }
+  });
+
+  return state;
 }
 
 /** The mode the preview renders in, for the items deep in its tree. */
@@ -147,6 +212,8 @@ export function QuestionnairePreview(props: QuestionnairePreviewProps): JSX.Elem
   const signatureRequired = !!getRequiredSignatureType(form.getValues());
   const [signature, setSignature] = useState<Signature | undefined>(defaultSignature);
   const [signatureMissing, setSignatureMissing] = useState(false);
+  // Answers are not calculated when viewing them: they are the answers given.
+  const calculation = useCalculatedAnswers(form, !viewing);
 
   /**
    * Validates the given items, shows their errors and reports whether they are valid.
@@ -158,7 +225,7 @@ export function QuestionnairePreview(props: QuestionnairePreviewProps): JSX.Elem
       return true;
     }
     const errors = validateFormAnswers(form.getValues(), scope);
-    form.setErrors(errors);
+    form.setErrors({ ...calculation.current.errors, ...errors });
     return Object.keys(errors).length === 0;
   };
 

@@ -12,6 +12,7 @@ import {
   fromFhirQuestionnaireItem,
   getAnswerOptionDisplay,
   getAnswerOptionProblems,
+  getCalculatedAnswers,
   getFormItemDropTarget,
   getItemControlOptions,
   getLocalAnswerOptionSystem,
@@ -2234,6 +2235,119 @@ describe('QuestionnaireBuilderV2.utils', () => {
     test('moveFormItem does not move a group into itself', () => {
       const values = createValues();
       expect(moveFormItem(values, 'p1', { parentLinkId: 'g1', index: 0 })).toBe(values.item);
+    });
+  });
+
+  describe('SDC expressions', () => {
+    const ENABLE_WHEN_EXPRESSION_URL =
+      'http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-enableWhenExpression';
+    const CALCULATED_EXPRESSION_URL =
+      'http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-calculatedExpression';
+    const answerOf = (linkId: string): string => `%resource.item.where(linkId='${linkId}').answer.value`;
+
+    function expression(url: string, value: string): QuestionnaireItem['extension'] {
+      return [{ url, valueExpression: { language: 'text/fhirpath', expression: value } }];
+    }
+
+    function setup(items: QuestionnaireItem[]): Record<string, any> {
+      return toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [{ linkId: 'height', type: 'decimal' }, { linkId: 'weight', type: 'decimal' }, ...items],
+      });
+    }
+
+    // Form values change by replacing them, so answers are set on a copy.
+    function answer(values: Record<string, any>, answers: Record<string, any>): Record<string, any> {
+      return {
+        ...values,
+        item: values.item.map((item: any) =>
+          item.linkId in answers ? { ...item, answer: [{ value: answers[item.linkId] }] } : item
+        ),
+      };
+    }
+
+    test('enableWhenExpression takes the place of enableWhen', () => {
+      const values = setup([
+        {
+          linkId: 'target',
+          type: 'string',
+          enableWhen: [{ question: 'height', operator: 'exists', answerBoolean: true }],
+          extension: expression(ENABLE_WHEN_EXPRESSION_URL, `${answerOf('weight')} > 100`),
+        },
+      ]);
+      const target = (v: Record<string, any>): any => v.item[2];
+      expect(evaluateEnableWhen(values, target(values))).toBe(false);
+      const heightOnly = answer(values, { height: 180 });
+      expect(evaluateEnableWhen(heightOnly, target(heightOnly))).toBe(false);
+      const heavy = answer(values, { weight: 120 });
+      expect(evaluateEnableWhen(heavy, target(heavy))).toBe(true);
+    });
+
+    test('an enableWhenExpression that fails falls back to enableWhen', () => {
+      const values = answer(
+        setup([
+          {
+            linkId: 'target',
+            type: 'string',
+            enableWhen: [{ question: 'height', operator: 'exists', answerBoolean: true }],
+            extension: expression(ENABLE_WHEN_EXPRESSION_URL, '%resource.item.unknown()'),
+          },
+        ]),
+        { height: 180 }
+      );
+      expect(evaluateEnableWhen(values, values.item[2])).toBe(true);
+    });
+
+    test('calculatedExpression calculates answers', () => {
+      const bmi = `(${answerOf('weight')} / (${answerOf('height')} / 100).power(2)).round(1)`;
+      const values = setup([{ linkId: 'bmi', type: 'decimal', extension: expression(CALCULATED_EXPRESSION_URL, bmi) }]);
+      expect(getCalculatedAnswers(answer(values, { height: 180, weight: 72.5 }))).toEqual([
+        { fieldPath: 'item.2.answer.0.value', value: 22.4 },
+      ]);
+      // Without a result, the answer is cleared.
+      expect(getCalculatedAnswers(answer(values, { height: 180 }))).toEqual([
+        { fieldPath: 'item.2.answer.0.value', value: null },
+      ]);
+    });
+
+    test('calculatedExpression errors', () => {
+      const values = answer(
+        setup([
+          { linkId: 'broken', type: 'decimal', extension: expression(CALCULATED_EXPRESSION_URL, 'item.where(linkId=') },
+          { linkId: 'text', type: 'decimal', extension: expression(CALCULATED_EXPRESSION_URL, "'heavy'") },
+        ]),
+        { weight: 72.5 }
+      );
+      const [broken, text] = getCalculatedAnswers(values);
+      expect(broken.fieldPath).toBe('item.2.answer.0.value');
+      expect(broken.error).toMatch(/^Expression evaluation failed: /);
+      expect(text).toEqual({
+        fieldPath: 'item.3.answer.0.value',
+        error: "The expression's result is a string, not a decimal",
+      });
+    });
+
+    test('calculatedExpression in each group repetition', () => {
+      const values = setup([
+        {
+          linkId: 'visits',
+          type: 'group',
+          repeats: true,
+          extension: [{ url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-minOccurs', valueInteger: 2 }],
+          item: [{ linkId: 'total', type: 'integer', extension: expression(CALCULATED_EXPRESSION_URL, '1 + 1') }],
+        },
+      ]);
+      expect(getCalculatedAnswers(values)).toEqual([
+        { fieldPath: 'item.2.answer.0.0.answer.0.value', value: 2 },
+        { fieldPath: 'item.2.answer.1.0.answer.0.value', value: 2 },
+      ]);
+    });
+
+    test('expressions are kept on save', () => {
+      const extension = expression(CALCULATED_EXPRESSION_URL, '1 + 1');
+      const exported = toFhirQuestionnaire(setup([{ linkId: 'total', type: 'integer', extension }]));
+      expect(exported.item?.[2].extension).toEqual(expect.arrayContaining(extension ?? []));
     });
   });
 });

@@ -1,6 +1,16 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
-import { generateId, getReferenceString, HTTP_HL7_ORG, UCUM } from '@medplum/core';
+import type { TypedValue } from '@medplum/core';
+import {
+  evalFhirPathTyped,
+  generateId,
+  getReferenceString,
+  HTTP_HL7_ORG,
+  normalizeErrorString,
+  toJsBoolean,
+  toTypedValue,
+  UCUM,
+} from '@medplum/core';
 import type {
   Coding,
   Extension,
@@ -19,6 +29,8 @@ import type {
 } from '@medplum/fhirtypes';
 import {
   getQuestionnaireItemReferenceTargetTypes,
+  QUESTIONNAIRE_CALCULATED_EXPRESSION_URL,
+  QUESTIONNAIRE_ENABLED_WHEN_EXPRESSION_URL,
   QUESTIONNAIRE_HIDDEN_URL,
   QUESTIONNAIRE_ITEM_CONTROL_URL,
   QUESTIONNAIRE_OPTION_EXCLUSIVE_URL,
@@ -26,6 +38,7 @@ import {
   QUESTIONNAIRE_SIGNATURE_REQUIRED_URL,
   QUESTIONNAIRE_SIGNATURE_RESPONSE_URL,
   setQuestionnaireItemReferenceTargetTypes,
+  typedValueToResponseItem,
 } from '@medplum/react-hooks';
 import type { QuestionnaireForm } from './QuestionnaireFormContext';
 
@@ -1948,6 +1961,17 @@ export function evaluateEnableWhen(values: Record<string, any>, item: ExtendedQu
   // The conditions are read from the item's definition: an answer copy (e.g. in a group repetition) is not updated
   // when its definition is edited.
   const definition: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
+
+  // As in Medplum's QuestionnaireForm, an enableWhenExpression takes the place of the enableWhen conditions.
+  const enableWhenExpression = getItemExpression(definition, QUESTIONNAIRE_ENABLED_WHEN_EXPRESSION_URL);
+  if (enableWhenExpression) {
+    try {
+      return toJsBoolean(evaluateResponseExpression(values, enableWhenExpression));
+    } catch {
+      // An expression that cannot be evaluated falls back to the enableWhen conditions.
+    }
+  }
+
   const enableWhen = (definition.enableWhen || []).filter((condition) => condition?.question && condition.operator);
   const enableBehavior = definition.enableBehavior ?? 'all';
 
@@ -2639,6 +2663,152 @@ function toFhirResponseAnswer(item: ExtendedQuestionnaireItem, value: any): Ques
     default:
       return { valueString: String(value) };
   }
+}
+
+/**
+ * Returns an item's FHIRPath expression from an SDC expression extension (e.g. sdc-questionnaire-calculatedExpression),
+ * kept in the item's preserved extensions.
+ * @param definition - The item definition.
+ * @param url - The extension URL.
+ * @returns The expression, or undefined when the item has none.
+ */
+function getItemExpression(definition: ExtendedQuestionnaireItem, url: string): string | undefined {
+  return definition.preserved?.extension?.find((extension) => extension.url === url)?.valueExpression?.expression;
+}
+
+const currentResponses = new WeakMap<Record<string, any>, QuestionnaireResponse>();
+
+/**
+ * Converts all answers in the builder form values into a QuestionnaireResponse, for expressions to evaluate against.
+ * Unlike the submitted response, it has every question, including unanswered, hidden and disabled ones, as the
+ * response Medplum's QuestionnaireForm evaluates expressions against does.
+ * @param values - The current form values.
+ * @returns The QuestionnaireResponse, the same one for the same values.
+ */
+function toCurrentQuestionnaireResponse(values: Record<string, any>): QuestionnaireResponse {
+  let response = currentResponses.get(values);
+  if (!response) {
+    response = {
+      resourceType: 'QuestionnaireResponse',
+      status: 'in-progress',
+      item: toCurrentResponseItems(values, values.item ?? []),
+    };
+    currentResponses.set(values, response);
+  }
+  return response;
+}
+
+function toCurrentResponseItems(
+  values: Record<string, any>,
+  items: ExtendedQuestionnaireItem[]
+): QuestionnaireResponseItem[] {
+  return items.flatMap((item): QuestionnaireResponseItem[] => {
+    const original: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
+    if (original.type === 'display') {
+      return [];
+    }
+
+    const base = { linkId: item.linkId, ...(original.text && { text: original.text }) };
+
+    if (original.type === 'group') {
+      return ((item.answer ?? []) as unknown as ExtendedQuestionnaireItem[][])
+        .filter(Array.isArray)
+        .map((answerGroup) => ({ ...base, item: toCurrentResponseItems(values, answerGroup) }));
+    }
+
+    const answers = (item.answer ?? [])
+      .filter((answer) => !isEmptyAnswerValue(answer.value))
+      .map((answer) => {
+        const followUpItems = toCurrentResponseItems(values, answer.item ?? []);
+        return {
+          ...toFhirResponseAnswer(original, answer.value),
+          ...(followUpItems.length > 0 && { item: followUpItems }),
+        };
+      });
+
+    return [{ ...base, ...(answers.length > 0 && { answer: answers }) }];
+  });
+}
+
+/**
+ * Evaluates a FHIRPath expression against the current answers, as Medplum's QuestionnaireForm does: on the
+ * QuestionnaireResponse, which is also `%resource`.
+ * @param values - The current form values.
+ * @param expression - The FHIRPath expression.
+ * @returns The result.
+ */
+function evaluateResponseExpression(values: Record<string, any>, expression: string): TypedValue[] {
+  const response = toTypedValue(toCurrentQuestionnaireResponse(values));
+  return evalFhirPathTyped(expression, [response], { '%resource': response });
+}
+
+/** An answer calculated by its question's calculatedExpression, or why it could not be. */
+export interface CalculatedAnswer {
+  /** The form path of the answer value. */
+  readonly fieldPath: string;
+  /** The calculated value, empty when the expression has no result. */
+  readonly value?: any;
+  readonly error?: string;
+}
+
+/**
+ * Calculates the answers of questions with a calculatedExpression (sdc-questionnaire-calculatedExpression) from the
+ * current answers, as Medplum's QuestionnaireForm does. An expression without a result clears the answer.
+ * @param values - The current form values.
+ * @returns The calculated answers, one per answered copy of each such question.
+ */
+export function getCalculatedAnswers(values: Record<string, any>): CalculatedAnswer[] {
+  const result: CalculatedAnswer[] = [];
+
+  const visit = (item: ExtendedQuestionnaireItem): void => {
+    const original: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
+    if (original.type === 'display') {
+      return;
+    }
+    if (original.type === 'group') {
+      for (const answerGroup of (item.answer ?? []) as unknown as ExtendedQuestionnaireItem[][]) {
+        if (Array.isArray(answerGroup)) {
+          answerGroup.forEach(visit);
+        }
+      }
+      return;
+    }
+
+    const expression = getItemExpression(original, QUESTIONNAIRE_CALCULATED_EXPRESSION_URL);
+    if (expression) {
+      result.push(calculateAnswer(values, item, original, expression));
+    }
+    for (const answer of item.answer ?? []) {
+      answer.item?.forEach(visit);
+    }
+  };
+
+  (values.item ?? []).forEach(visit);
+  return result;
+}
+
+function calculateAnswer(
+  values: Record<string, any>,
+  item: ExtendedQuestionnaireItem,
+  original: ExtendedQuestionnaireItem,
+  expression: string
+): CalculatedAnswer {
+  const fieldPath = `${item.answerPath}.answer.0.value`;
+  let calculated: TypedValue[];
+  try {
+    calculated = evaluateResponseExpression(values, expression);
+  } catch (err) {
+    return { fieldPath, error: `Expression evaluation failed: ${normalizeErrorString(err)}` };
+  }
+
+  if (calculated.length === 0) {
+    return { fieldPath, value: null };
+  }
+  const answer = typedValueToResponseItem({ linkId: item.linkId, type: original.type }, calculated[0]);
+  if (!answer) {
+    return { fieldPath, error: `The expression's result is a ${calculated[0].type}, not a ${original.type}` };
+  }
+  return { fieldPath, value: fromQuestionnaireResponseItemAnswer([answer], original.type)[0].value };
 }
 
 /**

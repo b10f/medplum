@@ -4,7 +4,8 @@ import { Group } from '@mantine/core';
 import { generateId } from '@medplum/core';
 import type { JSX } from 'react';
 import type { QuestionnaireForm } from '../../QuestionnaireFormV2/QuestionnaireFormContext';
-import { FormFlatCollection, FormTextInput } from '../QuestionnaireFormInputs';
+import { FormFlatCollection } from '../QuestionnaireFormInputs/FormFlatCollection';
+import { FormTextInput } from '../QuestionnaireFormInputs/FormTextInput';
 
 export interface QuestionnaireItemCodesProps {
   readonly form: QuestionnaireForm;

@@ -31,6 +31,7 @@ import {
 } from './QuestionnaireBuilderV2.utils';
 import { QuestionnaireGroupMenu } from './QuestionnaireGroupMenu';
 import { QuestionnaireItemSettings } from './QuestionnaireItemSettings/QuestionnaireItemSettings';
+import { useItemSettingsCodes } from './QuestionnaireItemSettings/useItemSettingsCodes';
 import { QuestionnaireItemTree } from './QuestionnaireItemTree';
 
 export interface QuestionnaireBuilderV2Props {
@@ -47,6 +48,8 @@ export function QuestionnaireBuilderV2(props: QuestionnaireBuilderV2Props): JSX.
     initialValues: { resourceType: 'Questionnaire', status: 'active' },
   });
   const { initialize } = form;
+  // Loaded once for the builder, not each time the settings of another item are shown.
+  const itemSettingsCodes = useItemSettingsCodes();
 
   useEffect(() => {
     if (defaultValue) {
@@ -107,7 +110,11 @@ export function QuestionnaireBuilderV2(props: QuestionnaireBuilderV2Props): JSX.
         <div className={classes.column}>
           <ScrollArea h="100%">
             {selectedItem ? (
-              <QuestionnaireItemSettings key={selectedItem.linkId} selectedItem={selectedItem} />
+              <QuestionnaireItemSettings
+                key={selectedItem.linkId}
+                selectedItem={selectedItem}
+                codes={itemSettingsCodes}
+              />
             ) : (
               <Alert color="blue">Select an item.</Alert>
             )}

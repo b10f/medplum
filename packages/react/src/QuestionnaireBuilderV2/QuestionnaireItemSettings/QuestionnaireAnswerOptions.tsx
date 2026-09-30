@@ -24,7 +24,8 @@ import {
   getLocalAnswerOptionSystem,
   isManualAnswerOption,
 } from '../QuestionnaireBuilderV2.utils';
-import { FormSwitch, FormTextInput } from '../QuestionnaireFormInputs';
+import { FormSwitch } from '../QuestionnaireFormInputs/FormSwitch';
+import { FormTextInput } from '../QuestionnaireFormInputs/FormTextInput';
 import { getPlainOptionInputType } from './QuestionnaireItemSettings.utils';
 import { QuestionnaireLoincAnswerListDrawer } from './QuestionnaireLoincAnswerListDrawer';
 import { QuestionnaireValueSetAnswersDrawer } from './QuestionnaireValueSetAnswersDrawer';

@@ -7,10 +7,12 @@ import { QuestionnaireItemBehaviorSection } from './QuestionnaireItemBehaviorSec
 import { QuestionnaireItemConditionsSection } from './QuestionnaireItemConditionsSection';
 import { QuestionnaireItemContentSection } from './QuestionnaireItemContentSection';
 import { QuestionnaireItemGuidanceSection } from './QuestionnaireItemGuidanceSection';
-import { useItemSettingsCodes } from './useItemSettingsCodes';
+import type { ItemSettingsCodes } from './useItemSettingsCodes';
 
 export interface QuestionnaireItemSettingsProps {
   readonly selectedItem: ExtendedQuestionnaireItem;
+  /** The codes the settings offer, loaded once by the builder (see useItemSettingsCodes). */
+  readonly codes: ItemSettingsCodes;
   readonly disabled?: boolean;
 }
 
@@ -21,8 +23,7 @@ export interface QuestionnaireItemSettingsProps {
  * @returns The QuestionnaireItemSettings React node.
  */
 export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps): JSX.Element {
-  const { selectedItem, disabled = false } = props;
-  const codes = useItemSettingsCodes();
+  const { selectedItem, codes, disabled = false } = props;
   const sectionProps = { selectedItem, disabled, codes };
 
   return (

@@ -13,7 +13,8 @@ import {
   getValueByPath,
 } from '../../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import { ValueSetAutocomplete } from '../../ValueSetAutocomplete/ValueSetAutocomplete';
-import { FormSelect, FormTextInput } from '../QuestionnaireFormInputs';
+import { FormSelect } from '../QuestionnaireFormInputs/FormSelect';
+import { FormTextInput } from '../QuestionnaireFormInputs/FormTextInput';
 import { getEnableWhenAnswerInputType } from './QuestionnaireItemSettings.utils';
 
 export interface QuestionnaireEnableWhenAnswerProps {

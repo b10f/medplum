@@ -4,7 +4,9 @@ import { Stack } from '@mantine/core';
 import { generateId } from '@medplum/core';
 import type { JSX } from 'react';
 import { getValueByPath } from '../../QuestionnaireFormV2/QuestionnaireFormV2.utils';
-import { FormFlatCollection, FormSwitch, FormTextInput } from '../QuestionnaireFormInputs';
+import { FormFlatCollection } from '../QuestionnaireFormInputs/FormFlatCollection';
+import { FormSwitch } from '../QuestionnaireFormInputs/FormSwitch';
+import { FormTextInput } from '../QuestionnaireFormInputs/FormTextInput';
 import type { QuestionnaireItemFieldProps } from './QuestionnaireItemSettings.utils';
 import { getValueInputType } from './QuestionnaireItemSettings.utils';
 

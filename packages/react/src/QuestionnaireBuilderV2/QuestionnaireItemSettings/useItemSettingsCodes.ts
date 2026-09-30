@@ -3,7 +3,7 @@
 import type { MedplumClient } from '@medplum/core';
 import { HTTP_HL7_ORG } from '@medplum/core';
 import type { Coding, ValueSetExpansionContains } from '@medplum/fhirtypes';
-import { useMedplum } from '@medplum/react-hooks';
+import { isValueSetUnavailableError, useMedplum } from '@medplum/react-hooks';
 import { useEffect, useState } from 'react';
 import type { ItemControlCodes } from '../QuestionnaireBuilderV2.utils';
 
@@ -20,6 +20,10 @@ const VALUE_SET_URLS = {
   questionnaireDisplayCategory: `${HTTP_HL7_ORG}/fhir/ValueSet/questionnaire-display-category`,
 } as const;
 
+/** The code lists the settings panel offers. */
+export type ItemSettingsCodeList =
+  'itemTypes' | 'enableOperators' | 'enableBehaviors' | 'itemControlCodes' | 'usageModes' | 'displayCategories';
+
 /** The codes the settings panel offers, loaded from the server. */
 export interface ItemSettingsCodes {
   /** True until the codes are loaded. */
@@ -30,11 +34,15 @@ export interface ItemSettingsCodes {
   readonly itemControlCodes: ItemControlCodes | undefined;
   readonly usageModes: Coding[];
   readonly displayCategories: Coding[];
+  /** Why a list could not be loaded, by list: its value set or code system is not on the server. */
+  readonly unavailable: Partial<Record<ItemSettingsCodeList, string>>;
 }
 
 /**
  * Loads the codes the settings panel offers: question types, item controls, condition operators and behaviors, usage
- * modes and display categories.
+ * modes and display categories. They are loaded once, for every item the panel shows. A list whose value set or code
+ * system is not on the server is marked unavailable; a transient failure leaves the list empty, as Medplum's
+ * QuestionnaireForm does.
  * @returns The codes, and whether they are still loading.
  */
 export function useItemSettingsCodes(): ItemSettingsCodes {
@@ -47,51 +55,101 @@ export function useItemSettingsCodes(): ItemSettingsCodes {
     itemControlCodes: undefined,
     usageModes: [],
     displayCategories: [],
+    unavailable: {},
   });
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadCodes = async (): Promise<void> => {
-      try {
-        const [itemTypes, enableOperators, enableBehaviors, itemControlCodes, usageModes, displayCategories] =
-          await Promise.all([
-            loadQuestionTypes(medplum),
-            expandValueSet(medplum, VALUE_SET_URLS.questionnaireEnableOperator),
-            expandValueSet(medplum, VALUE_SET_URLS.questionnaireEnableBehavior),
-            loadItemControlCodes(medplum),
-            expandValueSet(medplum, VALUE_SET_URLS.questionnaireUsageMode),
-            expandValueSet(medplum, VALUE_SET_URLS.questionnaireDisplayCategory),
-          ]);
-        setCodes({
-          loading: false,
-          itemTypes,
-          enableOperators,
-          enableBehaviors,
-          itemControlCodes,
-          usageModes,
-          displayCategories,
-        });
-      } catch (error: any) {
-        console.error('Error loading value sets:', error);
-        setCodes((current) => ({ ...current, loading: false }));
+      const [itemTypes, enableOperators, enableBehaviors, itemControlCodes, usageModes, displayCategories] =
+        await Promise.all([
+          loadCodeList(() => loadQuestionTypes(medplum), `Code system ${ITEM_TYPE_SYSTEM} is unavailable`),
+          loadValueSet(medplum, VALUE_SET_URLS.questionnaireEnableOperator),
+          loadValueSet(medplum, VALUE_SET_URLS.questionnaireEnableBehavior),
+          loadCodeList(() => loadItemControlCodes(medplum), `Code system ${ITEM_CONTROL_SYSTEM} is unavailable`),
+          loadValueSet(medplum, VALUE_SET_URLS.questionnaireUsageMode),
+          loadValueSet(medplum, VALUE_SET_URLS.questionnaireDisplayCategory),
+        ]);
+      if (cancelled) {
+        return;
       }
+
+      const unavailable: Partial<Record<ItemSettingsCodeList, string>> = {};
+      const lists = { itemTypes, enableOperators, enableBehaviors, itemControlCodes, usageModes, displayCategories };
+      for (const [name, list] of Object.entries(lists)) {
+        if (list.unavailable) {
+          unavailable[name as ItemSettingsCodeList] = list.unavailable;
+        }
+      }
+
+      setCodes({
+        loading: false,
+        itemTypes: itemTypes.value ?? [],
+        enableOperators: enableOperators.value ?? [],
+        enableBehaviors: enableBehaviors.value ?? [],
+        itemControlCodes: itemControlCodes.value,
+        usageModes: usageModes.value ?? [],
+        displayCategories: displayCategories.value ?? [],
+        unavailable,
+      });
     };
 
     loadCodes().catch(console.error);
+    return () => {
+      cancelled = true;
+    };
   }, [medplum]);
 
   return codes;
+}
+
+interface LoadedCodeList<T> {
+  readonly value?: T;
+  /** Why the list is unavailable. */
+  readonly unavailable?: string;
+}
+
+/**
+ * Loads one code list. It is unavailable when its source is not on the server: a code system that is not found, or a
+ * value set whose expansion fails with 400 or 404. Other failures are logged and leave the list empty.
+ * @param load - Loads the list; resolves to undefined when its code system is not found.
+ * @param unavailableMessage - Why the list is unavailable, when it is.
+ * @returns The list, or why it is unavailable.
+ */
+async function loadCodeList<T>(
+  load: () => Promise<T | undefined>,
+  unavailableMessage: string
+): Promise<LoadedCodeList<T>> {
+  try {
+    const value = await load();
+    return value === undefined ? { unavailable: unavailableMessage } : { value };
+  } catch (err) {
+    if (isValueSetUnavailableError(err)) {
+      return { unavailable: unavailableMessage };
+    }
+    console.error('Error loading codes:', err);
+    return {};
+  }
+}
+
+function loadValueSet(medplum: MedplumClient, url: string): Promise<LoadedCodeList<Coding[]>> {
+  return loadCodeList(() => expandValueSet(medplum, url), `Value set ${url} is unavailable`);
 }
 
 /**
  * Loads the item controls from FHIR's item control code system, by the kind of item they are for: its top-level
  * (abstract) codes `group`, `text` and `question`.
  * @param medplum - The Medplum client.
- * @returns The item controls, by kind.
+ * @returns The item controls, by kind, or undefined when the code system is not found.
  */
-async function loadItemControlCodes(medplum: MedplumClient): Promise<ItemControlCodes> {
+async function loadItemControlCodes(medplum: MedplumClient): Promise<ItemControlCodes | undefined> {
   const codeSystem = await medplum.searchOne('CodeSystem', { url: ITEM_CONTROL_SYSTEM });
+  if (!codeSystem) {
+    return undefined;
+  }
   const childrenOf = (code: string): Coding[] =>
-    (codeSystem?.concept?.find((concept) => concept.code === code)?.concept ?? []).map((concept) => ({
+    (codeSystem.concept?.find((concept) => concept.code === code)?.concept ?? []).map((concept) => ({
       system: ITEM_CONTROL_SYSTEM,
       code: concept.code,
       display: concept.display,
@@ -103,11 +161,14 @@ async function loadItemControlCodes(medplum: MedplumClient): Promise<ItemControl
  * Loads the question types: the codes under `question` in FHIR's item type code system. Its hierarchy is not declared
  * as is-a, so a value set expansion is flat (and cannot filter by it); the code system's own nesting is read instead.
  * @param medplum - The Medplum client.
- * @returns The question types.
+ * @returns The question types, or undefined when the code system is not found.
  */
-async function loadQuestionTypes(medplum: MedplumClient): Promise<Coding[]> {
+async function loadQuestionTypes(medplum: MedplumClient): Promise<Coding[] | undefined> {
   const codeSystem = await medplum.searchOne('CodeSystem', { url: ITEM_TYPE_SYSTEM });
-  const question = codeSystem?.concept?.find((concept) => concept.code === 'question');
+  if (!codeSystem) {
+    return undefined;
+  }
+  const question = codeSystem.concept?.find((concept) => concept.code === 'question');
   return (question?.concept ?? []).map((concept) => ({
     system: ITEM_TYPE_SYSTEM,
     code: concept.code,

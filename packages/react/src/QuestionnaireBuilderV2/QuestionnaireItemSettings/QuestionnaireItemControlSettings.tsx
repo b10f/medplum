@@ -4,8 +4,10 @@ import type { Coding } from '@medplum/fhirtypes';
 import type { JSX } from 'react';
 import { useQuestionnaireFormContext } from '../../QuestionnaireFormV2/QuestionnaireFormContext';
 import { getValueByPath } from '../../QuestionnaireFormV2/QuestionnaireFormV2.utils';
-import { getItemControlOptions } from '../QuestionnaireBuilderV2.utils';
-import { FormRadioGroup, FormSelect, FormTextInput } from '../QuestionnaireFormInputs';
+import { getItemControlOptions, hasItemControls } from '../QuestionnaireBuilderV2.utils';
+import { FormRadioGroup } from '../QuestionnaireFormInputs/FormRadioGroup';
+import { FormSelect } from '../QuestionnaireFormInputs/FormSelect';
+import { FormTextInput } from '../QuestionnaireFormInputs/FormTextInput';
 import type { QuestionnaireItemSectionProps } from './QuestionnaireItemSettings.utils';
 import { getDefaultItemControl, toSelectData } from './QuestionnaireItemSettings.utils';
 
@@ -22,8 +24,10 @@ export function QuestionnaireItemControlSettings(props: QuestionnaireItemSection
   const item = getValueByPath(form.getValues(), path) ?? selectedItem;
   const { type, repeats, itemControl } = item;
   const options = codes.itemControlCodes ? getItemControlOptions(codes.itemControlCodes, item) : [];
+  // Without the item control code system, an item that could take one says so.
+  const unavailable = hasItemControls(item) ? codes.unavailable.itemControlCodes : undefined;
 
-  if (options.length === 0) {
+  if (options.length === 0 && !unavailable) {
     return null;
   }
 
@@ -36,6 +40,7 @@ export function QuestionnaireItemControlSettings(props: QuestionnaireItemSection
         context={`${path}.itemControl`}
         data={toSelectData(options)}
         loading={codes.loading}
+        unavailable={unavailable}
         disabled={disabled}
         value={itemControl?.code ?? getDefaultItemControl(type, !!repeats)}
         onChange={(code) => {

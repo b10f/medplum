@@ -6,7 +6,8 @@ import { useQuestionnaireFormContext } from '../../QuestionnaireFormV2/Questionn
 import type { ExtendedQuestionnaireItem } from '../../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import { findRootItem, getValueByPath } from '../../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import { hasFixedItemControl } from '../QuestionnaireBuilderV2.utils';
-import { FormSwitch, FormTextInput } from '../QuestionnaireFormInputs';
+import { FormSwitch } from '../QuestionnaireFormInputs/FormSwitch';
+import { FormTextInput } from '../QuestionnaireFormInputs/FormTextInput';
 import type { QuestionnaireItemSectionProps } from './QuestionnaireItemSettings.utils';
 import { QuestionnaireSettingsSectionTitle } from './QuestionnaireSettingsSectionTitle';
 

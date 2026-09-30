@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { JSX } from 'react';
 import { getValueByPath } from '../../QuestionnaireFormV2/QuestionnaireFormV2.utils';
-import { FormTextInput } from '../QuestionnaireFormInputs';
+import { FormTextInput } from '../QuestionnaireFormInputs/FormTextInput';
 import type { QuestionnaireItemFieldProps } from './QuestionnaireItemSettings.utils';
 import { getValueInputType } from './QuestionnaireItemSettings.utils';
 

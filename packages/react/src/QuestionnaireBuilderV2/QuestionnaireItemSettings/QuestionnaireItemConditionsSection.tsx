@@ -11,7 +11,7 @@ import type {
   ExtendedQuestionnaireItemEnableWhen,
 } from '../../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import { findFormItemByLinkId, getValueByPath } from '../../QuestionnaireFormV2/QuestionnaireFormV2.utils';
-import { FormSelect } from '../QuestionnaireFormInputs';
+import { FormSelect } from '../QuestionnaireFormInputs/FormSelect';
 import { QuestionnaireEnableWhenAnswer } from './QuestionnaireEnableWhenAnswer';
 import type { QuestionnaireItemSectionProps } from './QuestionnaireItemSettings.utils';
 import { toSelectData } from './QuestionnaireItemSettings.utils';
@@ -104,6 +104,7 @@ export function QuestionnaireItemConditionsSection(props: QuestionnaireItemSecti
                       label="Operator"
                       context={`${path}.enableWhen.${index}.operator`}
                       loading={codes.loading}
+                      unavailable={codes.unavailable.enableOperators}
                       data={toSelectData(getOperators(condition))}
                     />
                   )}
@@ -154,6 +155,7 @@ export function QuestionnaireItemConditionsSection(props: QuestionnaireItemSecti
           context={`${path}.enableBehavior`}
           data={toSelectData(codes.enableBehaviors)}
           loading={codes.loading}
+          unavailable={codes.unavailable.enableBehaviors}
           disabled={disabled}
         />
       )}
@@ -166,6 +168,7 @@ export function QuestionnaireItemConditionsSection(props: QuestionnaireItemSecti
         context={`${path}.usageMode`}
         data={toSelectData(codes.usageModes)}
         loading={codes.loading}
+        unavailable={codes.unavailable.usageModes}
         disabled={disabled}
       />
     </>

@@ -4,7 +4,9 @@ import type { JSX } from 'react';
 import { useQuestionnaireFormContext } from '../../QuestionnaireFormV2/QuestionnaireFormContext';
 import { getValueByPath } from '../../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import { hasFixedItemControl } from '../QuestionnaireBuilderV2.utils';
-import { FormSelect, FormTextarea, FormTextInput } from '../QuestionnaireFormInputs';
+import { FormSelect } from '../QuestionnaireFormInputs/FormSelect';
+import { FormTextarea } from '../QuestionnaireFormInputs/FormTextarea';
+import { FormTextInput } from '../QuestionnaireFormInputs/FormTextInput';
 import { ItemTypeIcon } from '../QuestionnaireItemTree';
 import { QuestionnaireAnswerOptions } from './QuestionnaireAnswerOptions';
 import { QuestionnaireAttachmentLimits } from './QuestionnaireAttachmentLimits';
@@ -63,6 +65,7 @@ export function QuestionnaireItemContentSection(props: QuestionnaireItemSectionP
           context={`${path}.displayCategory`}
           data={toSelectData(codes.displayCategories)}
           loading={codes.loading}
+          unavailable={codes.unavailable.displayCategories}
           disabled={disabled}
           value={item.displayCategory?.code ?? null}
           onChange={(code) => {
@@ -82,6 +85,7 @@ export function QuestionnaireItemContentSection(props: QuestionnaireItemSectionP
             label="Type"
             context={`${path}.type`}
             loading={codes.loading}
+            unavailable={codes.unavailable.itemTypes}
             data={toSelectData(codes.itemTypes)}
           />
 

@@ -6,7 +6,7 @@ import { IconPlus, IconTrash } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { getReferenceFilterError, getValueByPath } from '../../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import { ResourceTypeInput } from '../../ResourceTypeInput/ResourceTypeInput';
-import { FormTextInput } from '../QuestionnaireFormInputs';
+import { FormTextInput } from '../QuestionnaireFormInputs/FormTextInput';
 import type { QuestionnaireItemFieldProps } from './QuestionnaireItemSettings.utils';
 import { QuestionnaireReferenceProfiles } from './QuestionnaireReferenceProfiles';
 

@@ -73,6 +73,15 @@ function getQuestionControlCodes(type: string, repeats: boolean): string[] {
 }
 
 /**
+ * Returns true if an item can take an item control: a group, or a question of a type that has controls of its own.
+ * @param item - The builder form item.
+ * @returns True if the item has item controls to choose from.
+ */
+export function hasItemControls(item: ExtendedQuestionnaireItem): boolean {
+  return item.type === 'group' || getQuestionControlCodes(item.type, !!item.repeats).length > 0;
+}
+
+/**
  * Returns the item controls an item can take, from the item control code system: group controls for groups (not
  * page, header or footer, which are added as such), and the question controls that suit a question's type. Text
  * controls are edited as the question's help and display texts.

@@ -925,7 +925,8 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
     });
   }
 
-  if (minValue) {
+  // 0 is a bound too.
+  if (!isEmptyAnswerValue(minValue)) {
     const questionType: string = item.type;
     // R4 minValue/maxValue take no Quantity: a quantity's bound is its number, as a decimal.
     const valueKey =
@@ -950,7 +951,7 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
     });
   }
 
-  if (maxValue) {
+  if (!isEmptyAnswerValue(maxValue)) {
     const questionType = item.type;
     // R4 minValue/maxValue take no Quantity: a quantity's bound is its number, as a decimal.
     const valueKey =

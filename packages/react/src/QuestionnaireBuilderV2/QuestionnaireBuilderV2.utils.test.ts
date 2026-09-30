@@ -604,6 +604,21 @@ describe('QuestionnaireBuilderV2.utils', () => {
     });
   });
 
+  test('a bound of 0 is kept on save', () => {
+    const minValue = 'http://hl7.org/fhir/StructureDefinition/minValue';
+    const maxValue = 'http://hl7.org/fhir/StructureDefinition/maxValue';
+    const extension = [
+      { url: minValue, valueInteger: 0 },
+      { url: maxValue, valueInteger: 0 },
+    ];
+    const values = toFormValues({
+      resourceType: 'Questionnaire',
+      status: 'active',
+      item: [{ linkId: 'drinks', type: 'integer', extension }],
+    });
+    expect(toFhirQuestionnaire(values).item?.[0].extension).toEqual(expect.arrayContaining(extension));
+  });
+
   describe('validateFormAnswers', () => {
     function setup(item: QuestionnaireItem): Record<string, any> {
       return toFormValues({ resourceType: 'Questionnaire', status: 'active', item: [item] });

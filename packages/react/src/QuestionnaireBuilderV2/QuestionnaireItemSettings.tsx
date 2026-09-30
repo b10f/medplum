@@ -28,8 +28,16 @@ import type {
   ValueSetExpansionContains,
 } from '@medplum/fhirtypes';
 import { useMedplum } from '@medplum/react-hooks';
-import { IconList, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
-import type { JSX } from 'react';
+import {
+  IconAdjustmentsHorizontal,
+  IconBulb,
+  IconGitBranch,
+  IconList,
+  IconPlus,
+  IconSearch,
+  IconTrash,
+} from '@tabler/icons-react';
+import type { JSX, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { ResourceInput } from '../ResourceInput/ResourceInput';
 import { ResourceTypeInput } from '../ResourceTypeInput/ResourceTypeInput';
@@ -66,6 +74,7 @@ import {
   FormTextarea,
   FormTextInput,
 } from './QuestionnaireFormInputs';
+import { ItemTypeIcon } from './QuestionnaireItemTree';
 import { QuestionnaireLoincAnswerListDrawer } from './QuestionnaireLoincAnswerListDrawer';
 import { QuestionnaireValueSetAnswersDrawer } from './QuestionnaireValueSetAnswersDrawer';
 
@@ -450,9 +459,11 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
     <Box p={8}>
       <Stack gap="md">
         <Divider />
-        <Text size="xl" fw={500}>
+        <SettingsSectionTitle
+          icon={<ItemTypeIcon item={getValueByPath(form.getValues(), path) ?? selectedItem} size={22} />}
+        >
           {hasFixedControl ? (itemControl?.display ?? 'Page') : getTitle(selectedItem, type)}
-        </Text>
+        </SettingsSectionTitle>
         <Divider />
 
         <FormTextInput form={form} label="Prefix" context={`${path}.prefix`} disabled={disabled} />
@@ -808,9 +819,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
         )}
 
         <Divider />
-        <Text size="xl" fw={500}>
-          Settings
-        </Text>
+        <SettingsSectionTitle icon={<IconAdjustmentsHorizontal size={22} />}>Settings</SettingsSectionTitle>
         <Divider />
 
         <FormSwitch form={form} label="Hidden" context={`${path}.hidden`} disabled={disabled} />
@@ -862,9 +871,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
         )}
 
         <Divider />
-        <Text size="xl" fw={500}>
-          Guidance
-        </Text>
+        <SettingsSectionTitle icon={<IconBulb size={22} />}>Guidance</SettingsSectionTitle>
         <Divider />
 
         {!isDisplay && (
@@ -1025,9 +1032,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
         )}
 
         <Divider />
-        <Text size="xl" fw={500}>
-          Conditional Display
-        </Text>
+        <SettingsSectionTitle icon={<IconGitBranch size={22} />}>Conditional Display</SettingsSectionTitle>
         <Divider />
 
         {enableWhens.length === 0 ? (
@@ -1641,6 +1646,24 @@ function flattenExpansion(contains: ValueSetExpansionContains[]): Coding[] {
 
 function toSelectData(codings: Coding[]): { value: string; label: string }[] {
   return codings.map((coding) => ({ value: coding.code as string, label: coding.display ?? (coding.code as string) }));
+}
+
+/**
+ * A section title of the settings panel, with its icon.
+ * @param props - The section's icon and title.
+ * @param props.icon - The icon.
+ * @param props.children - The title.
+ * @returns The section title.
+ */
+function SettingsSectionTitle(props: { readonly icon: JSX.Element; readonly children: ReactNode }): JSX.Element {
+  return (
+    <Group gap="xs" wrap="nowrap">
+      {props.icon}
+      <Text size="xl" fw={500}>
+        {props.children}
+      </Text>
+    </Group>
+  );
 }
 
 function getTitle(selectedItem: ExtendedQuestionnaireItem | undefined, type: string): string {

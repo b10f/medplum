@@ -288,24 +288,25 @@ function TreeNodeContent(props: TreeNodeContentProps): JSX.Element {
  * The item's icon, the same as in the add item menu.
  * @param props - The item.
  * @param props.item - The builder form item.
+ * @param props.size - The icon size; 16 by default.
  * @returns The icon.
  */
-function ItemTypeIcon(props: { readonly item: ExtendedQuestionnaireItem }): JSX.Element {
-  const { item } = props;
+export function ItemTypeIcon(props: { readonly item: ExtendedQuestionnaireItem; readonly size?: number }): JSX.Element {
+  const { item, size = 16 } = props;
   if (isPageItem(item)) {
-    return <IconFiles size={16} />;
+    return <IconFiles size={size} />;
   }
   if (item.itemControl?.code === 'header' && item.type === 'group') {
-    return <IconLayoutNavbar size={16} />;
+    return <IconLayoutNavbar size={size} />;
   }
   if (item.itemControl?.code === 'footer' && item.type === 'group') {
-    return <IconLayoutBottombar size={16} />;
+    return <IconLayoutBottombar size={size} />;
   }
   if (item.type === 'group') {
-    return <IconFolders size={16} />;
+    return <IconFolders size={size} />;
   }
   if (item.type === 'display') {
-    return <IconFileText size={16} />;
+    return <IconFileText size={size} />;
   }
-  return <IconHelp size={16} />;
+  return <IconHelp size={size} />;
 }

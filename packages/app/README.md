@@ -41,4 +41,14 @@ Production build:
 npm run build
 ```
 
+### Example questionnaires
+
+To try out Questionnaire Builder v2 with realistic forms, seed the example questionnaires in [`seed/questionnaires`](seed/questionnaires) into your local server. With the server running, from the repository root:
+
+```bash
+npm run seed:questionnaires
+```
+
+It signs in as the server's default super admin and prints a Builder v2 link for each questionnaire. A questionnaire that already exists (by its canonical URL) is left as it is, so it is safe to run again. To use another server or user, set `MEDPLUM_BASE_URL`, `MEDPLUM_APP_URL`, `MEDPLUM_EMAIL` and `MEDPLUM_PASSWORD`.
+
 For more information, refer to the [Developer Instructions](https://www.medplum.com/docs/contributing/run-the-stack).

@@ -15,3 +15,13 @@ export const QuestionnaireFormProvider: FC<{ readonly form: QuestionnaireForm; r
   provider;
 export const useQuestionnaireFormContext: () => QuestionnaireForm = useFormContext;
 export const useQuestionnaireEditorForm: UseForm<QuestionnaireFormValues> = useForm;
+
+// The answers, as a draft QuestionnaireResponse: kept apart from the questionnaire, which the builder edits.
+const [responseProvider, useResponseFormContext, useResponseForm] = createFormContext<QuestionnaireFormValues>();
+
+export const QuestionnaireResponseFormProvider: FC<{
+  readonly form: QuestionnaireForm;
+  readonly children: ReactNode;
+}> = responseProvider;
+export const useQuestionnaireResponseFormContext: () => QuestionnaireForm = useResponseFormContext;
+export const useQuestionnaireResponseForm: UseForm<QuestionnaireFormValues> = useResponseForm;

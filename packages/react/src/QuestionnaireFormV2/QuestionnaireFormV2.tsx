@@ -6,12 +6,7 @@ import type { JSX } from 'react';
 import { useEffect } from 'react';
 import { QuestionnaireFormProvider, useQuestionnaireEditorForm } from './QuestionnaireFormContext';
 import type { ExtendedQuestionnaireItem, QuestionnaireMode } from './QuestionnaireFormV2.utils';
-import {
-  addFormAnswer,
-  fromFhirQuestionnaireItem,
-  getResponseSignature,
-  toFhirQuestionnaireResponse,
-} from './QuestionnaireFormV2.utils';
+import { fromFhirQuestionnaireItem } from './QuestionnaireFormV2.utils';
 import { QuestionnaireRenderer } from './QuestionnaireRenderer';
 
 export type { QuestionnaireMode } from './QuestionnaireFormV2.utils';
@@ -45,17 +40,18 @@ export function QuestionnaireFormV2(props: QuestionnaireFormV2Props): JSX.Elemen
   const { initialize } = form;
 
   useEffect(() => {
-    if (questionnaire && responseLoaded) {
+    if (questionnaire) {
       initialize({
         ...questionnaire,
         item: (questionnaire.item ?? []).map((item: QuestionnaireItem, index: number) =>
-          fromFhirQuestionnaireItem(item, questionnaire, index, questionnaireResponse?.item)
+          fromFhirQuestionnaireItem(item, questionnaire, index)
         ),
       });
     }
-  }, [questionnaire, questionnaireResponse, responseLoaded, initialize]);
+  }, [questionnaire, initialize]);
 
-  if (!form.initialized) {
+  // The renderer reads the response's answers once, when it starts.
+  if (!form.initialized || !responseLoaded) {
     return null;
   }
 
@@ -65,12 +61,11 @@ export function QuestionnaireFormV2(props: QuestionnaireFormV2Props): JSX.Elemen
     <QuestionnaireFormProvider form={form}>
       <QuestionnaireRenderer
         items={items}
-        addAnswer={(item, original) => addFormAnswer(form, item, original)}
+        questionnaireResponse={questionnaireResponse}
         submitButtonText={props.submitButtonText}
         excludeButtons={props.excludeButtons}
-        defaultSignature={getResponseSignature(questionnaireResponse)}
         mode={props.mode}
-        onSubmit={(signature) => props.onSubmit?.(toFhirQuestionnaireResponse(form.getValues(), signature))}
+        onSubmit={props.onSubmit}
       />
     </QuestionnaireFormProvider>
   );

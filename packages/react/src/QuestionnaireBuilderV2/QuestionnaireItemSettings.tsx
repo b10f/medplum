@@ -49,7 +49,6 @@ import type {
 import {
   findFormItemByLinkId,
   fromFhirAnswerOptions,
-  getAnswerItems,
   getAnswerOptionLabel,
   getChoiceValueKey,
   getReferenceFilterError,
@@ -95,12 +94,11 @@ const VALUE_SET_URLS = {
 
 export interface QuestionnaireItemSettingsProps {
   readonly selectedItem: ExtendedQuestionnaireItem;
-  readonly addAnswer: (item: ExtendedQuestionnaireItem, original?: ExtendedQuestionnaireItem) => void;
   readonly disabled?: boolean;
 }
 
 export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps): JSX.Element {
-  const { selectedItem, addAnswer, disabled = false } = props;
+  const { selectedItem, disabled = false } = props;
   const medplum = useMedplum();
   const form = useQuestionnaireFormContext();
   const [loading, setLoading] = useState(true);
@@ -274,55 +272,6 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
     form.removeListItem(`${path}.answerOption`, index);
   };
 
-  const syncAnswers = (
-    node: ExtendedQuestionnaireItem,
-    applyChange?: (answerItem: ExtendedQuestionnaireItem) => void
-  ): void => {
-    const path = node.answerPath;
-    const answers = getValueByPath(form.getValues(), `${path}.answer`) ?? [];
-
-    // Walks group repetitions and the follow-up items of question answers.
-    for (const answer of answers) {
-      for (const answerItem of getAnswerItems(answer) ?? []) {
-        if (answerItem.linkId === selectedItem?.linkId) {
-          if (applyChange) {
-            applyChange(answerItem);
-          }
-        } else {
-          syncAnswers(answerItem, applyChange);
-        }
-      }
-    }
-  };
-
-  const handleInitialInputChange = (value: any, index: number): void => {
-    // The answers of a nested item are in copies under its ancestors' answers.
-    const isNested = !!selectedItem?.parent;
-
-    const applyChange = (item: ExtendedQuestionnaireItem): void => {
-      const path = item.answerPath;
-      const answerArray: { value: any }[] = getValueByPath(form.getValues(), `${path}.answer`) ?? [];
-
-      if (index >= 0 && index < answerArray.length) {
-        const current = answerArray[index].value;
-        if (item.type === 'quantity') {
-          // The initial value sets the number; a unit already chosen is kept.
-          answerArray[index].value = { ...(current && typeof current === 'object' ? current : {}), value: +value };
-        } else {
-          answerArray[index].value = item.type === 'integer' || item.type === 'decimal' ? +value : value;
-        }
-        form.setFieldValue(`${path}.answer`, answerArray);
-      }
-    };
-
-    if (isNested) {
-      const root = findRootGroup(selectedItem);
-      syncAnswers(root, applyChange);
-    } else {
-      applyChange(selectedItem);
-    }
-  };
-
   const handleAnswerOptionSelectionChange = (value: boolean, index: number): void => {
     const path = selectedItem?.path;
 
@@ -336,48 +285,11 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
     form.setFieldValue(`${path}.answerOption`, answerOptionsArray);
   };
 
+  // The preview's answers follow the repetitions on their own; only the initial values are kept within them.
   const handleRepeatsChange = (repeats: boolean): void => {
-    const parent = selectedItem?.parent;
-    const isNested = !!parent;
     const initialArray = getValueByPath(form.getValues(), `${selectedItem.path}.initial`) ?? [];
-    const minOccurs = getValueByPath(form.getValues(), `${selectedItem.path}.minOccurs`) ?? 1;
-
-    const applyChange = (item: ExtendedQuestionnaireItem, original?: ExtendedQuestionnaireItem): void => {
-      const path = item.answerPath;
-      const answerArray = getValueByPath(form.getValues(), `${path}.answer`) ?? [];
-
-      if (!repeats) {
-        if (initialArray) {
-          let i = initialArray.length;
-
-          while (i-- > 1) {
-            initialArray.pop();
-            form.setFieldValue(`${selectedItem.path}.initial`, initialArray);
-          }
-        }
-
-        if (answerArray) {
-          let i = answerArray.length;
-
-          while (i-- > 1) {
-            answerArray.pop();
-            form.setFieldValue(`${path}.answer`, answerArray);
-          }
-        }
-      } else {
-        let i = answerArray.length;
-
-        while (i++ < minOccurs) {
-          addAnswer(item, original);
-        }
-      }
-    };
-
-    if (isNested) {
-      const root = findRootGroup(selectedItem);
-      syncAnswers(root, applyChange);
-    } else {
-      applyChange(selectedItem);
+    if (!repeats && initialArray.length > 1) {
+      form.setFieldValue(`${selectedItem.path}.initial`, initialArray.slice(0, 1));
     }
 
     const itemControl = getValueByPath(form.getValues(), `${selectedItem?.path}.itemControl`);
@@ -387,69 +299,15 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
     }
   };
 
-  const handleMinOccursChange = (minOccurs: number): void => {
-    // An empty or zero field is not a limit; applying it would delete every answer.
-    if (!minOccurs) {
-      return;
-    }
-
-    const parent = selectedItem?.parent;
-    const isNested = !!parent;
-
-    const applyChange = (item: ExtendedQuestionnaireItem, original?: ExtendedQuestionnaireItem): void => {
-      const path = item.answerPath;
-      const answerArray = getValueByPath(form.getValues(), `${path}.answer`) ?? [];
-      let i = answerArray.length;
-
-      while (i++ < minOccurs) {
-        addAnswer(item, original);
-      }
-
-      i = answerArray.length;
-      while (i-- > minOccurs) {
-        answerArray.pop();
-        form.setFieldValue(`${path}.answer`, answerArray);
-      }
-    };
-
-    if (isNested) {
-      const root = findRootGroup(selectedItem);
-      syncAnswers(root, applyChange);
-    } else {
-      applyChange(selectedItem);
-    }
-  };
-
   const handleMaxOccursChange = (maxOccurs: number): void => {
-    // An empty or zero field means unlimited; applying it would delete every answer.
+    // An empty or zero field means unlimited.
     if (!maxOccurs) {
       return;
     }
 
-    const parent = selectedItem?.parent;
-    const isNested = !!parent;
-
     const initialArray = getValueByPath(form.getValues(), `${selectedItem.path}.initial`) ?? [];
     if (initialArray.length > maxOccurs) {
       form.setFieldValue(`${selectedItem.path}.initial`, initialArray.slice(0, maxOccurs));
-    }
-
-    const applyChange = (item: ExtendedQuestionnaireItem): void => {
-      const path = item.answerPath;
-      const answerArray = getValueByPath(form.getValues(), `${path}.answer`) ?? [];
-      let i = answerArray.length;
-
-      while (i-- > maxOccurs) {
-        answerArray.pop();
-        form.setFieldValue(`${path}.answer`, answerArray);
-      }
-    };
-
-    if (isNested) {
-      const root = findRootGroup(selectedItem);
-      syncAnswers(root, applyChange);
-    } else {
-      applyChange(selectedItem);
     }
   };
 
@@ -529,7 +387,6 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
                         form={form}
                         label="Initial Value"
                         context={`${path}.initial.${index}.value`}
-                        onChange={(value) => handleInitialInputChange(value, index)}
                         disabled={disabled}
                       />
                     )}
@@ -540,7 +397,6 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
                         label="Initial Value"
                         context={`${path}.initial.${index}.value`}
                         type={getInitialInputType(type)}
-                        onChange={(value) => handleInitialInputChange(value, index)}
                         disabled={disabled}
                       />
                     )}
@@ -701,10 +557,7 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
                             form={form}
                             label="Initially Selected"
                             context={`${path}.answerOption.${index}.initialSelected`}
-                            onChange={(value) => {
-                              handleAnswerOptionSelectionChange(value, index);
-                              handleInitialInputChange(answer.value, 0);
-                            }}
+                            onChange={(value) => handleAnswerOptionSelectionChange(value, index)}
                             disabled={disabled}
                           />
 
@@ -849,7 +702,6 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
                     context={`${path}.minOccurs`}
                     type="number"
                     min="1"
-                    onChange={(value) => handleMinOccursChange(+value)}
                     disabled={disabled}
                   />
                 )}

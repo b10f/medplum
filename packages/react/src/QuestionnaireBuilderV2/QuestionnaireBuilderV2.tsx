@@ -16,7 +16,6 @@ import {
 } from '../QuestionnaireFormV2/QuestionnaireFormContext';
 import type { ExtendedQuestionnaireItem } from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import {
-  addFormAnswer,
   findFormItemByLinkId,
   fromFhirQuestionnaireItem,
   getRequiredSignatureType,
@@ -69,9 +68,6 @@ export function QuestionnaireBuilderV2(props: QuestionnaireBuilderV2Props): JSX.
   const selectedItem = findFormItemByLinkId(items, selectedLinkId);
   const setSelectedItem = (item: ExtendedQuestionnaireItem | undefined): void => setSelectedLinkId(item?.linkId);
 
-  const addAnswer = (item: ExtendedQuestionnaireItem, original?: ExtendedQuestionnaireItem): void =>
-    addFormAnswer(form, item, original);
-
   return (
     <QuestionnaireFormProvider form={form}>
       <QuestionnaireSettingsDrawer
@@ -111,7 +107,7 @@ export function QuestionnaireBuilderV2(props: QuestionnaireBuilderV2Props): JSX.
         <div className={classes.column}>
           <ScrollArea h="100%">
             {selectedItem ? (
-              <QuestionnaireItemSettings key={selectedItem.linkId} selectedItem={selectedItem} addAnswer={addAnswer} />
+              <QuestionnaireItemSettings key={selectedItem.linkId} selectedItem={selectedItem} />
             ) : (
               <Alert color="blue">Select an item.</Alert>
             )}
@@ -122,7 +118,6 @@ export function QuestionnaireBuilderV2(props: QuestionnaireBuilderV2Props): JSX.
             <QuestionnaireRenderer
               items={items}
               selectedItem={selectedItem}
-              addAnswer={addAnswer}
               onSubmit={() => showNotification({ color: 'green', message: 'All preview answers are valid' })}
             />
           </ScrollArea>

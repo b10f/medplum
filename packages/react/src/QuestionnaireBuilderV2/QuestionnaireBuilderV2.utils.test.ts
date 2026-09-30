@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
-import type { Questionnaire, QuestionnaireItem } from '@medplum/fhirtypes';
+import type { Questionnaire, QuestionnaireItem, QuestionnaireResponseItem } from '@medplum/fhirtypes';
 import {
   findFormItemByLinkId,
   fromFhirQuestionnaireItem,
   getRequiredSignatureType,
   getRespondedItems,
+  toDraftResponse,
   toFhirQuestionnaire,
   toFhirQuestionnaireResponse,
 } from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
@@ -337,8 +338,9 @@ describe('QuestionnaireBuilderV2.utils', () => {
       expect(values.item.map((item: any) => hasFixedItemControl(item))).toStrictEqual([true, true, false, true]);
       expect(getRespondedItems(values.item).map((item) => item.linkId)).toStrictEqual(['header', 'page', 'footer']);
 
-      values.item[0].answer[0][0].answer = [{ value: 'A-1' }];
-      expect(toFhirQuestionnaireResponse(values).item?.map((item) => item.linkId)).toStrictEqual(['header']);
+      const response = toDraftResponse(values.item);
+      (response.item?.[0].item?.[0] as QuestionnaireResponseItem).answer = [{ valueString: 'A-1' }];
+      expect(toFhirQuestionnaireResponse(values, response).item?.map((item) => item.linkId)).toStrictEqual(['header']);
 
       const rows = flattenFormItems(values.item, { page: true });
       expect(getFormItemDropTarget(rows, 'footer', 'q', 24 * 3, 24)?.depth).toBe(0);

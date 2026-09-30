@@ -1,13 +1,22 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
-import type { Questionnaire, QuestionnaireItem, QuestionnaireResponse } from '@medplum/fhirtypes';
+import type {
+  Questionnaire,
+  QuestionnaireItem,
+  QuestionnaireResponse,
+  QuestionnaireResponseItem,
+} from '@medplum/fhirtypes';
+import type { ExtendedQuestionnaireItem } from './QuestionnaireFormV2.utils';
 import {
   applyExclusiveOptions,
   evaluateEnableWhen,
   findFormItemByLinkId,
   fromFhirQuestionnaireItem,
   getAnswerOptionDisplay,
+  getAnswerValue,
   getCalculatedAnswers,
+  getGroupErrorKey,
+  getInitialAnswerKeys,
   getPageItems,
   getReferenceFilterError,
   getReferenceSearchCriteria,
@@ -24,6 +33,10 @@ import {
   isUsedInMode,
   PAGE_ITEM_CONTROL,
   rebuildFormItems,
+  removeResponseItems,
+  syncResponseItems,
+  toDraftAnswer,
+  toDraftResponse,
   toFhirQuestionnaire,
   toFhirQuestionnaireItem,
   toFhirQuestionnaireResponse,
@@ -37,6 +50,68 @@ function toFormValues(questionnaire: Questionnaire): Record<string, any> {
       fromFhirQuestionnaireItem(item, questionnaire, index)
     ),
   };
+}
+
+/** The questionnaire, as the builder holds it, and the draft response of its answers. */
+interface TestForm {
+  values: Record<string, any>;
+  response: QuestionnaireResponse;
+}
+
+function toForm(questionnaire: Questionnaire, response?: QuestionnaireResponse): TestForm {
+  const values = toFormValues(questionnaire);
+  return { values, response: toDraftResponse(values.item, response) };
+}
+
+function findResponseItem(
+  responseItems: QuestionnaireResponseItem[] | undefined,
+  linkId: string
+): QuestionnaireResponseItem | undefined {
+  for (const responseItem of responseItems ?? []) {
+    if (responseItem.linkId === linkId) {
+      return responseItem;
+    }
+    const found =
+      findResponseItem(responseItem.item, linkId) ??
+      responseItem.answer?.map((answer) => findResponseItem(answer.item, linkId)).find(Boolean);
+    if (found) {
+      return found;
+    }
+  }
+  return undefined;
+}
+
+function getItem(form: TestForm, linkId: string): ExtendedQuestionnaireItem {
+  return findFormItemByLinkId(form.values.item, linkId) as ExtendedQuestionnaireItem;
+}
+
+/**
+ * Answers a question, as its input would: its first response item, or the one at a response path (e.g. in the second
+ * repetition of a group). The draft response is replaced, as the form replaces it.
+ * @param form - The test form.
+ * @param target - The question's linkId, or the response path of its response item.
+ * @param values - The answer values.
+ */
+function answer(form: TestForm, target: string, ...values: any[]): void {
+  const response = structuredClone(form.response);
+  const responseItem = target.startsWith('item.')
+    ? (getValueByPath(response, target) as QuestionnaireResponseItem)
+    : (findResponseItem(response.item, target) as QuestionnaireResponseItem);
+  const item = getItem(form, responseItem.linkId);
+  responseItem.answer = values.map((value) => toDraftAnswer(item, value));
+  form.response = { ...response, item: syncResponseItems(form.values.item, response.item) };
+}
+
+function isEnabled(form: TestForm, linkId: string, context = 'item'): boolean {
+  return evaluateEnableWhen(form.values, form.response, getItem(form, linkId), context);
+}
+
+function validate(form: TestForm): Record<string, string> {
+  return validateFormAnswers(form.values, form.response);
+}
+
+function submit(form: TestForm): QuestionnaireResponse {
+  return toFhirQuestionnaireResponse(form.values, form.response);
 }
 
 describe('QuestionnaireFormV2.utils', () => {
@@ -130,7 +205,7 @@ describe('QuestionnaireFormV2.utils', () => {
     });
 
     const fhirItem = toFhirQuestionnaireItem(values.item[0]);
-    for (const key of ['index', 'path', 'answerPath', 'parent', 'answer']) {
+    for (const key of ['index', 'path', 'parent']) {
       expect(fhirItem).not.toHaveProperty(key);
     }
   });
@@ -147,93 +222,134 @@ describe('QuestionnaireFormV2.utils', () => {
     expect(findFormItemByLinkId(values.item, undefined)).toBeUndefined();
   });
 
-  test('group answer paths use dot notation', () => {
-    const values = toFormValues({
+  test('the draft response answers each question, in each repetition of a group', () => {
+    const { response } = toForm({
       resourceType: 'Questionnaire',
       status: 'active',
-      item: [{ linkId: 'g1', type: 'group', item: [{ linkId: 'q1', type: 'string' }] }],
+      item: [
+        {
+          linkId: 'g1',
+          type: 'group',
+          item: [
+            { linkId: 'q1', type: 'string' },
+            { linkId: 'note', type: 'display', text: 'Display text has no response item' },
+          ],
+        },
+      ],
     });
-
-    const child = values.item[0].answer[0][0];
-    expect(child.answerPath).toBe('item.0.answer.0.0');
-    expect(getValueByPath(values, `${child.answerPath}.answer.0.value`)).toBe('');
+    expect(response).toStrictEqual({
+      resourceType: 'QuestionnaireResponse',
+      status: 'in-progress',
+      item: [{ linkId: 'g1', item: [{ linkId: 'q1', answer: [{}] }] }],
+    });
   });
 
-  describe('rebuildFormItems keeps answers', () => {
-    function setup(): Record<string, any> {
-      return toFormValues({
-        resourceType: 'Questionnaire',
-        status: 'active',
+  describe('the draft response follows the questionnaire', () => {
+    const questionnaire: Questionnaire = {
+      resourceType: 'Questionnaire',
+      status: 'active',
+      item: [
+        { linkId: 'name', type: 'string' },
+        { linkId: 'agree', type: 'boolean' },
+        {
+          linkId: 'colors',
+          type: 'choice',
+          repeats: true,
+          answerOption: [{ valueCoding: { code: 'red' } }, { valueCoding: { code: 'blue' } }],
+        },
+        { linkId: 'g1', type: 'group', repeats: true, item: [{ linkId: 'inner', type: 'integer' }] },
+      ],
+    };
+
+    test('answers are kept by linkId as items are reordered; removed items leave the response', () => {
+      const form = toForm(questionnaire);
+      answer(form, 'name', 'Alice');
+      answer(form, 'agree', true);
+      answer(form, 'colors', { code: 'red' }, { code: 'blue' });
+      answer(form, 'inner', 7);
+
+      const [name, agree, colors, group] = form.values.item;
+      const reordered = rebuildFormItems({ ...form.values, item: [group, colors, agree, name] });
+      expect(syncResponseItems(reordered, form.response.item)).toStrictEqual([
+        { linkId: 'g1', item: [{ linkId: 'inner', answer: [{ valueInteger: 7 }] }] },
+        { linkId: 'colors', answer: [{ valueCoding: { code: 'red' } }, { valueCoding: { code: 'blue' } }] },
+        { linkId: 'agree', answer: [{ valueBoolean: true }] },
+        { linkId: 'name', answer: [{ valueString: 'Alice' }] },
+      ]);
+      expect(syncResponseItems([name], form.response.item)).toStrictEqual([
+        { linkId: 'name', answer: [{ valueString: 'Alice' }] },
+      ]);
+    });
+
+    test('each repetition of a group keeps its answers', () => {
+      const form = toForm(questionnaire, {
+        resourceType: 'QuestionnaireResponse',
+        status: 'completed',
         item: [
-          { linkId: 'name', type: 'string' },
-          { linkId: 'agree', type: 'boolean' },
-          {
-            linkId: 'colors',
-            type: 'choice',
-            repeats: true,
-            answerOption: [{ valueCoding: { code: 'red' } }, { valueCoding: { code: 'blue' } }],
-          },
-          { linkId: 'g1', type: 'group', item: [{ linkId: 'inner', type: 'integer' }] },
+          { linkId: 'g1', item: [{ linkId: 'inner', answer: [{ valueInteger: 3 }] }] },
+          { linkId: 'g1', item: [{ linkId: 'inner', answer: [{ valueInteger: 9 }] }] },
         ],
       });
-    }
-
-    test('answers survive a reorder', () => {
-      const values = setup();
-      values.item[0].answer = [{ value: 'Alice' }, { value: 'Bob' }];
-      values.item[1].answer = [{ value: true }];
-      values.item[2].answer = [{ value: { code: 'red' } }, { value: { code: 'blue' } }];
-      values.item[3].answer[0][0].answer = [{ value: 7 }];
-
-      values.item = [values.item[3], values.item[2], values.item[1], values.item[0]];
-      const rebuilt = rebuildFormItems(values);
-
-      expect(rebuilt[0].linkId).toBe('g1');
-      const inner = (rebuilt[0].answer as any)[0][0];
-      expect(inner.answerPath).toBe('item.0.answer.0.0');
-      expect(inner.answer).toStrictEqual([{ value: 7 }]);
-      expect(rebuilt[1].answer).toStrictEqual([{ value: { code: 'red' } }, { value: { code: 'blue' } }]);
-      expect(rebuilt[2].answer).toStrictEqual([{ value: true }]);
-      expect(rebuilt[3].answer).toStrictEqual([{ value: 'Alice' }, { value: 'Bob' }]);
+      expect(form.response.item?.filter((responseItem) => responseItem.linkId === 'g1')).toStrictEqual([
+        { linkId: 'g1', item: [{ linkId: 'inner', answer: [{ valueInteger: 3 }] }] },
+        { linkId: 'g1', item: [{ linkId: 'inner', answer: [{ valueInteger: 9 }] }] },
+      ]);
     });
 
-    test('repeated group answers survive', () => {
-      const values = setup();
-      const secondRepetition = fromFhirQuestionnaireItem(
-        { linkId: 'inner', type: 'integer' },
+    test('a new question starts with its initial answers', () => {
+      const form = toForm(questionnaire);
+      const added = fromFhirQuestionnaireItem(
+        { linkId: 'new', type: 'string', initial: [{ valueString: 'x' }] },
         null,
-        0,
-        undefined,
-        values.item[3],
-        'item.3.item',
-        'item.3.answer.1'
+        4
       );
-      secondRepetition.answer = [{ value: 9 }];
-      values.item[3].answer.push([secondRepetition]);
-      values.item[3].answer[0][0].answer = [{ value: 3 }];
-
-      const rebuilt = rebuildFormItems(values);
-      const groupAnswers = rebuilt[3].answer as any;
-      expect(groupAnswers).toHaveLength(2);
-      expect(groupAnswers[0][0].answer).toStrictEqual([{ value: 3 }]);
-      expect(groupAnswers[1][0].answer).toStrictEqual([{ value: 9 }]);
-      expect(groupAnswers[1][0].answerPath).toBe('item.3.answer.1.0');
+      expect(syncResponseItems([...form.values.item, added], form.response.item).at(-1)).toStrictEqual({
+        linkId: 'new',
+        answer: [{ valueString: 'x' }],
+      });
     });
 
-    test('new items get their initial answers', () => {
-      const values = setup();
-      values.item.push(
-        fromFhirQuestionnaireItem({ linkId: 'new', type: 'string', initial: [{ valueString: 'x' }] }, null, 4)
-      );
-      delete values.item[4].answer;
-      const rebuilt = rebuildFormItems(values);
-      expect(rebuilt[4].answer).toStrictEqual([{ value: 'x' }]);
+    test('repetitions and answers are kept within their minimum and maximum occurrences', () => {
+      const form = toForm(questionnaire);
+      const [name, , , group] = form.values.item;
+      const repetitions = (): number =>
+        syncResponseItems(form.values.item, form.response.item).filter((responseItem) => responseItem.linkId === 'g1')
+          .length;
+
+      group.minOccurs = 3;
+      expect(repetitions()).toBe(3);
+      form.response = toDraftResponse(form.values.item, form.response);
+      group.minOccurs = 1;
+      group.maxOccurs = 2;
+      expect(repetitions()).toBe(2);
+
+      name.repeats = true;
+      name.minOccurs = 2;
+      expect(syncResponseItems(form.values.item, form.response.item)[0].answer).toStrictEqual([{}, {}]);
+      answer(form, 'name', 'Alice', 'Bob');
+      name.repeats = false;
+      expect(syncResponseItems(form.values.item, form.response.item)[0].answer).toStrictEqual([
+        { valueString: 'Alice' },
+      ]);
+    });
+
+    test('a question whose initial answers change can start over from them', () => {
+      const form = toForm(questionnaire);
+      answer(form, 'name', 'Alice');
+      const before = getInitialAnswerKeys(form.values.item);
+      form.values.item[0].initial = [{ value: 'Bob' }];
+      const after = getInitialAnswerKeys(form.values.item);
+      expect(after.get('name')).not.toBe(before.get('name'));
+      expect(after.get('agree')).toBe(before.get('agree'));
+
+      const reset = syncResponseItems(form.values.item, removeResponseItems(form.response.item, new Set(['name'])));
+      expect(reset[0]).toStrictEqual({ linkId: 'name', answer: [{ valueString: 'Bob' }] });
     });
   });
 
   describe('evaluateEnableWhen', () => {
-    function setup(enableWhen: any[], extraItems: QuestionnaireItem[] = []): Record<string, any> {
-      return toFormValues({
+    function setup(enableWhen: any[], extraItems: QuestionnaireItem[] = []): TestForm {
+      return toForm({
         resourceType: 'Questionnaire',
         status: 'active',
         item: [
@@ -241,6 +357,7 @@ describe('QuestionnaireFormV2.utils', () => {
           {
             linkId: 'color',
             type: 'choice',
+            repeats: true,
             answerOption: [
               { valueCoding: { code: 'red', display: 'Red' } },
               { valueCoding: { code: 'blue', display: 'Blue' } },
@@ -253,47 +370,46 @@ describe('QuestionnaireFormV2.utils', () => {
       });
     }
 
-    function target(values: Record<string, any>): any {
-      return values.item.at(-1);
-    }
-
     test('numeric comparison', () => {
-      const values = setup([{ question: 'num', operator: '>', answerInteger: 5 }]);
-      expect(evaluateEnableWhen(values, target(values))).toBe(false);
-      values.item[0].answer[0].value = '7';
-      expect(evaluateEnableWhen(values, target(values))).toBe(true);
+      const form = setup([{ question: 'num', operator: '>', answerInteger: 5 }]);
+      expect(isEnabled(form, 'target')).toBe(false);
+      answer(form, 'num', '7');
+      expect(isEnabled(form, 'target')).toBe(true);
     });
 
     test('choice comparison with single and multiple selections', () => {
-      const values = setup([{ question: 'color', operator: '=', answerCoding: { code: 'blue' } }]);
-      values.item[1].answer = [{ value: { code: 'red' } }];
-      expect(evaluateEnableWhen(values, target(values))).toBe(false);
-      values.item[1].answer = [{ value: { code: 'red' } }, { value: { code: 'blue' } }];
-      expect(evaluateEnableWhen(values, target(values))).toBe(true);
+      const form = setup([{ question: 'color', operator: '=', answerCoding: { code: 'blue' } }]);
+      answer(form, 'color', { code: 'red' });
+      expect(isEnabled(form, 'target')).toBe(false);
+      answer(form, 'color', { code: 'red' }, { code: 'blue' });
+      expect(isEnabled(form, 'target')).toBe(true);
     });
 
     test('question inside a group', () => {
-      const values = setup([{ question: 'inner', operator: '=', answerString: 'yes' }]);
-      expect(evaluateEnableWhen(values, target(values))).toBe(false);
-      values.item[2].answer[0][0].answer[0].value = 'yes';
-      expect(evaluateEnableWhen(values, target(values))).toBe(true);
+      const form = setup([{ question: 'inner', operator: '=', answerString: 'yes' }]);
+      expect(isEnabled(form, 'target')).toBe(false);
+      answer(form, 'inner', 'yes');
+      expect(isEnabled(form, 'target')).toBe(true);
     });
 
     test('exists and empty', () => {
       const exists = setup([{ question: 'num', operator: 'exists', answerBoolean: true }]);
-      expect(evaluateEnableWhen(exists, target(exists))).toBe(false);
-      exists.item[0].answer[0].value = 3;
-      expect(evaluateEnableWhen(exists, target(exists))).toBe(true);
+      expect(isEnabled(exists, 'target')).toBe(false);
+      answer(exists, 'num', 3);
+      expect(isEnabled(exists, 'target')).toBe(true);
 
       const empty = setup([{ question: 'num', operator: 'exists', answerBoolean: false }]);
-      expect(target(empty).enableWhen[0].operator).toBe('empty');
-      expect(evaluateEnableWhen(empty, target(empty))).toBe(true);
+      expect(getItem(empty, 'target').enableWhen[0].operator).toBe('empty');
+      expect(isEnabled(empty, 'target')).toBe(true);
+      // A repeating choice question with nothing selected has no answers at all
+      const noColor = setup([{ question: 'color', operator: 'exists', answerBoolean: false }]);
+      expect(isEnabled(noColor, 'target')).toBe(true);
     });
 
     test('incomplete conditions are ignored', () => {
-      const values = setup([]);
-      target(values).enableWhen = [{ question: null, operator: '', answer: '' }];
-      expect(evaluateEnableWhen(values, target(values))).toBe(true);
+      const form = setup([]);
+      getItem(form, 'target').enableWhen = [{ question: null, operator: '', answer: '' }] as any;
+      expect(isEnabled(form, 'target')).toBe(true);
     });
   });
 
@@ -496,25 +612,19 @@ describe('QuestionnaireFormV2.utils', () => {
       ],
     };
 
-    function prefill(): Record<string, any> {
-      return {
-        ...questionnaire,
-        item: (questionnaire.item ?? []).map((item, index) =>
-          fromFhirQuestionnaireItem(item, questionnaire, index, response.item)
-        ),
-      };
+    function prefill(): TestForm {
+      return toForm(questionnaire, response);
     }
 
     test('prefill reads group repetitions as sibling items', () => {
-      const values = prefill();
-      const address = values.item[3];
-      expect(address.answer).toHaveLength(2);
-      expect(address.answer[1][0].answerPath).toBe('item.3.answer.1.0');
-      expect(address.answer[1][0].answer).toStrictEqual([{ value: 'Vienna' }]);
+      const { response: draft } = prefill();
+      expect(draft.item?.filter((responseItem) => responseItem.linkId === 'address')).toStrictEqual(
+        response.item?.slice(3)
+      );
     });
 
     test('round trip produces standard FHIR', () => {
-      const result = toFhirQuestionnaireResponse(prefill());
+      const result = submit(prefill());
       expect(result.questionnaire).toBe('Questionnaire/q-1');
       expect(result.status).toBe('completed');
       // Hidden and disabled (age is not > 60) items are left out; groups repeat as sibling items with nested `item`
@@ -522,7 +632,7 @@ describe('QuestionnaireFormV2.utils', () => {
     });
 
     test('top-level items outside pages are left out of a paginated response', () => {
-      const values = toFormValues({
+      const form = toForm({
         resourceType: 'Questionnaire',
         status: 'active',
         item: [
@@ -540,14 +650,13 @@ describe('QuestionnaireFormV2.utils', () => {
           },
         ],
       });
-      const result = toFhirQuestionnaireResponse(values);
-      expect(result.item).toStrictEqual([
+      expect(submit(form).item).toStrictEqual([
         { linkId: 'page', item: [{ linkId: 'inside', answer: [{ valueString: 'shown' }] }] },
       ]);
     });
 
     test('display items are not in the response, and do not make a group present', () => {
-      const values = toFormValues({
+      const form = toForm({
         resourceType: 'Questionnaire',
         status: 'active',
         item: [
@@ -562,20 +671,20 @@ describe('QuestionnaireFormV2.utils', () => {
           },
         ],
       });
-      expect(toFhirQuestionnaireResponse(values).item).toStrictEqual([]);
+      expect(submit(form).item).toStrictEqual([]);
 
-      values.item[1].answer[0][1].answer[0].value = 'answer';
-      expect(toFhirQuestionnaireResponse(values).item).toStrictEqual([
+      answer(form, 'q', 'answer');
+      expect(submit(form).item).toStrictEqual([
         { linkId: 'group', item: [{ linkId: 'q', answer: [{ valueString: 'answer' }] }] },
       ]);
     });
 
     test('unanswered questions are left out and numbers are typed', () => {
-      const values = prefill();
-      values.item[0].answer = [{ value: '  ' }];
-      values.item[1].answer = [{ value: '61' }];
-      values.item[5].answer = [{ value: 'yes' }];
-      const result = toFhirQuestionnaireResponse(values);
+      const form = prefill();
+      answer(form, 'name', '  ');
+      answer(form, 'age', '61');
+      answer(form, 'follow-up', 'yes');
+      const result = submit(form);
       expect(result.item?.map((item) => item.linkId)).toStrictEqual([
         'age',
         'colors',
@@ -603,35 +712,35 @@ describe('QuestionnaireFormV2.utils', () => {
   });
 
   describe('validateFormAnswers', () => {
-    function setup(item: QuestionnaireItem): Record<string, any> {
-      return toFormValues({ resourceType: 'Questionnaire', status: 'active', item: [item] });
+    function setup(item: QuestionnaireItem): TestForm {
+      return toForm({ resourceType: 'Questionnaire', status: 'active', item: [item] });
     }
 
     test('required', () => {
-      const values = setup({ linkId: 'q', type: 'string', text: 'Name', required: true });
-      expect(validateFormAnswers(values)).toStrictEqual({ 'item.0.answer.0.value': 'This field is required' });
-      values.item[0].answer = [{ value: 'Alice' }];
-      expect(validateFormAnswers(values)).toStrictEqual({});
+      const form = setup({ linkId: 'q', type: 'string', text: 'Name', required: true });
+      expect(validate(form)).toStrictEqual({ 'item.0.answer.0': 'This field is required' });
+      answer(form, 'q', 'Alice');
+      expect(validate(form)).toStrictEqual({});
     });
 
     test('regex and length', () => {
-      const values = setup({
+      const form = setup({
         linkId: 'q',
         type: 'string',
         text: 'Zip',
         maxLength: 5,
         extension: [{ url: 'http://hl7.org/fhir/StructureDefinition/regex', valueString: '^[0-9]+$' }],
       });
-      values.item[0].answer = [{ value: 'abc' }];
-      expect(validateFormAnswers(values)).toStrictEqual({ 'item.0.answer.0.value': 'Zip format is invalid' });
-      values.item[0].answer = [{ value: '123456' }];
-      expect(validateFormAnswers(values)).toStrictEqual({ 'item.0.answer.0.value': 'Zip cannot exceed 5 characters' });
-      values.item[0].answer = [{ value: '12345' }];
-      expect(validateFormAnswers(values)).toStrictEqual({});
+      answer(form, 'q', 'abc');
+      expect(validate(form)).toStrictEqual({ 'item.0.answer.0': 'Zip format is invalid' });
+      answer(form, 'q', '123456');
+      expect(validate(form)).toStrictEqual({ 'item.0.answer.0': 'Zip cannot exceed 5 characters' });
+      answer(form, 'q', '12345');
+      expect(validate(form)).toStrictEqual({});
     });
 
     test('value range', () => {
-      const values = setup({
+      const form = setup({
         linkId: 'q',
         type: 'integer',
         text: 'Age',
@@ -640,28 +749,28 @@ describe('QuestionnaireFormV2.utils', () => {
           { url: 'http://hl7.org/fhir/StructureDefinition/maxValue', valueInteger: 99 },
         ],
       });
-      values.item[0].answer = [{ value: '17' }];
-      expect(validateFormAnswers(values)).toStrictEqual({ 'item.0.answer.0.value': 'Age must be at least 18' });
-      values.item[0].answer = [{ value: '100' }];
-      expect(validateFormAnswers(values)).toStrictEqual({ 'item.0.answer.0.value': 'Age cannot exceed 99' });
+      answer(form, 'q', '17');
+      expect(validate(form)).toStrictEqual({ 'item.0.answer.0': 'Age must be at least 18' });
+      answer(form, 'q', '100');
+      expect(validate(form)).toStrictEqual({ 'item.0.answer.0': 'Age cannot exceed 99' });
     });
 
     test('a regex must match the whole value', () => {
-      const values = setup({
+      const form = setup({
         linkId: 'q',
         type: 'string',
         text: 'Zip',
         extension: [{ url: 'http://hl7.org/fhir/StructureDefinition/regex', valueString: '[0-9]{5}' }],
       });
-      values.item[0].answer = [{ value: 'abc12345xyz' }];
-      expect(validateFormAnswers(values)).toStrictEqual({ 'item.0.answer.0.value': 'Zip format is invalid' });
-      values.item[0].answer = [{ value: '1234' }];
-      expect(validateFormAnswers(values)).toStrictEqual({ 'item.0.answer.0.value': 'Zip format is invalid' });
-      values.item[0].answer = [{ value: '12345' }];
-      expect(validateFormAnswers(values)).toStrictEqual({});
+      answer(form, 'q', 'abc12345xyz');
+      expect(validate(form)).toStrictEqual({ 'item.0.answer.0': 'Zip format is invalid' });
+      answer(form, 'q', '1234');
+      expect(validate(form)).toStrictEqual({ 'item.0.answer.0': 'Zip format is invalid' });
+      answer(form, 'q', '12345');
+      expect(validate(form)).toStrictEqual({});
       // An empty answer is not checked (only required is)
-      values.item[0].answer = [{ value: '' }];
-      expect(validateFormAnswers(values)).toStrictEqual({});
+      answer(form, 'q', '');
+      expect(validate(form)).toStrictEqual({});
     });
 
     test('dateTime values keep their local time through save and load', () => {
@@ -675,7 +784,7 @@ describe('QuestionnaireFormV2.utils', () => {
         current = fromFhirQuestionnaireItem(toFhirQuestionnaireItem(current), null, 0);
       }
       expect(current.initial[0].value).toBe('2026-09-29T10:00');
-      expect(current.answer[0].value).toBe('2026-09-29T10:00');
+      expect(getAnswerValue(current, toDraftResponse([current]).item?.[0].answer?.[0])).toBe('2026-09-29T10:00');
       expect(current.minValue).toBe('2026-09-29T09:30');
       expect(current.maxValue).toBe('2026-09-29T18:00');
       // Saved as the UTC instant of that local time
@@ -685,49 +794,49 @@ describe('QuestionnaireFormV2.utils', () => {
     });
 
     test('a URL must be a full link, within its max length', () => {
-      const values = setup({ linkId: 'q', type: 'url', text: 'Website', maxLength: 25 });
+      const form = setup({ linkId: 'q', type: 'url', text: 'Website', maxLength: 25 });
       for (const valid of [
         'https://example.com',
         'http://localhost:3000/a',
         'ftp://files.example.com',
         'mailto:a@b.co',
       ]) {
-        values.item[0].answer = [{ value: valid }];
-        expect(validateFormAnswers(values)).toStrictEqual({});
+        answer(form, 'q', valid);
+        expect(validate(form)).toStrictEqual({});
       }
       for (const invalid of ['example.com', 'www.example.com', 'https://', 'hello world', 'javascript:alert(1)']) {
-        values.item[0].answer = [{ value: invalid }];
-        expect(validateFormAnswers(values)).toStrictEqual({
-          'item.0.answer.0.value': 'Website must be a full link, e.g. https://example.com',
+        answer(form, 'q', invalid);
+        expect(validate(form)).toStrictEqual({
+          'item.0.answer.0': 'Website must be a full link, e.g. https://example.com',
         });
       }
-      values.item[0].answer = [{ value: 'https://example.com/a-long-path' }];
-      expect(validateFormAnswers(values)).toStrictEqual({
-        'item.0.answer.0.value': 'Website cannot exceed 25 characters',
+      answer(form, 'q', 'https://example.com/a-long-path');
+      expect(validate(form)).toStrictEqual({
+        'item.0.answer.0': 'Website cannot exceed 25 characters',
       });
-      expect(toFhirQuestionnaireItem(values.item[0]).maxLength).toBe(25);
+      expect(toFhirQuestionnaireItem(form.values.item[0]).maxLength).toBe(25);
     });
 
     test('an invalid regex in the definition is ignored', () => {
-      const values = setup({
+      const form = setup({
         linkId: 'q',
         type: 'string',
         extension: [{ url: 'http://hl7.org/fhir/StructureDefinition/regex', valueString: '([' }],
       });
-      values.item[0].answer = [{ value: 'anything' }];
-      expect(validateFormAnswers(values)).toStrictEqual({});
+      answer(form, 'q', 'anything');
+      expect(validate(form)).toStrictEqual({});
     });
 
     test('required repeating choice reports on the answer list', () => {
-      const values = setup({
+      const form = setup({
         linkId: 'q',
         type: 'choice',
         required: true,
         repeats: true,
         answerOption: [{ valueCoding: { code: 'a' } }],
       });
-      values.item[0].answer = [];
-      expect(validateFormAnswers(values)).toStrictEqual({ 'item.0.answer': 'This field is required' });
+      expect(form.response.item?.[0].answer).toStrictEqual([]);
+      expect(validate(form)).toStrictEqual({ 'item.0.answer': 'This field is required' });
     });
   });
 
@@ -867,13 +976,8 @@ describe('QuestionnaireFormV2.utils', () => {
       ],
     };
 
-    function prefill(): Record<string, any> {
-      return {
-        ...questionnaire,
-        item: (questionnaire.item ?? []).map((item, index) =>
-          fromFhirQuestionnaireItem(item, questionnaire, index, response.item)
-        ),
-      };
+    function prefill(): TestForm {
+      return toForm(questionnaire, response);
     }
 
     test('follow-up items are kept on save', () => {
@@ -887,45 +991,43 @@ describe('QuestionnaireFormV2.utils', () => {
     });
 
     test('each answer has its own follow-up items, prefilled from answer.item', () => {
-      const values = prefill();
-      const meds = values.item[1];
-      expect(meds.item[0].path).toBe('item.1.item.0');
-      expect(meds.answer).toHaveLength(2);
-      expect(meds.answer[0].item[0].answerPath).toBe('item.1.answer.0.item.0');
-      expect(meds.answer[0].item[0].answer).toStrictEqual([{ value: '100 mg' }]);
-      expect(meds.answer[1].item[0].answerPath).toBe('item.1.answer.1.item.0');
+      const form = prefill();
+      expect(form.values.item[1].item[0].path).toBe('item.1.item.0');
+      expect(form.response.item?.[1].answer).toStrictEqual([
+        {
+          valueCoding: { system: 'x', code: 'a', display: 'Aspirin' },
+          item: [{ linkId: 'dose', text: 'Dose', answer: [{ valueString: '100 mg' }] }],
+        },
+        { valueCoding: { system: 'x', code: 'b', display: 'Ibuprofen' }, item: [{ linkId: 'dose', answer: [{}] }] },
+      ]);
     });
 
     test('a condition on the question is evaluated against the answer the follow-up item belongs to', () => {
-      const values = prefill();
-      const meds = values.item[1];
-      expect(evaluateEnableWhen(values, meds.answer[0].item[0])).toBe(true);
-      expect(evaluateEnableWhen(values, meds.answer[1].item[0])).toBe(false);
+      const form = prefill();
+      expect(isEnabled(form, 'dose', 'item.1.answer.0.item')).toBe(true);
+      expect(isEnabled(form, 'dose', 'item.1.answer.1.item')).toBe(false);
 
-      values.item[0].answer[0].value = false;
-      expect(evaluateEnableWhen(values, values.item[0].answer[0].item[0])).toBe(false);
+      answer(form, 'smoke', false);
+      expect(isEnabled(form, 'how-many', 'item.0.answer.0.item')).toBe(false);
     });
 
     test('follow-up answers are written under their answer', () => {
-      const result = toFhirQuestionnaireResponse(prefill());
-      expect(result.item).toStrictEqual(response.item);
+      expect(submit(prefill()).item).toStrictEqual(response.item);
     });
 
-    test('rebuildFormItems keeps follow-up answers', () => {
-      const values = prefill();
-      const rebuilt = rebuildFormItems(values);
-      expect(rebuilt[1].answer[0].item?.[0].answer).toStrictEqual([{ value: '100 mg' }]);
-      expect(rebuilt[0].answer[0].item?.[0].answer).toStrictEqual([{ value: 10 }]);
+    test('follow-up answers are kept as the questionnaire is edited', () => {
+      const form = prefill();
+      expect(syncResponseItems(rebuildFormItems(form.values), form.response.item)).toStrictEqual(form.response.item);
     });
 
     test('follow-up items are validated when their answer is given', () => {
-      const values = prefill();
-      values.item[0].item[0].minValue = 20;
-      expect(validateFormAnswers(values)).toStrictEqual({
-        'item.0.answer.0.item.0.answer.0.value': 'How many per day? must be at least 20',
+      const form = prefill();
+      form.values.item[0].item[0].minValue = 20;
+      expect(validate(form)).toStrictEqual({
+        'item.0.answer.0.item.0.answer.0': 'How many per day? must be at least 20',
       });
-      values.item[0].answer[0].value = false;
-      expect(validateFormAnswers(values)).toStrictEqual({});
+      answer(form, 'smoke', false);
+      expect(validate(form)).toStrictEqual({});
     });
   });
 
@@ -935,8 +1037,8 @@ describe('QuestionnaireFormV2.utils', () => {
       valueCodeableConcept: { coding: [{ system: 'http://hl7.org/fhir/questionnaire-item-control', code: 'page' }] },
     };
 
-    function createValues(): Record<string, any> {
-      return toFormValues({
+    function createForm(): TestForm {
+      return toForm({
         resourceType: 'Questionnaire',
         status: 'active',
         item: [
@@ -961,62 +1063,96 @@ describe('QuestionnaireFormV2.utils', () => {
       });
     }
 
-    // The answer copies the renderer shows: page repetition 0 -> contact repetition 0 -> ...
-    const contactCopy = (values: Record<string, any>): any => values.item[0].answer[0][0];
-    const streetCopy = (values: Record<string, any>): any => contactCopy(values).answer[0][0].answer[0][0];
-    const emailCopy = (values: Record<string, any>): any => contactCopy(values).answer[0][1];
+    // Where the renderer answers them: page repetition 0 -> contact repetition 0 -> ...
+    const contactContext = 'item.0.item';
+    const emailContext = 'item.0.item.0.item';
 
-    test('conditions are read from the definition, so an edit applies to answer copies right away', () => {
-      const values = createValues();
-      expect(evaluateEnableWhen(values, emailCopy(values))).toBe(true);
-      values.item[0].item[0].item[1].enableWhen = [
-        { question: values.item[0].item[0].item[0].item[0], operator: 'exists', answer: true },
+    test('conditions are read from the definition, so an edit applies right away', () => {
+      const form = createForm();
+      expect(isEnabled(form, 'email', emailContext)).toBe(true);
+      getItem(form, 'email').enableWhen = [
+        { question: getItem(form, 'street') as unknown as QuestionnaireItem, operator: 'exists', answer: true },
       ];
-      expect(emailCopy(values).enableWhen).toStrictEqual([]);
-      expect(evaluateEnableWhen(values, emailCopy(values))).toBe(false);
-      streetCopy(values).answer[0].value = 'Main St';
-      expect(evaluateEnableWhen(values, emailCopy(values))).toBe(true);
+      expect(isEnabled(form, 'email', emailContext)).toBe(false);
+      answer(form, 'street', 'Main St');
+      expect(isEnabled(form, 'email', emailContext)).toBe(true);
+    });
+
+    test('a condition on a question in the same group is about its own repetition', () => {
+      const form = toForm({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          {
+            linkId: 'pain',
+            type: 'group',
+            repeats: true,
+            item: [
+              { linkId: 'hurts', type: 'boolean' },
+              {
+                linkId: 'where',
+                type: 'string',
+                enableWhen: [{ question: 'hurts', operator: '=', answerBoolean: true }],
+              },
+            ],
+          },
+        ],
+      });
+      form.response = toDraftResponse(form.values.item, {
+        resourceType: 'QuestionnaireResponse',
+        status: 'in-progress',
+        item: [
+          { linkId: 'pain', item: [{ linkId: 'hurts', answer: [{ valueBoolean: false }] }] },
+          { linkId: 'pain', item: [{ linkId: 'hurts', answer: [{ valueBoolean: true }] }] },
+        ],
+      });
+      expect(isEnabled(form, 'where', 'item.0.item')).toBe(false);
+      expect(isEnabled(form, 'where', 'item.1.item')).toBe(true);
     });
 
     test('an item in a read-only group is read only', () => {
-      const values = createValues();
-      expect(isReadOnlyFormItem(values, streetCopy(values))).toBe(false);
-      values.item[0].item[0].readOnly = true;
-      expect(isReadOnlyFormItem(values, streetCopy(values))).toBe(true);
-      expect(isReadOnlyFormItem(values, contactCopy(values))).toBe(true);
-      expect(isReadOnlyFormItem(values, values.item[0])).toBe(false);
+      const form = createForm();
+      expect(isReadOnlyFormItem(form.values, getItem(form, 'street'))).toBe(false);
+      getItem(form, 'contact').readOnly = true;
+      expect(isReadOnlyFormItem(form.values, getItem(form, 'street'))).toBe(true);
+      expect(isReadOnlyFormItem(form.values, getItem(form, 'contact'))).toBe(true);
+      expect(isReadOnlyFormItem(form.values, getItem(form, 'page'))).toBe(false);
     });
 
     test('a required group needs at least one answered question', () => {
-      const values = createValues();
-      expect(getRequiredGroupError(values, contactCopy(values))).toBeUndefined();
+      const form = createForm();
+      const groupError = (): string | undefined =>
+        getRequiredGroupError(form.values, form.response, getItem(form, 'contact'), contactContext);
+      expect(groupError()).toBeUndefined();
 
-      values.item[0].item[0].required = true;
-      expect(getRequiredGroupError(values, contactCopy(values))).toBe('Answer at least one question in this group');
-      expect(validateFormAnswers(values)).toStrictEqual({
-        'item.0.answer.0.0.answer': 'Answer at least one question in this group',
+      getItem(form, 'contact').required = true;
+      expect(groupError()).toBe('Answer at least one question in this group');
+      expect(validate(form)).toStrictEqual({
+        [getGroupErrorKey(contactContext, 'contact')]: 'Answer at least one question in this group',
       });
 
       // An answer in a nested group counts
-      streetCopy(values).answer[0].value = 'Main St';
-      expect(getRequiredGroupError(values, contactCopy(values))).toBeUndefined();
-      expect(validateFormAnswers(values)).toStrictEqual({});
+      answer(form, 'street', 'Main St');
+      expect(groupError()).toBeUndefined();
+      expect(validate(form)).toStrictEqual({});
 
       // Unless the question is hidden: it is not in the response
-      values.item[0].item[0].item[0].item[0].hidden = true;
-      expect(getRequiredGroupError(values, contactCopy(values))).toBeDefined();
+      getItem(form, 'street').hidden = true;
+      expect(groupError()).toBeDefined();
     });
 
     test('a required page needs an answered question; display text does not count', () => {
-      const values = createValues();
-      values.item[0].required = true;
-      expect(getRequiredGroupError(values, values.item[0])).toBe('Answer at least one question on this page');
-      emailCopy(values).answer[0].value = 'a@example.com';
-      expect(getRequiredGroupError(values, values.item[0])).toBeUndefined();
+      const form = createForm();
+      getItem(form, 'page').required = true;
+      expect(getRequiredGroupError(form.values, form.response, getItem(form, 'page'), 'item')).toBe(
+        'Answer at least one question on this page'
+      );
+      answer(form, 'email', 'a@example.com');
+      expect(getRequiredGroupError(form.values, form.response, getItem(form, 'page'), 'item')).toBeUndefined();
     });
 
     test('a required repeating group needs minOccurs answered repetitions', () => {
-      const values = toFormValues({
+      const form = toForm({
         resourceType: 'Questionnaire',
         status: 'active',
         item: [
@@ -1030,21 +1166,21 @@ describe('QuestionnaireFormV2.utils', () => {
           },
         ],
       });
-      expect(values.item[0].answer).toHaveLength(2);
-      values.item[0].answer[0][0].answer[0].value = 'Aspirin';
-      expect(getRequiredGroupError(values, values.item[0])).toBe(
+      expect(form.response.item).toHaveLength(2);
+      answer(form, 'item.0.item.0', 'Aspirin');
+      expect(getRequiredGroupError(form.values, form.response, getItem(form, 'meds'), 'item')).toBe(
         'Answer at least one question in this group in 2 repetitions'
       );
-      values.item[0].answer[1][0].answer[0].value = 'Ibuprofen';
-      expect(getRequiredGroupError(values, values.item[0])).toBeUndefined();
+      answer(form, 'item.1.item.0', 'Ibuprofen');
+      expect(getRequiredGroupError(form.values, form.response, getItem(form, 'meds'), 'item')).toBeUndefined();
     });
 
     test('read-only groups and questions are not required of the respondent', () => {
-      const values = createValues();
-      values.item[0].item[0].required = true;
-      values.item[0].item[0].item[1].required = true;
-      values.item[0].item[0].readOnly = true;
-      expect(validateFormAnswers(values)).toStrictEqual({});
+      const form = createForm();
+      getItem(form, 'contact').required = true;
+      getItem(form, 'email').required = true;
+      getItem(form, 'contact').readOnly = true;
+      expect(validate(form)).toStrictEqual({});
     });
   });
 
@@ -1097,17 +1233,17 @@ describe('QuestionnaireFormV2.utils', () => {
     });
 
     test('answers are written with the value type of their option; typed answers as strings', () => {
-      const values = toFormValues({
+      const form = toForm({
         resourceType: 'Questionnaire',
         status: 'active',
         item: [colors, count, time, { ...colors, linkId: 'open', type: 'open-choice' }],
       });
       // The initially selected plain option is the initial answer
-      expect(values.item[0].answer).toStrictEqual([{ value: 'Blue' }]);
-      values.item[1].answer = [{ value: 2 }];
-      values.item[2].answer = [{ value: '17:30:00' }];
-      values.item[3].answer = [{ value: 'Green' }];
-      expect(toFhirQuestionnaireResponse(values).item?.map((item) => item.answer)).toStrictEqual([
+      expect(form.response.item?.[0].answer).toStrictEqual([{ valueString: 'Blue' }]);
+      answer(form, 'count', 2);
+      answer(form, 'time', '17:30:00');
+      answer(form, 'open', 'Green');
+      expect(submit(form).item?.map((item) => item.answer)).toStrictEqual([
         [{ valueString: 'Blue' }],
         [{ valueInteger: 2 }],
         [{ valueTime: '17:30:00' }],
@@ -1116,24 +1252,24 @@ describe('QuestionnaireFormV2.utils', () => {
     });
 
     test('prefilled choice answers match their options', () => {
-      const questionnaire: Questionnaire = { resourceType: 'Questionnaire', status: 'active', item: [time, count] };
-      const item = fromFhirQuestionnaireItem(time, questionnaire, 0, [
-        { linkId: 'time', answer: [{ valueTime: '17:30:00' }] },
-      ]);
-      expect(item.answer).toStrictEqual([{ value: '17:30:00' }]);
-      const rebuilt = rebuildFormItems({
-        ...questionnaire,
-        item: [
-          item,
-          fromFhirQuestionnaireItem(count, questionnaire, 1, [{ linkId: 'count', answer: [{ valueInteger: 2 }] }]),
-        ],
-      });
-      expect(rebuilt[0].answer).toStrictEqual([{ value: '17:30:00' }]);
-      expect(rebuilt[1].answer).toStrictEqual([{ value: 2 }]);
+      const form = toForm(
+        { resourceType: 'Questionnaire', status: 'active', item: [time, count] },
+        {
+          resourceType: 'QuestionnaireResponse',
+          status: 'completed',
+          item: [
+            { linkId: 'time', answer: [{ valueTime: '17:30:00' }] },
+            { linkId: 'count', answer: [{ valueInteger: 2 }] },
+          ],
+        }
+      );
+      const [timeItem, countItem] = form.values.item;
+      expect(getAnswerValue(timeItem, form.response.item?.[0].answer?.[0])).toBe(timeItem.answerOption[1].value);
+      expect(getAnswerValue(countItem, form.response.item?.[1].answer?.[0])).toBe(countItem.answerOption[1].value);
     });
 
     test('number conditions compare numbers, and ignore unanswered questions', () => {
-      const values = toFormValues({
+      const form = toForm({
         resourceType: 'Questionnaire',
         status: 'active',
         item: [
@@ -1142,14 +1278,14 @@ describe('QuestionnaireFormV2.utils', () => {
           { linkId: 'none', type: 'string', enableWhen: [{ question: 'children', operator: '<', answerInteger: 1 }] },
         ],
       });
-      // Typed into a text field, answers are strings
-      values.item[0].answer = [{ value: '10' }];
-      expect(evaluateEnableWhen(values, values.item[1])).toBe(true);
-      values.item[0].answer = [{ value: '' }];
-      expect(evaluateEnableWhen(values, values.item[1])).toBe(false);
-      expect(evaluateEnableWhen(values, values.item[2])).toBe(false);
-      values.item[0].answer = [{ value: '0' }];
-      expect(evaluateEnableWhen(values, values.item[2])).toBe(true);
+      // Typed into a number field, answers are text until they are written
+      answer(form, 'children', '10');
+      expect(isEnabled(form, 'many')).toBe(true);
+      answer(form, 'children', '');
+      expect(isEnabled(form, 'many')).toBe(false);
+      expect(isEnabled(form, 'none')).toBe(false);
+      answer(form, 'children', '0');
+      expect(isEnabled(form, 'none')).toBe(true);
     });
 
     test('conditions on plain-value options are typed and evaluated by value', () => {
@@ -1167,22 +1303,22 @@ describe('QuestionnaireFormV2.utils', () => {
           { linkId: 'two', type: 'string', enableWhen: [{ question: 'count', operator: '!=', answerInteger: 2 }] },
         ],
       };
-      const values = toFormValues(questionnaire);
-      expect(toFhirQuestionnaire(values).item?.[2].enableWhen).toStrictEqual([
+      const form = toForm(questionnaire);
+      expect(toFhirQuestionnaire(form.values).item?.[2].enableWhen).toStrictEqual([
         { question: 'color', operator: '=', answerString: 'Red' },
       ]);
-      expect(toFhirQuestionnaire(values).item?.[3].enableWhen).toStrictEqual([
+      expect(toFhirQuestionnaire(form.values).item?.[3].enableWhen).toStrictEqual([
         { question: 'count', operator: '!=', answerInteger: 2 },
       ]);
 
-      expect(evaluateEnableWhen(values, values.item[2])).toBe(false);
-      values.item[0].answer = [{ value: 'Red' }];
-      expect(evaluateEnableWhen(values, values.item[2])).toBe(true);
+      expect(isEnabled(form, 'why-red')).toBe(false);
+      answer(form, 'color', 'Red');
+      expect(isEnabled(form, 'why-red')).toBe(true);
 
-      values.item[1].answer = [{ value: 2 }];
-      expect(evaluateEnableWhen(values, values.item[3])).toBe(false);
-      values.item[1].answer = [{ value: 1 }];
-      expect(evaluateEnableWhen(values, values.item[3])).toBe(true);
+      answer(form, 'count', 2);
+      expect(isEnabled(form, 'two')).toBe(false);
+      answer(form, 'count', 1);
+      expect(isEnabled(form, 'two')).toBe(true);
     });
   });
 
@@ -1190,7 +1326,7 @@ describe('QuestionnaireFormV2.utils', () => {
     const kg = { system: 'http://unitsofmeasure.org', code: 'kg', display: 'kilogram' };
     const lb = { system: 'http://unitsofmeasure.org', code: '[lb_av]', display: 'pound' };
 
-    test('answers keep their comparator and unit through prefill, rebuild and the response', () => {
+    test('answers keep their comparator and unit through prefill and the response', () => {
       const weight: QuestionnaireItem = {
         linkId: 'weight',
         type: 'quantity',
@@ -1200,21 +1336,21 @@ describe('QuestionnaireFormV2.utils', () => {
           { url: 'http://hl7.org/fhir/StructureDefinition/questionnaire-unitOption', valueCoding: lb },
         ],
       };
-      const questionnaire: Questionnaire = { resourceType: 'Questionnaire', status: 'active', item: [weight] };
-      const answer = { comparator: '<' as const, value: 80, unit: 'kilogram', system: kg.system, code: 'kg' };
-      const item = fromFhirQuestionnaireItem(weight, questionnaire, 0, [
-        { linkId: 'weight', answer: [{ valueQuantity: answer }] },
-      ]);
-      expect(item.answer).toStrictEqual([{ value: answer }]);
-      const rebuilt = rebuildFormItems({ ...questionnaire, item: [item] });
-      expect(rebuilt[0].answer).toStrictEqual([{ value: answer }]);
-      expect(toFhirQuestionnaireResponse({ ...questionnaire, item: rebuilt }).item?.[0].answer).toStrictEqual([
-        { valueQuantity: answer },
-      ]);
+      const quantity = { comparator: '<' as const, value: 80, unit: 'kilogram', system: kg.system, code: 'kg' };
+      const form = toForm(
+        { resourceType: 'Questionnaire', status: 'active', item: [weight] },
+        {
+          resourceType: 'QuestionnaireResponse',
+          status: 'completed',
+          item: [{ linkId: 'weight', answer: [{ valueQuantity: quantity }] }],
+        }
+      );
+      expect(getAnswerValue(getItem(form, 'weight'), form.response.item?.[0].answer?.[0])).toStrictEqual(quantity);
+      expect(submit(form).item?.[0].answer).toStrictEqual([{ valueQuantity: quantity }]);
     });
 
     test('a typed value is written as a number; without a chosen unit the fixed unit is used', () => {
-      const values = toFormValues({
+      const form = toForm({
         resourceType: 'Questionnaire',
         status: 'active',
         item: [
@@ -1226,16 +1362,17 @@ describe('QuestionnaireFormV2.utils', () => {
           },
         ],
       });
-      values.item[0].answer = [{ value: { value: '1.5', unit: 'cups' } }];
-      values.item[1].answer = [{ value: { value: '72' } }];
-      expect(toFhirQuestionnaireResponse(values).item?.map((item) => item.answer)).toStrictEqual([
+      answer(form, 'free', { value: '1.5', unit: 'cups' });
+      answer(form, 'fixed', { value: '72' });
+      expect(form.response.item?.[0].answer).toStrictEqual([{ valueQuantity: { value: 1.5, unit: 'cups' } }]);
+      expect(submit(form).item?.map((item) => item.answer)).toStrictEqual([
         [{ valueQuantity: { value: 1.5, unit: 'cups' } }],
         [{ valueQuantity: { value: 72, unit: 'kilogram', system: 'http://unitsofmeasure.org', code: 'kg' } }],
       ]);
     });
 
     test('a quantity with only a unit is unanswered; ranges and conditions use its value', () => {
-      const values = toFormValues({
+      const form = toForm({
         resourceType: 'Questionnaire',
         status: 'active',
         item: [
@@ -1253,20 +1390,23 @@ describe('QuestionnaireFormV2.utils', () => {
           },
         ],
       });
-      values.item[0].answer = [{ value: { value: undefined, unit: 'kg' } }];
-      expect(isEmptyAnswerValue(values.item[0].answer[0].value)).toBe(true);
-      expect(validateFormAnswers(values)).toStrictEqual({ 'item.0.answer.0.value': 'This field is required' });
+      answer(form, 'weight', { value: undefined, unit: 'kg' });
+      expect(form.response.item?.[0].answer).toStrictEqual([{ valueQuantity: { unit: 'kg' } }]);
+      expect(isEmptyAnswerValue(getAnswerValue(getItem(form, 'weight'), form.response.item?.[0].answer?.[0]))).toBe(
+        true
+      );
+      expect(validate(form)).toStrictEqual({ 'item.0.answer.0': 'This field is required' });
 
-      values.item[0].answer = [{ value: { value: '120', unit: 'kg' } }];
-      expect(validateFormAnswers(values)).toStrictEqual({});
-      expect(evaluateEnableWhen(values, values.item[1])).toBe(true);
-      values.item[0].answer = [{ value: { value: '1', unit: 'kg' } }];
-      expect(validateFormAnswers(values)).toStrictEqual({ 'item.0.answer.0.value': 'Weight must be at least 2' });
-      expect(evaluateEnableWhen(values, values.item[1])).toBe(false);
+      answer(form, 'weight', { value: '120', unit: 'kg' });
+      expect(validate(form)).toStrictEqual({});
+      expect(isEnabled(form, 'heavy')).toBe(true);
+      answer(form, 'weight', { value: '1', unit: 'kg' });
+      expect(validate(form)).toStrictEqual({ 'item.0.answer.0': 'Weight must be at least 2' });
+      expect(isEnabled(form, 'heavy')).toBe(false);
     });
 
     test('with one allowed unit, that unit is the unit of the answer', () => {
-      const values = toFormValues({
+      const form = toForm({
         resourceType: 'Questionnaire',
         status: 'active',
         item: [
@@ -1277,8 +1417,8 @@ describe('QuestionnaireFormV2.utils', () => {
           },
         ],
       });
-      values.item[0].answer = [{ value: { value: '70' } }];
-      expect(toFhirQuestionnaireResponse(values).item?.[0].answer).toStrictEqual([
+      answer(form, 'weight', { value: '70' });
+      expect(submit(form).item?.[0].answer).toStrictEqual([
         { valueQuantity: { value: 70, unit: 'kilogram', system: 'http://unitsofmeasure.org', code: 'kg' } },
       ]);
     });
@@ -1500,15 +1640,14 @@ describe('QuestionnaireFormV2.utils', () => {
         status: 'active',
         item: [{ linkId: 'doctor', type: 'reference', text: 'Doctor' }],
       };
-      const answer = { reference: 'Practitioner/123', display: 'Dr. Alice Smith' };
-      const item = fromFhirQuestionnaireItem(questionnaire.item?.[0] as QuestionnaireItem, questionnaire, 0, [
-        { linkId: 'doctor', answer: [{ valueReference: answer }] },
-      ]);
-      expect(item.answer).toStrictEqual([{ value: answer }]);
-      const rebuilt = rebuildFormItems({ ...questionnaire, item: [item] });
-      expect(toFhirQuestionnaireResponse({ ...questionnaire, item: rebuilt }).item?.[0].answer).toStrictEqual([
-        { valueReference: answer },
-      ]);
+      const reference = { reference: 'Practitioner/123', display: 'Dr. Alice Smith' };
+      const form = toForm(questionnaire, {
+        resourceType: 'QuestionnaireResponse',
+        status: 'completed',
+        item: [{ linkId: 'doctor', answer: [{ valueReference: reference }] }],
+      });
+      expect(getAnswerValue(getItem(form, 'doctor'), form.response.item?.[0].answer?.[0])).toStrictEqual(reference);
+      expect(submit(form).item?.[0].answer).toStrictEqual([{ valueReference: reference }]);
     });
   });
 
@@ -1547,18 +1686,16 @@ describe('QuestionnaireFormV2.utils', () => {
         item: [{ linkId: 'photo', type: 'attachment', text: 'Photo', required: true }],
       };
       const attachment = { contentType: 'image/png', url: 'Binary/123', title: 'photo.png' };
-      const empty = toFormValues(questionnaire);
-      expect(validateFormAnswers(empty)).toStrictEqual({ 'item.0.answer.0.value': 'This field is required' });
+      expect(validate(toForm(questionnaire))).toStrictEqual({ 'item.0.answer.0': 'This field is required' });
 
-      const item = fromFhirQuestionnaireItem(questionnaire.item?.[0] as QuestionnaireItem, questionnaire, 0, [
-        { linkId: 'photo', answer: [{ valueAttachment: attachment }] },
-      ]);
-      expect(item.answer).toStrictEqual([{ value: attachment }]);
-      const rebuilt = rebuildFormItems({ ...questionnaire, item: [item] });
-      expect(validateFormAnswers({ ...questionnaire, item: rebuilt })).toStrictEqual({});
-      expect(toFhirQuestionnaireResponse({ ...questionnaire, item: rebuilt }).item?.[0].answer).toStrictEqual([
-        { valueAttachment: attachment },
-      ]);
+      const form = toForm(questionnaire, {
+        resourceType: 'QuestionnaireResponse',
+        status: 'completed',
+        item: [{ linkId: 'photo', answer: [{ valueAttachment: attachment }] }],
+      });
+      expect(getAnswerValue(getItem(form, 'photo'), form.response.item?.[0].answer?.[0])).toStrictEqual(attachment);
+      expect(validate(form)).toStrictEqual({});
+      expect(submit(form).item?.[0].answer).toStrictEqual([{ valueAttachment: attachment }]);
     });
   });
 
@@ -1570,17 +1707,13 @@ describe('QuestionnaireFormV2.utils', () => {
         who: { reference: 'Practitioner/1' },
         data: 'abc',
       };
-      const response = toFhirQuestionnaireResponse(
-        { resourceType: 'Questionnaire', status: 'active', item: [] },
-        signature
-      );
+      const form = toForm({ resourceType: 'Questionnaire', status: 'active', item: [] });
+      const response = toFhirQuestionnaireResponse(form.values, form.response, signature);
       expect(response.extension).toStrictEqual([
         { url: 'http://hl7.org/fhir/StructureDefinition/questionnaireresponse-signature', valueSignature: signature },
       ]);
       expect(getResponseSignature(response)).toStrictEqual(signature);
-      expect(
-        toFhirQuestionnaireResponse({ resourceType: 'Questionnaire', status: 'active', item: [] }).extension
-      ).toBeUndefined();
+      expect(submit(form).extension).toBeUndefined();
     });
   });
 
@@ -1611,8 +1744,8 @@ describe('QuestionnaireFormV2.utils', () => {
       valueCode: code,
     });
 
-    function createValues(): Record<string, any> {
-      return toFormValues({
+    function createForm(): TestForm {
+      return toForm({
         resourceType: 'Questionnaire',
         status: 'active',
         item: [
@@ -1632,24 +1765,26 @@ describe('QuestionnaireFormV2.utils', () => {
     }
 
     test('which items are shown when filling in and when viewing answers', () => {
-      const values = createValues();
+      const form = createForm();
       const shown = (mode: 'capture' | 'display'): string[] =>
-        values.item.filter((item: any) => isShownInMode(values, item, mode)).map((item: any) => item.linkId);
+        form.values.item
+          .filter((item: any) => isShownInMode(form.values, form.response, item, 'item', mode))
+          .map((item: any) => item.linkId);
 
       expect(shown('capture')).toStrictEqual(['both', 'capture', 'capture-display-non-empty']);
       expect(shown('display')).toStrictEqual(['both', 'display']);
 
-      values.item[3].answer = [{ value: 'a' }];
-      values.item[4].answer = [{ value: 'b' }];
+      answer(form, 'display-non-empty', 'a');
+      answer(form, 'capture-display-non-empty', 'b');
       expect(shown('display')).toStrictEqual(['both', 'display', 'display-non-empty', 'capture-display-non-empty']);
       expect(isUsedInMode(undefined, 'display')).toBe(true);
     });
 
     test('items not filled in are not validated and not in the response', () => {
-      const values = createValues();
-      expect(validateFormAnswers(values)).toStrictEqual({ 'item.1.answer.0.value': 'This field is required' });
-      values.item[1].answer = [{ value: 'captured' }];
-      expect(toFhirQuestionnaireResponse(values).item?.map((item) => item.linkId)).toStrictEqual(['capture']);
+      const form = createForm();
+      expect(validate(form)).toStrictEqual({ 'item.1.answer.0': 'This field is required' });
+      answer(form, 'capture', 'captured');
+      expect(submit(form).item?.map((item) => item.linkId)).toStrictEqual(['capture']);
     });
   });
 
@@ -1707,7 +1842,7 @@ describe('QuestionnaireFormV2.utils', () => {
     });
 
     test('yes/no radio buttons start unanswered; a switch starts off', () => {
-      const values = toFormValues({
+      const form = toForm({
         resourceType: 'Questionnaire',
         status: 'active',
         item: [
@@ -1715,8 +1850,10 @@ describe('QuestionnaireFormV2.utils', () => {
           { linkId: 'switch', type: 'boolean' },
         ],
       });
-      expect(values.item[0].answer).toStrictEqual([{ value: null }]);
-      expect(values.item[1].answer).toStrictEqual([{ value: false }]);
+      expect(form.response.item).toStrictEqual([
+        { linkId: 'buttons', answer: [{}] },
+        { linkId: 'switch', answer: [{ valueBoolean: false }] },
+      ]);
     });
 
     test('help is shown behind a button, on hover or below; loaded help keeps its item', () => {
@@ -1865,7 +2002,7 @@ describe('QuestionnaireFormV2.utils', () => {
     });
 
     test('decimal places are saved as maxDecimalPlaces and checked', () => {
-      const values = toFormValues({
+      const form = toForm({
         resourceType: 'Questionnaire',
         status: 'active',
         item: [
@@ -1878,19 +2015,19 @@ describe('QuestionnaireFormV2.utils', () => {
           { linkId: 'weight', type: 'quantity', text: 'Weight' },
         ],
       });
-      expect(values.item[0].maxDecimalPlaces).toBe(1);
-      values.item[0].answer = [{ value: '36.6' }];
-      expect(validateFormAnswers(values)).toStrictEqual({});
-      values.item[0].answer = [{ value: '36.65' }];
-      expect(validateFormAnswers(values)).toStrictEqual({
-        'item.0.answer.0.value': 'Temperature can have at most 1 decimal place',
+      expect(form.values.item[0].maxDecimalPlaces).toBe(1);
+      answer(form, 'temp', '36.6');
+      expect(validate(form)).toStrictEqual({});
+      answer(form, 'temp', '36.65');
+      expect(validate(form)).toStrictEqual({
+        'item.0.answer.0': 'Temperature can have at most 1 decimal place',
       });
 
-      values.item[0].answer = [{ value: '36.6' }];
-      values.item[1].maxDecimalPlaces = '0';
-      values.item[1].answer = [{ value: { value: '72.5', unit: 'kg' } }];
-      expect(validateFormAnswers(values)).toStrictEqual({ 'item.1.answer.0.value': 'Weight must be a whole number' });
-      expect(toFhirQuestionnaire(values).item?.[1].extension).toContainEqual({
+      answer(form, 'temp', '36.6');
+      form.values.item[1].maxDecimalPlaces = '0';
+      answer(form, 'weight', { value: '72.5', unit: 'kg' });
+      expect(validate(form)).toStrictEqual({ 'item.1.answer.0': 'Weight must be a whole number' });
+      expect(toFhirQuestionnaire(form.values).item?.[1].extension).toContainEqual({
         url: 'http://hl7.org/fhir/StructureDefinition/maxDecimalPlaces',
         valueInteger: 0,
       });
@@ -1908,26 +2045,25 @@ describe('QuestionnaireFormV2.utils', () => {
       return [{ url, valueExpression: { language: 'text/fhirpath', expression: value } }];
     }
 
-    function setup(items: QuestionnaireItem[]): Record<string, any> {
-      return toFormValues({
+    function setup(items: QuestionnaireItem[]): TestForm {
+      return toForm({
         resourceType: 'Questionnaire',
         status: 'active',
         item: [{ linkId: 'height', type: 'decimal' }, { linkId: 'weight', type: 'decimal' }, ...items],
       });
     }
 
-    // Form values change by replacing them, so answers are set on a copy.
-    function answer(values: Record<string, any>, answers: Record<string, any>): Record<string, any> {
-      return {
-        ...values,
-        item: values.item.map((item: any) =>
-          item.linkId in answers ? { ...item, answer: [{ value: answers[item.linkId] }] } : item
-        ),
-      };
+    // The form is answered on a copy, as the draft response changes by being replaced.
+    function answered(form: TestForm, answers: Record<string, any>): TestForm {
+      const copy = { ...form };
+      for (const [linkId, value] of Object.entries(answers)) {
+        answer(copy, linkId, value);
+      }
+      return copy;
     }
 
     test('enableWhenExpression takes the place of enableWhen', () => {
-      const values = setup([
+      const form = setup([
         {
           linkId: 'target',
           type: 'string',
@@ -1935,16 +2071,13 @@ describe('QuestionnaireFormV2.utils', () => {
           extension: expression(ENABLE_WHEN_EXPRESSION_URL, `${answerOf('weight')} > 100`),
         },
       ]);
-      const target = (v: Record<string, any>): any => v.item[2];
-      expect(evaluateEnableWhen(values, target(values))).toBe(false);
-      const heightOnly = answer(values, { height: 180 });
-      expect(evaluateEnableWhen(heightOnly, target(heightOnly))).toBe(false);
-      const heavy = answer(values, { weight: 120 });
-      expect(evaluateEnableWhen(heavy, target(heavy))).toBe(true);
+      expect(isEnabled(form, 'target')).toBe(false);
+      expect(isEnabled(answered(form, { height: 180 }), 'target')).toBe(false);
+      expect(isEnabled(answered(form, { weight: 120 }), 'target')).toBe(true);
     });
 
     test('an enableWhenExpression that fails falls back to enableWhen', () => {
-      const values = answer(
+      const form = answered(
         setup([
           {
             linkId: 'target',
@@ -1955,40 +2088,42 @@ describe('QuestionnaireFormV2.utils', () => {
         ]),
         { height: 180 }
       );
-      expect(evaluateEnableWhen(values, values.item[2])).toBe(true);
+      expect(isEnabled(form, 'target')).toBe(true);
     });
 
     test('calculatedExpression calculates answers', () => {
       const bmi = `(${answerOf('weight')} / (${answerOf('height')} / 100).power(2)).round(1)`;
-      const values = setup([{ linkId: 'bmi', type: 'decimal', extension: expression(CALCULATED_EXPRESSION_URL, bmi) }]);
-      expect(getCalculatedAnswers(answer(values, { height: 180, weight: 72.5 }))).toEqual([
-        { fieldPath: 'item.2.answer.0.value', value: 22.4 },
+      const form = setup([{ linkId: 'bmi', type: 'decimal', extension: expression(CALCULATED_EXPRESSION_URL, bmi) }]);
+      const calculated = (answers: Record<string, any>): unknown => {
+        const { values, response } = answered(form, answers);
+        return getCalculatedAnswers(values, response);
+      };
+      expect(calculated({ height: 180, weight: 72.5 })).toEqual([
+        { answerPath: 'item.2.answer.0', answer: { valueDecimal: 22.4 } },
       ]);
       // Without a result, the answer is cleared.
-      expect(getCalculatedAnswers(answer(values, { height: 180 }))).toEqual([
-        { fieldPath: 'item.2.answer.0.value', value: null },
-      ]);
+      expect(calculated({ height: 180 })).toEqual([{ answerPath: 'item.2.answer.0', answer: {} }]);
     });
 
     test('calculatedExpression errors', () => {
-      const values = answer(
+      const { values, response } = answered(
         setup([
           { linkId: 'broken', type: 'decimal', extension: expression(CALCULATED_EXPRESSION_URL, 'item.where(linkId=') },
           { linkId: 'text', type: 'decimal', extension: expression(CALCULATED_EXPRESSION_URL, "'heavy'") },
         ]),
         { weight: 72.5 }
       );
-      const [broken, text] = getCalculatedAnswers(values);
-      expect(broken.fieldPath).toBe('item.2.answer.0.value');
+      const [broken, text] = getCalculatedAnswers(values, response);
+      expect(broken.answerPath).toBe('item.2.answer.0');
       expect(broken.error).toMatch(/^Expression evaluation failed: /);
       expect(text).toEqual({
-        fieldPath: 'item.3.answer.0.value',
+        answerPath: 'item.3.answer.0',
         error: "The expression's result is a string, not a decimal",
       });
     });
 
     test('calculatedExpression in each group repetition', () => {
-      const values = setup([
+      const { values, response } = setup([
         {
           linkId: 'visits',
           type: 'group',
@@ -1997,15 +2132,15 @@ describe('QuestionnaireFormV2.utils', () => {
           item: [{ linkId: 'total', type: 'integer', extension: expression(CALCULATED_EXPRESSION_URL, '1 + 1') }],
         },
       ]);
-      expect(getCalculatedAnswers(values)).toEqual([
-        { fieldPath: 'item.2.answer.0.0.answer.0.value', value: 2 },
-        { fieldPath: 'item.2.answer.1.0.answer.0.value', value: 2 },
+      expect(getCalculatedAnswers(values, response)).toEqual([
+        { answerPath: 'item.2.item.0.answer.0', answer: { valueInteger: 2 } },
+        { answerPath: 'item.3.item.0.answer.0', answer: { valueInteger: 2 } },
       ]);
     });
 
     test('expressions are kept on save', () => {
       const extension = expression(CALCULATED_EXPRESSION_URL, '1 + 1');
-      const exported = toFhirQuestionnaire(setup([{ linkId: 'total', type: 'integer', extension }]));
+      const exported = toFhirQuestionnaire(setup([{ linkId: 'total', type: 'integer', extension }]).values);
       expect(exported.item?.[2].extension).toEqual(expect.arrayContaining(extension ?? []));
     });
   });

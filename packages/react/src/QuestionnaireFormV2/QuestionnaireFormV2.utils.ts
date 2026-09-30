@@ -42,14 +42,12 @@ import {
   setQuestionnaireItemReferenceTargetTypes,
   typedValueToResponseItem,
 } from '@medplum/react-hooks';
-import type { QuestionnaireForm } from './QuestionnaireFormContext';
 
+/**
+ * A questionnaire item as the builder edits it: the extensions it reads are plain fields. Its answers are not here, but
+ * in a draft QuestionnaireResponse (see syncResponseItems).
+ */
 export interface ExtendedQuestionnaireItem extends Omit<QuestionnaireItem, 'enableWhen' | 'item' | 'answerOption'> {
-  /**
-   * A question's answers; each carries its own copies of the question's follow-up items. A group's answers are its
-   * repetitions: copies of its items (see ExtendedQuestionnaireItemAnswer).
-   */
-  answer: ExtendedQuestionnaireItemAnswer[];
   prefix: string;
   hidden: boolean;
   minLength: number | null;
@@ -97,7 +95,6 @@ export interface ExtendedQuestionnaireItem extends Omit<QuestionnaireItem, 'enab
   itemControl: Record<string, any>;
   answerOption: ExtendedQuestionnaireItemAnswerOption[];
   path: string;
-  answerPath: string;
   /** A group's items, or a question's follow-up items. */
   item: ExtendedQuestionnaireItem[];
   parent: ExtendedQuestionnaireItem | undefined;
@@ -110,12 +107,6 @@ export interface PreservedItemContent {
   readonly fields?: Record<string, any>;
   /** Extensions the builder does not read. */
   readonly extension?: Extension[];
-}
-
-export interface ExtendedQuestionnaireItemAnswer {
-  value: any;
-  /** Copies of the question's follow-up items, answered for this answer. */
-  item?: ExtendedQuestionnaireItem[];
 }
 
 export interface ExtendedQuestionnaireItemAnswerOption extends QuestionnaireItemAnswerOption {
@@ -438,67 +429,17 @@ export function findFormItemByLinkId(
 }
 
 /**
- * Rebuilds all form items from their FHIR form, recomputing `path`, `answerPath`, `parent` and `enableWhen`
- * references. Answers are carried over by linkId. Call after any change to the item structure (add, move,
- * delete).
+ * Rebuilds all form items from their FHIR form, recomputing `path`, `parent` and `enableWhen` references. Call after
+ * any change to the item structure (add, move, delete).
  * @param values - The current form values.
  * @returns The rebuilt form items.
  */
 export function rebuildFormItems(values: Record<string, any>): ExtendedQuestionnaireItem[] {
-  const responseItems = toResponseItems(values.item ?? []);
   const fhirItems: QuestionnaireItem[] = (values.item ?? []).map((item: any) => toFhirQuestionnaireItem(item));
   const questionnaire = { ...values, item: fhirItems } as Questionnaire;
   return fhirItems.map((item: QuestionnaireItem, index: number) =>
-    fromFhirQuestionnaireItem(item, questionnaire, index, responseItems)
+    fromFhirQuestionnaireItem(item, questionnaire, index)
   );
-}
-
-/**
- * Converts the answers of form items into response items in the shape
- * fromFhirQuestionnaireItem reads back: one answer per value, and one response item per group repetition.
- * @param items - The form items (or group answer copies).
- * @returns The response items.
- */
-function toResponseItems(items: ExtendedQuestionnaireItem[]): QuestionnaireResponseItem[] {
-  return items.flatMap((item): QuestionnaireResponseItem[] => {
-    if (item.type === 'group') {
-      const answerGroups = (item.answer ?? []) as unknown as ExtendedQuestionnaireItem[][];
-      return answerGroups
-        .filter(Array.isArray)
-        .map((answerGroup) => ({ linkId: item.linkId, item: toResponseItems(answerGroup) }));
-    }
-    // No answers means "use the initial values", except for a repeating choice where nothing selected is a valid state.
-    const isRepeatingChoice = (item.type === 'choice' || item.type === 'open-choice') && item.repeats;
-    if (!item.answer || (item.answer.length === 0 && !isRepeatingChoice)) {
-      return [{ linkId: item.linkId }];
-    }
-    return [
-      {
-        linkId: item.linkId,
-        answer: item.answer.map((answer) => ({
-          ...toResponseItemAnswer(answer.value),
-          ...(answer.item?.length && { item: toResponseItems(answer.item) }),
-        })),
-      },
-    ];
-  });
-}
-
-function toResponseItemAnswer(value: any): QuestionnaireResponseItemAnswer {
-  if (value === undefined || value === null || value === '') {
-    return {};
-  }
-  if (typeof value === 'boolean') {
-    return { valueBoolean: value };
-  }
-  if (typeof value === 'number') {
-    return { valueDecimal: value };
-  }
-  if (typeof value === 'string') {
-    return { valueString: value };
-  }
-  // Codings, attachments and references come back unchanged from valueCoding; only the round trip matters here.
-  return { valueCoding: value };
 }
 
 /**
@@ -563,11 +504,9 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
     initial,
     answerOption,
     code,
-    answer: _answer,
     index: _index,
     item: childItems,
     path: _path,
-    answerPath: _answerPath,
     parent: _parent,
     ...rest
   } = item;
@@ -944,20 +883,16 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
  * @param item - The FHIR QuestionnaireItem (or an already converted form item).
  * @param questionnaire - The questionnaire the item belongs to; used to resolve enableWhen questions.
  * @param index - The index of the item within its parent.
- * @param responseItems - Optional response items to prefill answers from.
  * @param parent - The parent form item, if nested.
  * @param basePath - The form path of the parent item list.
- * @param baseAnswerPath - The form path of the parent answer list.
  * @returns The form item.
  */
 export function fromFhirQuestionnaireItem(
   item: QuestionnaireItem | ExtendedQuestionnaireItem,
   questionnaire: Questionnaire | null,
   index?: number,
-  responseItems?: QuestionnaireResponseItem[],
   parent?: ExtendedQuestionnaireItem,
-  basePath: string = 'item',
-  baseAnswerPath: string = 'item'
+  basePath: string = 'item'
 ): any {
   // Help and a question's display texts are not items of their own: they are read into `help` and `displayTexts`.
   const allChildItems = (item.item ?? []) as QuestionnaireItem[];
@@ -978,10 +913,6 @@ export function fromFhirQuestionnaireItem(
   const minOccurs = extensions.find((ext) => ext.url === EXTENSION_URLS.minOccurs)?.valueInteger ?? 1;
   const maxOccurs = extensions.find((ext) => ext.url === EXTENSION_URLS.maxOccurs)?.valueInteger ?? null;
   const path = `${basePath}.${index}`;
-  const answerPath = `${baseAnswerPath}.${index}`;
-  const responseItem = (responseItems ?? []).find(
-    (responseItem: QuestionnaireResponseItem) => responseItem.linkId === item.linkId
-  );
 
   const parentRef = parent
     ? {
@@ -990,14 +921,12 @@ export function fromFhirQuestionnaireItem(
         readOnly: parent.readOnly,
         ...(parent.parent && { parent: parent.parent }),
         ...(parent.path && { path: parent.path }),
-        ...(parent.answerPath && { answerPath: parent.answerPath }),
       }
     : undefined;
 
   const formData: any = {
     // applies to questions & groups & display
     path: path,
-    answerPath: answerPath,
     index: index,
     linkId: item.linkId,
     prefix: item.prefix ?? '',
@@ -1070,9 +999,6 @@ export function fromFhirQuestionnaireItem(
     formData.unitOption = extensions
       .filter((extension: Extension) => extension.url === EXTENSION_URLS.unitOption)
       .map((extension: Extension) => extension.valueCoding);
-    formData.answer = responseItem?.answer
-      ? fromQuestionnaireResponseItemAnswer(responseItem.answer, item.type)
-      : fromQuestionnaireItemInitialToAnswer(item as QuestionnaireItem);
     formData.unit =
       extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.unit)?.valueCoding ?? null;
     formData.referenceResource = getQuestionnaireItemReferenceTargetTypes(item as QuestionnaireItem) ?? [];
@@ -1091,76 +1017,13 @@ export function fromFhirQuestionnaireItem(
     formData.referenceProfile = extensions
       .filter((extension: Extension) => extension.url === EXTENSION_URLS.referenceProfile && extension.valueCanonical)
       .map((extension: Extension) => extension.valueCanonical);
-
-    // Follow-up items: defined in the question's `item`, answered under each of its answers (`answer.item`).
-    formData.item = childItems.map((childItem: QuestionnaireItem, childIndex: number) =>
-      fromFhirQuestionnaireItem(childItem, questionnaire, childIndex, undefined, formData, `${path}.item`)
-    );
-    if (childItems.length > 0) {
-      formData.answer = formData.answer.map((answer: ExtendedQuestionnaireItemAnswer, answerIndex: number) => ({
-        ...answer,
-        item: childItems.map((childItem: QuestionnaireItem, childIndex: number) =>
-          fromFhirQuestionnaireItem(
-            childItem,
-            questionnaire,
-            childIndex,
-            responseItem?.answer?.[answerIndex]?.item,
-            formData,
-            `${path}.item`,
-            `${answerPath}.answer.${answerIndex}.item`
-          )
-        ),
-      }));
-    }
   }
 
-  // applies to groups only
-  if (item.type === 'group') {
-    formData.answer = [];
-
-    // Each repetition of a group is a separate response item with the group's linkId; its children are in `item`.
-    const groupRepetitions = (responseItems ?? []).filter(
-      (groupResponse: QuestionnaireResponseItem) => groupResponse.linkId === item.linkId && groupResponse.item?.length
-    );
-
-    groupRepetitions.forEach((groupResponse: QuestionnaireResponseItem) => {
-      formData.answer.push(
-        childItems.map((childItem: QuestionnaireItem, childIndex: number) =>
-          fromFhirQuestionnaireItem(
-            childItem,
-            questionnaire,
-            childIndex,
-            groupResponse.item,
-            formData,
-            `${path}.item`,
-            `${answerPath}.answer.${formData.answer.length}`
-          )
-        )
-      );
-    });
-
+  // A group's items, or a question's follow-up items (answered under each of its answers, in `answer.item`).
+  if (item.type !== 'display') {
     formData.item = childItems.map((childItem: QuestionnaireItem, childIndex: number) =>
-      fromFhirQuestionnaireItem(childItem, questionnaire, childIndex, undefined, formData, `${path}.item`)
+      fromFhirQuestionnaireItem(childItem, questionnaire, childIndex, formData, `${path}.item`)
     );
-  }
-
-  // If it's a group, initialize its answers to track repetitions
-  if (item.type === 'group') {
-    while (formData.answer.length < minOccurs) {
-      formData.answer.push(
-        childItems.map((childItem: QuestionnaireItem, childIndex: number) =>
-          fromFhirQuestionnaireItem(
-            childItem,
-            questionnaire,
-            childIndex,
-            undefined,
-            formData,
-            `${path}.item`,
-            `${answerPath}.answer.${formData.answer.length}`
-          )
-        )
-      );
-    }
   }
 
   return formData;
@@ -1306,74 +1169,6 @@ function fromQuestionnaireItemInitial(initial: QuestionnaireItemInitial): any {
   }
 
   return formData;
-}
-
-function fromQuestionnaireItemInitialToAnswer(item: QuestionnaireItem): { value: any }[] {
-  const initialArray = item.initial ?? [];
-  const extensions: Extension[] = item.extension ?? [];
-  const minOccurs =
-    extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.minOccurs)?.valueInteger ?? 1;
-  let answers: any[] = [];
-
-  initialArray.forEach((initial: QuestionnaireItemInitial) => {
-    let value: any = '';
-
-    if ('valueBoolean' in initial) {
-      value = initial.valueBoolean;
-    } else if ('valueDecimal' in initial) {
-      value = initial.valueDecimal;
-    } else if ('valueInteger' in initial) {
-      value = initial.valueInteger;
-    } else if ('valueDate' in initial) {
-      value = initial.valueDate;
-    } else if ('valueDateTime' in initial) {
-      value = toLocalDateTime(initial.valueDateTime);
-    } else if ('valueTime' in initial) {
-      value = initial.valueTime?.split(':').slice(0, 2).join(':');
-    } else if ('valueString' in initial) {
-      value = initial.valueString;
-    } else if ('valueUri' in initial) {
-      value = initial.valueUri;
-    } else if ('valueAttachment' in initial) {
-      value = initial.valueAttachment;
-    } else if ('valueCoding' in initial) {
-      value = initial.valueCoding;
-    } else if ('valueQuantity' in initial) {
-      // A quantity answer keeps its unit and comparator.
-      value = item.type === 'quantity' ? { ...initial.valueQuantity } : initial.valueQuantity?.value;
-    } else if ('valueReference' in initial) {
-      value = initial.valueReference;
-    }
-
-    answers.push({ value: value });
-  });
-
-  if (item.type === 'choice' || item.type === 'open-choice') {
-    const initialSelected = (item.answerOption ?? [])
-      .filter((answer: QuestionnaireItemAnswerOption) => answer.initialSelected)
-      .map((answer: QuestionnaireItemAnswerOption) => ({
-        value: answer.valueCoding ?? fromQuestionnaireItemAnswerOption(answer).value,
-      }));
-
-    answers = initialSelected;
-  }
-
-  // Yes/no as two radio buttons starts with neither picked; a switch or check-box starts off (false).
-  const isYesNoButtons =
-    item.type === 'boolean' &&
-    extensions.some(
-      (extension: Extension) =>
-        extension.url === EXTENSION_URLS.itemControl &&
-        extension.valueCodeableConcept?.coding?.some((coding) => coding.code === 'radio-button')
-    );
-  const defaultValue = isYesNoButtons ? null : getDefaultAnswerValue(item.type);
-
-  // If minOccurs is greater, add empty values to fulfill minOccurs requirement
-  while (answers.length < minOccurs) {
-    answers.push({ value: defaultValue });
-  }
-
-  return answers;
 }
 
 function fromQuestionnaireResponseItemAnswer(
@@ -1657,22 +1452,28 @@ function fromQuestionnaireItemAnswerOption(answerOption: QuestionnaireItemAnswer
 }
 
 /**
- * Evaluates an item's enableWhen conditions against the answers entered in the form.
+ * Evaluates an item's enableWhen conditions (or its enableWhenExpression) against the answers in the draft response.
  * Incomplete conditions (no question or operator) are ignored, matching toFhirQuestionnaireItem.
- * @param values - The current form values.
+ * @param values - The current form values (the questionnaire).
+ * @param response - The draft QuestionnaireResponse.
  * @param item - The form item to evaluate.
+ * @param context - The response path of the response items the item is answered in, e.g. `item.0.item`.
  * @returns True if the item should be shown.
  */
-export function evaluateEnableWhen(values: Record<string, any>, item: ExtendedQuestionnaireItem): boolean {
-  // The conditions are read from the item's definition: an answer copy (e.g. in a group repetition) is not updated
-  // when its definition is edited.
+export function evaluateEnableWhen(
+  values: Record<string, any>,
+  response: QuestionnaireResponse,
+  item: ExtendedQuestionnaireItem,
+  context: string
+): boolean {
+  // The conditions are read from the item's definition in the current values, so an edit applies right away.
   const definition: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
 
   // As in Medplum's QuestionnaireForm, an enableWhenExpression takes the place of the enableWhen conditions.
   const enableWhenExpression = getItemExpression(definition, QUESTIONNAIRE_ENABLED_WHEN_EXPRESSION_URL);
   if (enableWhenExpression) {
     try {
-      return toJsBoolean(evaluateResponseExpression(values, enableWhenExpression));
+      return toJsBoolean(evaluateResponseExpression(values, response, enableWhenExpression));
     } catch {
       // An expression that cannot be evaluated falls back to the enableWhen conditions.
     }
@@ -1685,40 +1486,27 @@ export function evaluateEnableWhen(values: Record<string, any>, item: ExtendedQu
     return true;
   }
 
-  // A follow-up item of a question belongs to one of its answers: a condition on that question is about that answer.
-  const parentAnswer = getParentAnswer(values, item);
-
   return enableWhen[enableBehavior === 'all' ? 'every' : 'some']((condition: ExtendedQuestionnaireItemEnableWhen) => {
     const { question, operator, answer } = condition;
     const predicateQuestion = findFormItemByLinkId(values.item ?? [], question.linkId);
-    let answers: { value: any }[] | undefined;
-
-    if (parentAnswer && question.linkId === item.parent?.linkId) {
-      answers = [parentAnswer];
-    } else if (predicateQuestion?.parent) {
-      const root = findRootItem(predicateQuestion);
-      const answerItem = findAnswerItem(values, root, predicateQuestion);
-      answers = answerItem?.answer;
-    } else {
-      answers = predicateQuestion?.answer;
-    }
-
-    answers = answers ?? [];
+    const answers = findQuestionAnswers(response, context, question.linkId).map((responseAnswer) => ({
+      value: predicateQuestion ? getAnswerValue(predicateQuestion, responseAnswer) : undefined,
+    }));
     const isCodeType = predicateQuestion?.type === 'choice' || predicateQuestion?.type === 'open-choice';
     // Numbers compare as numbers, also when typed into a text field as a string.
     const isNumeric =
       typeof answer === 'number' || ['integer', 'decimal', 'quantity'].includes(predicateQuestion?.type ?? '');
 
-    // Comparisons only count given answers: an unanswered number is an empty string, not 0.
+    // Comparisons only count given answers: an unanswered number is empty, not 0.
     const given = answers.filter((a) => !isEmptyAnswerValue(a.value));
 
     switch (operator) {
       case 'exists':
         return answer === false
-          ? answers.some((a) => !hasAnswerValue(a.value))
+          ? !answers.some((a) => hasAnswerValue(a.value))
           : answers.some((a) => hasAnswerValue(a.value));
       case 'empty':
-        return answers.some((a) => !hasAnswerValue(a.value));
+        return !answers.some((a) => hasAnswerValue(a.value));
       case '=':
         return given.some((a) => {
           if (!predicateQuestion) {
@@ -1772,49 +1560,78 @@ export function findRootItem(item: ExtendedQuestionnaireItem): ExtendedQuestionn
 }
 
 /**
- * Returns the answer a follow-up item belongs to, when the item is a copy under one of its question's answers.
- * @param values - The current form values.
- * @param item - The form item.
- * @returns The question's answer, or undefined when the item is not a follow-up item copy.
+ * Returns the indexes of an item's response items among the response items at a response path: one per repetition of
+ * a group, one for a question.
+ * @param response - The draft QuestionnaireResponse.
+ * @param context - The response path of the response items, e.g. `item` or `item.0.answer.1.item`.
+ * @param linkId - The item's linkId.
+ * @returns The indexes.
  */
-function getParentAnswer(values: Record<string, any>, item: ExtendedQuestionnaireItem): { value: any } | undefined {
-  const match = /^(.*\.answer\.\d+)\.item\.\d+$/.exec(item.answerPath ?? '');
-  return match ? getValueByPath(values, match[1]) : undefined;
+export function getResponseItemIndexes(
+  response: QuestionnaireResponse | Record<string, any>,
+  context: string,
+  linkId: string
+): number[] {
+  const responseItems: QuestionnaireResponseItem[] = getValueByPath(response, context) ?? [];
+  return responseItems.flatMap((responseItem, index) => (responseItem.linkId === linkId ? [index] : []));
 }
 
 /**
- * Returns the items answered under one answer of an item: a group repetition's items, or a question answer's
- * follow-up items.
- * @param answer - A group repetition, or a question's answer.
- * @returns The answered items, or undefined.
+ * Returns the response path of the response items that hold the group repetition or question answer the response items
+ * at `context` belong to.
+ * @param context - A response path of response items.
+ * @returns The response path, or undefined at the top level.
  */
-export function getAnswerItems(answer: any): ExtendedQuestionnaireItem[] | undefined {
-  if (Array.isArray(answer)) {
-    return answer;
-  }
-  return Array.isArray(answer?.item) ? answer.item : undefined;
+function getParentContext(context: string): string | undefined {
+  return /^(.*)\.\d+\.answer\.\d+\.item$/.exec(context)?.[1] ?? /^(.*)\.\d+\.item$/.exec(context)?.[1];
 }
 
-function findAnswerItem(
-  values: Record<string, any>,
-  node: ExtendedQuestionnaireItem,
-  item: ExtendedQuestionnaireItem
-): ExtendedQuestionnaireItem | undefined {
-  const answers = getValueByPath(values, `${node.answerPath}.answer`) ?? [];
-
-  for (const answer of answers) {
-    for (const answerItem of getAnswerItems(answer) ?? []) {
-      if (answerItem.linkId === item.linkId) {
-        return answerItem;
-      }
-      const found = findAnswerItem(values, answerItem, item);
-      if (found) {
-        return found;
-      }
+function findResponseItem(
+  responseItems: QuestionnaireResponseItem[] | undefined,
+  linkId: string
+): QuestionnaireResponseItem | undefined {
+  for (const responseItem of responseItems ?? []) {
+    if (responseItem.linkId === linkId) {
+      return responseItem;
+    }
+    const found =
+      findResponseItem(responseItem.item, linkId) ??
+      responseItem.answer?.map((answer) => findResponseItem(answer.item, linkId)).find(Boolean);
+    if (found) {
+      return found;
     }
   }
-
   return undefined;
+}
+
+/**
+ * Finds the answers of a question for an item answered at `context`: in the nearest group repetition or answer that has
+ * the question, so each repetition of a group has its own. A condition on the question an item is a follow-up item of
+ * is about the answer the item belongs to.
+ * @param response - The draft QuestionnaireResponse.
+ * @param context - The response path of the response items the item is answered in.
+ * @param linkId - The question's linkId.
+ * @returns The question's answers.
+ */
+function findQuestionAnswers(
+  response: QuestionnaireResponse,
+  context: string,
+  linkId: string
+): QuestionnaireResponseItemAnswer[] {
+  let scope: string | undefined = context;
+  while (scope !== undefined) {
+    const found = findResponseItem(getValueByPath(response, scope), linkId);
+    if (found) {
+      return found.answer ?? [];
+    }
+    const answerScope = /^(.*\.\d+)\.answer\.(\d+)\.item$/.exec(scope);
+    if (answerScope && getValueByPath(response, answerScope[1])?.linkId === linkId) {
+      const answer = getValueByPath(response, `${answerScope[1]}.answer.${answerScope[2]}`);
+      return answer ? [answer] : [];
+    }
+    scope = getParentContext(scope);
+  }
+  return [];
 }
 
 function hasAnswerValue(value: any): boolean {
@@ -1842,87 +1659,224 @@ function getNumericAnswer(value: any): any {
   return isQuantityAnswer(value) ? value.value : value;
 }
 
-/**
- * Adds an answer (or, for a group, a repetition) to a form item.
- * @param form - The questionnaire form.
- * @param item - The form item (or group answer copy) to add the answer to.
- * @param original - The item's definition when `item` is a copy inside a group answer.
- */
-export function addFormAnswer(
-  form: QuestionnaireForm,
-  item: ExtendedQuestionnaireItem,
-  original?: ExtendedQuestionnaireItem
-): void {
-  const path = item.answerPath;
-  if (!path) {
-    return;
-  }
+function isChoiceItemType(type: string | undefined): boolean {
+  return type === 'choice' || type === 'open-choice';
+}
 
-  const answerArray = getValueByPath(form.getValues(), `${path}.answer`) ?? [];
-  const questionnaireItem = toFhirQuestionnaireItem(item);
-  const childItems = questionnaireItem.item ?? [];
-
-  if (item.type === 'group') {
-    const groupHelpItem = findHelpItem(childItems);
-    const newGroupAnswer = childItems
-      .filter((childItem: QuestionnaireItem) => childItem !== groupHelpItem)
-      .map((childItem: QuestionnaireItem, childIndex: number) =>
-        fromFhirQuestionnaireItem(
-          childItem,
-          form.getValues() as Questionnaire,
-          childIndex,
-          undefined,
-          item,
-          `${item.path}.item`,
-          `${path}.answer.${answerArray.length}`
-        )
-      );
-
-    form.setFieldValue(`${path}.answer`, [...answerArray, newGroupAnswer]);
-    return;
-  }
-
-  let initialArray;
-
-  if (original) {
-    if (original.type === 'group') {
-      const itemIndex = original.item.findIndex(
-        (originalItem: ExtendedQuestionnaireItem) => originalItem.linkId === item.linkId
-      );
-      const question = original.item[itemIndex];
-      initialArray = question.initial;
-    } else {
-      initialArray = original.initial;
-    }
-  } else {
-    initialArray = getValueByPath(form.getValues(), `${item.path}.initial`) ?? [];
-  }
-
-  const index = answerArray.length;
-  const initialValue = (initialArray?.[index] as { value?: any } | undefined)?.value ?? '';
-
-  form.setFieldValue(`${path}.answer`, [...answerArray, { value: initialValue }]);
-  rebuildAnswerItems(form, original ?? item);
+function isBlankValue(value: any): boolean {
+  return value === undefined || value === null || value === '';
 }
 
 /**
- * After an item's answers were added, removed or replaced, recomputes the items answered under them (a group's
- * repetitions, a question's follow-up items) with their paths, keeping what was answered in them.
- * @param form - The questionnaire form.
- * @param item - The item (or answer copy) whose answers changed.
+ * Returns the value of a draft response answer as an input holds it: a coding, a quantity, a local date and time, the
+ * text of a string, and so on.
+ * @param item - The question.
+ * @param answer - The draft response answer.
+ * @returns The value, or undefined for an answer without one.
  */
-export function rebuildAnswerItems(form: QuestionnaireForm, item: ExtendedQuestionnaireItem): void {
-  const definition: ExtendedQuestionnaireItem = getValueByPath(form.getValues(), item.path) ?? item;
-  if (definition.type === 'group' || hasFollowUpItems(definition)) {
-    form.setFieldValue('item', rebuildFormItems(form.getValues()));
+export function getAnswerValue(
+  item: ExtendedQuestionnaireItem,
+  answer: QuestionnaireResponseItemAnswer | undefined
+): any {
+  if (!answer || !Object.keys(answer).some((key) => key.startsWith('value'))) {
+    return undefined;
   }
+  const value = fromQuestionnaireResponseItemAnswer([answer], item.type)[0].value;
+  // A quantity always has a value key, so one with only a unit still counts as unanswered.
+  return item.type === 'quantity' && value && typeof value === 'object' ? { ...value, value: value.value } : value;
+}
+
+/**
+ * Converts a value, as an input holds it, into a draft response answer: its FHIR value[x], or no value while the input
+ * is empty. Unlike a submitted response, a draft keeps empty answers, e.g. the rows of a repeating question.
+ * @param item - The question.
+ * @param value - The value.
+ * @returns The draft response answer.
+ */
+export function toDraftAnswer(item: ExtendedQuestionnaireItem, value: any): QuestionnaireResponseItemAnswer {
+  if (item.type === 'quantity') {
+    const quantity: Quantity = isQuantityAnswer(value) ? value : { value };
+    const number = isBlankValue(quantity.value) ? Number.NaN : parseFloat(String(quantity.value));
+    const draft: Quantity = {
+      ...(quantity.comparator && { comparator: quantity.comparator }),
+      ...(Number.isFinite(number) && { value: number }),
+      ...(quantity.unit && { unit: quantity.unit }),
+      ...(quantity.system && { system: quantity.system }),
+      ...(quantity.code && { code: quantity.code }),
+    };
+    return Object.keys(draft).length > 0 ? { valueQuantity: draft } : {};
+  }
+  if (isBlankValue(value)) {
+    return {};
+  }
+  if (item.type === 'integer' || item.type === 'decimal') {
+    const number = item.type === 'integer' ? Number.parseInt(String(value), 10) : parseFloat(String(value));
+    return Number.isFinite(number) ? toFhirResponseAnswer(item, number) : {};
+  }
+  if (item.type === 'dateTime' && Number.isNaN(new Date(value).getTime())) {
+    return {};
+  }
+  return toFhirResponseAnswer(item, value);
+}
+
+/**
+ * Returns a new answer of a question: its initial value at that position, if any, or else an empty answer (a yes/no
+ * switch or check box starts off; yes/no radio buttons start unanswered).
+ * @param item - The question.
+ * @param index - The answer's position.
+ * @returns The draft response answer.
+ */
+export function getNewAnswer(item: ExtendedQuestionnaireItem, index: number): QuestionnaireResponseItemAnswer {
+  // The builder holds initial values as { value }, as it holds answers.
+  const initial = (item.initial?.[index] as { value?: any } | undefined)?.value;
+  if (!isChoiceItemType(item.type) && !isBlankValue(initial)) {
+    return toDraftAnswer(item, initial);
+  }
+  return item.type === 'boolean' && item.itemControl?.code !== 'radio-button' ? { valueBoolean: false } : {};
+}
+
+/**
+ * Returns a question's initial answers: its initially selected options, or its initial values.
+ * @param item - The question.
+ * @returns The draft response answers.
+ */
+function getInitialAnswers(item: ExtendedQuestionnaireItem): QuestionnaireResponseItemAnswer[] {
+  if (isChoiceItemType(item.type)) {
+    return (item.answerOption ?? [])
+      .filter((option) => option.initialSelected)
+      .map((option) => toDraftAnswer(item, option.value));
+  }
+  return (item.initial ?? [])
+    .filter((initial) => !isBlankValue((initial as { value?: any })?.value))
+    .map((initial) => toDraftAnswer(item, (initial as { value?: any }).value));
+}
+
+function getMinOccurs(item: ExtendedQuestionnaireItem): number {
+  return item.repeats ? Math.max(1, +item.minOccurs || 1) : 1;
+}
+
+function getMaxOccurs(item: ExtendedQuestionnaireItem): number {
+  if (!item.repeats) {
+    return 1;
+  }
+  return item.maxOccurs ? +item.maxOccurs : Infinity;
+}
+
+/**
+ * Brings draft response items in line with the items they answer, as a QuestionnaireResponse holds its answers: a
+ * response item per question, created with its initial answers; one per repetition of a group, within its minimum and
+ * maximum occurrences; and a question's follow-up items under each of its answers. A question has at least one answer
+ * to fill in (its minimum occurrences, when it repeats), except a repeating choice question: it has one answer per
+ * selected option. Response items of items that are not there (any more) are left out.
+ * @param items - The form items.
+ * @param responseItems - The draft response items.
+ * @returns The draft response items.
+ */
+export function syncResponseItems(
+  items: ExtendedQuestionnaireItem[],
+  responseItems: QuestionnaireResponseItem[] | undefined
+): QuestionnaireResponseItem[] {
+  return items.flatMap((item): QuestionnaireResponseItem[] => {
+    if (item.type === 'display') {
+      return [];
+    }
+    const existing = (responseItems ?? []).filter((responseItem) => responseItem.linkId === item.linkId);
+    if (item.type === 'group') {
+      const repetitions = existing.slice(0, getMaxOccurs(item));
+      while (repetitions.length < getMinOccurs(item)) {
+        repetitions.push({ linkId: item.linkId });
+      }
+      return repetitions.map((repetition) => ({
+        ...repetition,
+        item: syncResponseItems(item.item ?? [], repetition.item),
+      }));
+    }
+    const responseItem = existing[0] ?? { linkId: item.linkId };
+    return [{ ...responseItem, answer: syncAnswers(item, responseItem.answer ?? getInitialAnswers(item)) }];
+  });
+}
+
+function syncAnswers(
+  item: ExtendedQuestionnaireItem,
+  answers: QuestionnaireResponseItemAnswer[]
+): QuestionnaireResponseItemAnswer[] {
+  const synced = answers.slice(0, getMaxOccurs(item));
+  const rows = isChoiceItemType(item.type) && item.repeats ? 0 : getMinOccurs(item);
+  while (synced.length < rows) {
+    synced.push(getNewAnswer(item, synced.length));
+  }
+  const followUpItems = item.item ?? [];
+  return synced.map(({ item: answerItems, ...answer }) =>
+    followUpItems.length > 0 ? { ...answer, item: syncResponseItems(followUpItems, answerItems) } : answer
+  );
+}
+
+/**
+ * Returns the draft QuestionnaireResponse a form starts from: the answers of an existing response (e.g. one being
+ * continued), or the initial answers.
+ * @param items - The form items.
+ * @param response - The existing response.
+ * @returns The draft QuestionnaireResponse.
+ */
+export function toDraftResponse(
+  items: ExtendedQuestionnaireItem[],
+  response?: QuestionnaireResponse
+): QuestionnaireResponse {
+  return {
+    resourceType: 'QuestionnaireResponse',
+    status: 'in-progress',
+    item: syncResponseItems(items, response?.item),
+  };
+}
+
+/**
+ * Removes the response items of the given items, wherever they are answered.
+ * @param responseItems - The draft response items.
+ * @param linkIds - The items' linkIds.
+ * @returns The draft response items without them.
+ */
+export function removeResponseItems(
+  responseItems: QuestionnaireResponseItem[] | undefined,
+  linkIds: Set<string>
+): QuestionnaireResponseItem[] {
+  return (responseItems ?? [])
+    .filter((responseItem) => !linkIds.has(responseItem.linkId))
+    .map((responseItem) => ({
+      ...responseItem,
+      ...(responseItem.item && { item: removeResponseItems(responseItem.item, linkIds) }),
+      ...(responseItem.answer && {
+        answer: responseItem.answer.map((answer) =>
+          answer.item ? { ...answer, item: removeResponseItems(answer.item, linkIds) } : answer
+        ),
+      }),
+    }));
+}
+
+/**
+ * Returns what each question's initial answers are, by linkId. When that changes, e.g. as an initial value is edited in
+ * the builder, the question's answers start over from the new initial answers.
+ * @param items - The form items.
+ * @param keys - The keys found so far (for recursion).
+ * @returns The keys, by linkId.
+ */
+export function getInitialAnswerKeys(
+  items: ExtendedQuestionnaireItem[],
+  keys = new Map<string, string>()
+): Map<string, string> {
+  for (const item of items) {
+    if (isQuestionItem(item)) {
+      keys.set(item.linkId, JSON.stringify([item.type, getInitialAnswers(item), getNewAnswer(item, 0)]));
+    }
+    getInitialAnswerKeys(item.item ?? [], keys);
+  }
+  return keys;
 }
 
 /**
  * Returns true if an item cannot be answered by the respondent: it, or a group or question it belongs to, is read only.
  * Read from the definitions, so it reflects the latest edits.
  * @param values - The current form values.
- * @param item - The form item (or answer copy).
+ * @param item - The form item.
  * @returns True if the item is read only.
  */
 export function isReadOnlyFormItem(values: Record<string, any>, item: ExtendedQuestionnaireItem): boolean {
@@ -1936,15 +1890,29 @@ export function isReadOnlyFormItem(values: Record<string, any>, item: ExtendedQu
 }
 
 /**
+ * Returns the key of a group's error among the form errors: the group is not one answer, but all its repetitions.
+ * @param context - The response path of the response items the group is answered in.
+ * @param linkId - The group's linkId.
+ * @returns The error key.
+ */
+export function getGroupErrorKey(context: string, linkId: string): string {
+  return `${context}:${linkId}`;
+}
+
+/**
  * Checks a required group (FHIR: it must be present in the response, so it needs at least one answered question;
  * a repeating group needs that in at least `minOccurs` repetitions).
  * @param values - The current form values.
- * @param item - The group (or its answer copy).
+ * @param response - The draft QuestionnaireResponse.
+ * @param item - The group.
+ * @param context - The response path of the response items the group is answered in.
  * @returns The error message, or undefined when the group is not required or is answered.
  */
 export function getRequiredGroupError(
   values: Record<string, any>,
-  item: ExtendedQuestionnaireItem
+  response: QuestionnaireResponse,
+  item: ExtendedQuestionnaireItem,
+  context: string
 ): string | undefined {
   const definition: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
   if (definition.type !== 'group' || !definition.required || isReadOnlyFormItem(values, item)) {
@@ -1952,9 +1920,9 @@ export function getRequiredGroupError(
   }
 
   const minOccurs = definition.repeats ? Math.max(1, +definition.minOccurs || 1) : 1;
-  const answered = ((item.answer ?? []) as unknown as ExtendedQuestionnaireItem[][])
-    .filter(Array.isArray)
-    .filter((repetition) => toSubmittedResponseItems(values, repetition).some(hasResponseAnswer)).length;
+  const answered = getResponseItemIndexes(response, context, item.linkId).filter((index) =>
+    toResponseItems(values, response, definition.item ?? [], `${context}.${index}.item`, true).some(hasResponseAnswer)
+  ).length;
   if (answered >= minOccurs) {
     return undefined;
   }
@@ -2057,64 +2025,72 @@ export function validateAnswerValue(original: ExtendedQuestionnaireItem, value: 
 }
 
 /**
- * Validates the answers of all shown items (not hidden, enabled by enableWhen).
+ * Validates the answers of all shown items (not hidden, enabled by their conditions).
  * @param values - The current form values.
+ * @param response - The draft QuestionnaireResponse.
  * @param items - The items to validate; defaults to all top-level items.
- * @returns Error messages keyed by form path.
+ * @param context - The response path of the response items the items are answered in.
+ * @returns Error messages keyed by response path: an answer's, or a repeating choice question's answer list.
  */
 export function validateFormAnswers(
   values: Record<string, any>,
-  items: ExtendedQuestionnaireItem[] = values.item ?? []
+  response: QuestionnaireResponse,
+  items: ExtendedQuestionnaireItem[] = values.item ?? [],
+  context = 'item'
 ): Record<string, string> {
   const errors: Record<string, string> = {};
 
-  const visit = (item: ExtendedQuestionnaireItem): void => {
+  const visit = (item: ExtendedQuestionnaireItem, itemContext: string): void => {
     const original: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
     if (
       original.hidden ||
-      !evaluateEnableWhen(values, item) ||
-      !isShownInMode(values, item, 'capture') ||
+      !evaluateEnableWhen(values, response, item, itemContext) ||
+      !isShownInMode(values, response, item, itemContext, 'capture') ||
       original.type === 'display'
     ) {
       return;
     }
 
+    const indexes = getResponseItemIndexes(response, itemContext, item.linkId);
     if (original.type === 'group') {
-      const groupError = getRequiredGroupError(values, item);
+      const groupError = getRequiredGroupError(values, response, item, itemContext);
       if (groupError) {
-        errors[`${item.answerPath}.answer`] = groupError;
+        errors[getGroupErrorKey(itemContext, item.linkId)] = groupError;
       }
-      for (const answerGroup of (item.answer ?? []) as unknown as ExtendedQuestionnaireItem[][]) {
-        if (Array.isArray(answerGroup)) {
-          answerGroup.forEach(visit);
-        }
+      for (const index of indexes) {
+        (original.item ?? []).forEach((child) => visit(child, `${itemContext}.${index}.item`));
       }
       return;
     }
 
-    const answersPath = `${item.answerPath}.answer`;
-    const answers = item.answer ?? [];
+    if (indexes.length === 0) {
+      return;
+    }
+    const answersPath = `${itemContext}.${indexes[0]}.answer`;
+    const answerValues = ((getValueByPath(response, answersPath) ?? []) as QuestionnaireResponseItemAnswer[]).map(
+      (answer) => getAnswerValue(original, answer)
+    );
 
     // A read-only question cannot be answered by the respondent, so it cannot be required of them.
     const readOnly = isReadOnlyFormItem(values, item);
-    if (original.required && !readOnly && answers.every((answer) => isEmptyAnswerValue(answer.value))) {
-      const isRepeatingChoice = (original.type === 'choice' || original.type === 'open-choice') && original.repeats;
-      errors[isRepeatingChoice ? answersPath : `${answersPath}.0.value`] = 'This field is required';
+    if (original.required && !readOnly && answerValues.every(isEmptyAnswerValue)) {
+      const isRepeatingChoice = isChoiceItemType(original.type) && original.repeats;
+      errors[isRepeatingChoice ? answersPath : `${answersPath}.0`] = 'This field is required';
       return;
     }
 
-    answers.forEach((answer, index) => {
-      const message = validateAnswerValue(original, answer.value);
+    answerValues.forEach((value, index) => {
+      const message = validateAnswerValue(original, value);
       if (message) {
-        errors[`${answersPath}.${index}.value`] = message;
+        errors[`${answersPath}.${index}`] = message;
       }
-      if (!isEmptyAnswerValue(answer.value)) {
-        answer.item?.forEach(visit);
+      if (!isEmptyAnswerValue(value)) {
+        (original.item ?? []).forEach((child) => visit(child, `${answersPath}.${index}.item`));
       }
     });
   };
 
-  items.forEach(visit);
+  items.forEach((item) => visit(item, context));
   return errors;
 }
 
@@ -2153,13 +2129,17 @@ export function isUsedInMode(usageMode: string | undefined, mode: QuestionnaireM
  * Returns true if an item is shown in a mode: its usage mode includes the mode and, for the `-non-empty` usage modes
  * when viewing answers, it is answered.
  * @param values - The current form values.
- * @param item - The item (or its answer copy).
+ * @param response - The draft QuestionnaireResponse.
+ * @param item - The item.
+ * @param context - The response path of the response items the item is answered in.
  * @param mode - The mode the questionnaire is rendered in.
  * @returns True if the item is shown.
  */
 export function isShownInMode(
   values: Record<string, any>,
+  response: QuestionnaireResponse,
   item: ExtendedQuestionnaireItem,
+  context: string,
   mode: QuestionnaireMode
 ): boolean {
   const definition: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
@@ -2167,19 +2147,26 @@ export function isShownInMode(
     return false;
   }
   if (mode === 'display' && definition.usageMode?.endsWith('non-empty')) {
-    return isAnsweredItem(values, item);
+    return isAnsweredItem(values, response, definition, context);
   }
   return true;
 }
 
-function isAnsweredItem(values: Record<string, any>, item: ExtendedQuestionnaireItem): boolean {
-  const definition: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
-  if (definition.type === 'group') {
-    return ((item.answer ?? []) as unknown as ExtendedQuestionnaireItem[][])
-      .filter(Array.isArray)
-      .some((repetition) => toSubmittedResponseItems(values, repetition).some(hasResponseAnswer));
+function isAnsweredItem(
+  values: Record<string, any>,
+  response: QuestionnaireResponse,
+  item: ExtendedQuestionnaireItem,
+  context: string
+): boolean {
+  const indexes = getResponseItemIndexes(response, context, item.linkId);
+  if (item.type === 'group') {
+    return indexes.some((index) =>
+      toResponseItems(values, response, item.item ?? [], `${context}.${index}.item`, true).some(hasResponseAnswer)
+    );
   }
-  return (item.answer ?? []).some((answer) => !isEmptyAnswerValue(answer.value));
+  const answers: QuestionnaireResponseItemAnswer[] =
+    indexes.length > 0 ? (getValueByPath(response, `${context}.${indexes[0]}.answer`) ?? []) : [];
+  return answers.some((answer) => !isEmptyAnswerValue(getAnswerValue(item, answer)));
 }
 
 /**
@@ -2192,15 +2179,19 @@ export function getResponseSignature(response: QuestionnaireResponse | undefined
 }
 
 /**
- * Converts the answers in the form values into a FHIR QuestionnaireResponse. Display items, hidden items, items
- * disabled by enableWhen, unanswered questions and, in a questionnaire with pages, top-level items outside a page are
- * left out.
- * Each group repetition is a separate item with the group's linkId; follow-up items are answered under their answer.
- * @param values - The current form values (the questionnaire with its answers).
+ * Converts the draft response into the QuestionnaireResponse to submit. Display items, hidden items, items disabled by
+ * their conditions, unanswered questions and, in a questionnaire with pages, top-level items outside a page are left
+ * out.
+ * @param values - The current form values (the questionnaire).
+ * @param response - The draft QuestionnaireResponse.
  * @param signature - The respondent's signature, when the questionnaire requires one.
  * @returns The QuestionnaireResponse.
  */
-export function toFhirQuestionnaireResponse(values: Record<string, any>, signature?: Signature): QuestionnaireResponse {
+export function toFhirQuestionnaireResponse(
+  values: Record<string, any>,
+  response: QuestionnaireResponse,
+  signature?: Signature
+): QuestionnaireResponse {
   const questionnaire = values as Questionnaire;
   let questionnaireCanonical: string | undefined = questionnaire.url;
   if (!questionnaireCanonical && questionnaire.id) {
@@ -2214,47 +2205,79 @@ export function toFhirQuestionnaireResponse(values: Record<string, any>, signatu
     authored: new Date().toISOString(),
     // Stored as Medplum's QuestionnaireForm stores it.
     ...(signature && { extension: [{ url: QUESTIONNAIRE_SIGNATURE_RESPONSE_URL, valueSignature: signature }] }),
-    item: toSubmittedResponseItems(values, getRespondedItems(values.item ?? [])),
+    item: toResponseItems(values, response, getRespondedItems(values.item ?? []), 'item', true),
   };
 }
 
-function toSubmittedResponseItems(
+/**
+ * Converts the draft response's answers to the given items into FHIR response items. Each group repetition is a
+ * separate item with the group's linkId; follow-up items are answered under their answer. A submitted response leaves
+ * out what toFhirQuestionnaireResponse describes; otherwise every question is there, answered or not, as in the response
+ * Medplum's QuestionnaireForm evaluates expressions against.
+ * @param values - The current form values.
+ * @param response - The draft QuestionnaireResponse.
+ * @param items - The items.
+ * @param context - The response path of the response items the items are answered in.
+ * @param submitted - True for the response to submit.
+ * @returns The response items.
+ */
+function toResponseItems(
   values: Record<string, any>,
-  items: ExtendedQuestionnaireItem[]
+  response: QuestionnaireResponse,
+  items: ExtendedQuestionnaireItem[],
+  context: string,
+  submitted: boolean
 ): QuestionnaireResponseItem[] {
   return items.flatMap((item): QuestionnaireResponseItem[] => {
     const original: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
-    // Items only shown when viewing answers are not filled in.
-    if (original.hidden || !evaluateEnableWhen(values, item) || !isShownInMode(values, item, 'capture')) {
-      return [];
-    }
-
     // Display text is not answered, so it has no response item.
     if (original.type === 'display') {
       return [];
     }
-
-    const base = { linkId: item.linkId, ...(original.text && { text: original.text }) };
-
-    if (original.type === 'group') {
-      return ((item.answer ?? []) as unknown as ExtendedQuestionnaireItem[][])
-        .filter(Array.isArray)
-        .map((answerGroup) => ({ ...base, item: toSubmittedResponseItems(values, answerGroup) }))
-        .filter((groupResponse) => groupResponse.item.length > 0);
+    // Items only shown when viewing answers are not filled in.
+    if (
+      submitted &&
+      (original.hidden ||
+        !evaluateEnableWhen(values, response, item, context) ||
+        !isShownInMode(values, response, item, context, 'capture'))
+    ) {
+      return [];
     }
 
-    const answers = (item.answer ?? [])
-      .filter((answer) => !isEmptyAnswerValue(answer.value))
-      .map((answer) => {
-        // Follow-up items are answered under the answer they belong to.
-        const followUpItems = toSubmittedResponseItems(values, answer.item ?? []);
-        return {
-          ...toFhirResponseAnswer(original, answer.value),
-          ...(followUpItems.length > 0 && { item: followUpItems }),
-        };
-      });
+    const base = { linkId: item.linkId, ...(original.text && { text: original.text }) };
+    const indexes = getResponseItemIndexes(response, context, item.linkId);
 
-    return answers.length > 0 ? [{ ...base, answer: answers }] : [];
+    if (original.type === 'group') {
+      return indexes
+        .map((index) => ({
+          ...base,
+          item: toResponseItems(values, response, original.item ?? [], `${context}.${index}.item`, submitted),
+        }))
+        .filter((groupResponse) => !submitted || groupResponse.item.length > 0);
+    }
+
+    const answersPath = `${context}.${indexes[0]}.answer`;
+    const draftAnswers: QuestionnaireResponseItemAnswer[] =
+      indexes.length > 0 ? (getValueByPath(response, answersPath) ?? []) : [];
+    const answers = draftAnswers.flatMap((draftAnswer, index): QuestionnaireResponseItemAnswer[] => {
+      const value = getAnswerValue(original, draftAnswer);
+      if (isEmptyAnswerValue(value)) {
+        return [];
+      }
+      const followUpItems = toResponseItems(
+        values,
+        response,
+        original.item ?? [],
+        `${answersPath}.${index}.item`,
+        submitted
+      );
+      return [{ ...toFhirResponseAnswer(original, value), ...(followUpItems.length > 0 && { item: followUpItems }) }];
+    });
+
+    if (submitted) {
+      return answers.length > 0 ? [{ ...base, answer: answers }] : [];
+    }
+    return [{ ...base, ...(answers.length > 0 && { answer: answers }) }];
   });
 }
 
@@ -2335,78 +2358,60 @@ function getItemExpression(definition: ExtendedQuestionnaireItem, url: string): 
   return definition.preserved?.extension?.find((extension) => extension.url === url)?.valueExpression?.expression;
 }
 
-const currentResponses = new WeakMap<Record<string, any>, QuestionnaireResponse>();
+const currentResponses = new WeakMap<Record<string, any>, WeakMap<QuestionnaireResponse, QuestionnaireResponse>>();
 
 /**
- * Converts all answers in the form values into a QuestionnaireResponse, for expressions to evaluate against.
- * Unlike the submitted response, it has every question, including unanswered, hidden and disabled ones, as the
- * response Medplum's QuestionnaireForm evaluates expressions against does.
+ * Converts the draft response into a QuestionnaireResponse for expressions to evaluate against: every question,
+ * including unanswered, hidden and disabled ones, as in the response Medplum's QuestionnaireForm evaluates expressions
+ * against.
  * @param values - The current form values.
- * @returns The QuestionnaireResponse, the same one for the same values.
+ * @param response - The draft QuestionnaireResponse.
+ * @returns The QuestionnaireResponse, the same one for the same values and draft.
  */
-function toCurrentQuestionnaireResponse(values: Record<string, any>): QuestionnaireResponse {
-  let response = currentResponses.get(values);
-  if (!response) {
-    response = {
+function toCurrentQuestionnaireResponse(
+  values: Record<string, any>,
+  response: QuestionnaireResponse
+): QuestionnaireResponse {
+  let byResponse = currentResponses.get(values);
+  if (!byResponse) {
+    byResponse = new WeakMap();
+    currentResponses.set(values, byResponse);
+  }
+  let current = byResponse.get(response);
+  if (!current) {
+    current = {
       resourceType: 'QuestionnaireResponse',
       status: 'in-progress',
-      item: toCurrentResponseItems(values, values.item ?? []),
+      item: toResponseItems(values, response, values.item ?? [], 'item', false),
     };
-    currentResponses.set(values, response);
+    byResponse.set(response, current);
   }
-  return response;
-}
-
-function toCurrentResponseItems(
-  values: Record<string, any>,
-  items: ExtendedQuestionnaireItem[]
-): QuestionnaireResponseItem[] {
-  return items.flatMap((item): QuestionnaireResponseItem[] => {
-    const original: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
-    if (original.type === 'display') {
-      return [];
-    }
-
-    const base = { linkId: item.linkId, ...(original.text && { text: original.text }) };
-
-    if (original.type === 'group') {
-      return ((item.answer ?? []) as unknown as ExtendedQuestionnaireItem[][])
-        .filter(Array.isArray)
-        .map((answerGroup) => ({ ...base, item: toCurrentResponseItems(values, answerGroup) }));
-    }
-
-    const answers = (item.answer ?? [])
-      .filter((answer) => !isEmptyAnswerValue(answer.value))
-      .map((answer) => {
-        const followUpItems = toCurrentResponseItems(values, answer.item ?? []);
-        return {
-          ...toFhirResponseAnswer(original, answer.value),
-          ...(followUpItems.length > 0 && { item: followUpItems }),
-        };
-      });
-
-    return [{ ...base, ...(answers.length > 0 && { answer: answers }) }];
-  });
+  return current;
 }
 
 /**
  * Evaluates a FHIRPath expression against the current answers, as Medplum's QuestionnaireForm does: on the
  * QuestionnaireResponse, which is also `%resource`.
  * @param values - The current form values.
+ * @param response - The draft QuestionnaireResponse.
  * @param expression - The FHIRPath expression.
  * @returns The result.
  */
-function evaluateResponseExpression(values: Record<string, any>, expression: string): TypedValue[] {
-  const response = toTypedValue(toCurrentQuestionnaireResponse(values));
-  return evalFhirPathTyped(expression, [response], { '%resource': response });
+function evaluateResponseExpression(
+  values: Record<string, any>,
+  response: QuestionnaireResponse,
+  expression: string
+): TypedValue[] {
+  const current = toTypedValue(toCurrentQuestionnaireResponse(values, response));
+  return evalFhirPathTyped(expression, [current], { '%resource': current });
 }
 
 /** An answer calculated by its question's calculatedExpression, or why it could not be. */
 export interface CalculatedAnswer {
-  /** The form path of the answer value. */
-  readonly fieldPath: string;
-  /** The calculated value, empty when the expression has no result. */
-  readonly value?: any;
+  /** The response path of the answer. */
+  readonly answerPath: string;
+  /** The calculated answer, without a value when the expression has no result. */
+  readonly answer?: QuestionnaireResponseItemAnswer;
   readonly error?: string;
 }
 
@@ -2414,60 +2419,65 @@ export interface CalculatedAnswer {
  * Calculates the answers of questions with a calculatedExpression (sdc-questionnaire-calculatedExpression) from the
  * current answers, as Medplum's QuestionnaireForm does. An expression without a result clears the answer.
  * @param values - The current form values.
- * @returns The calculated answers, one per answered copy of each such question.
+ * @param response - The draft QuestionnaireResponse.
+ * @returns The calculated answers, one for each response item of each such question.
  */
-export function getCalculatedAnswers(values: Record<string, any>): CalculatedAnswer[] {
+export function getCalculatedAnswers(values: Record<string, any>, response: QuestionnaireResponse): CalculatedAnswer[] {
   const result: CalculatedAnswer[] = [];
 
-  const visit = (item: ExtendedQuestionnaireItem): void => {
+  const visit = (item: ExtendedQuestionnaireItem, context: string): void => {
     const original: ExtendedQuestionnaireItem = getValueByPath(values, item.path) ?? item;
     if (original.type === 'display') {
       return;
     }
+    const indexes = getResponseItemIndexes(response, context, item.linkId);
     if (original.type === 'group') {
-      for (const answerGroup of (item.answer ?? []) as unknown as ExtendedQuestionnaireItem[][]) {
-        if (Array.isArray(answerGroup)) {
-          answerGroup.forEach(visit);
-        }
+      for (const index of indexes) {
+        (original.item ?? []).forEach((child) => visit(child, `${context}.${index}.item`));
       }
       return;
     }
+    if (indexes.length === 0) {
+      return;
+    }
 
+    const answersPath = `${context}.${indexes[0]}.answer`;
     const expression = getItemExpression(original, QUESTIONNAIRE_CALCULATED_EXPRESSION_URL);
     if (expression) {
-      result.push(calculateAnswer(values, item, original, expression));
+      result.push(calculateAnswer(values, response, original, `${answersPath}.0`, expression));
     }
-    for (const answer of item.answer ?? []) {
-      answer.item?.forEach(visit);
-    }
+    ((getValueByPath(response, answersPath) ?? []) as QuestionnaireResponseItemAnswer[]).forEach((_answer, index) =>
+      (original.item ?? []).forEach((child) => visit(child, `${answersPath}.${index}.item`))
+    );
   };
 
-  (values.item ?? []).forEach(visit);
+  (values.item ?? []).forEach((item: ExtendedQuestionnaireItem) => visit(item, 'item'));
   return result;
 }
 
 function calculateAnswer(
   values: Record<string, any>,
+  response: QuestionnaireResponse,
   item: ExtendedQuestionnaireItem,
-  original: ExtendedQuestionnaireItem,
+  answerPath: string,
   expression: string
 ): CalculatedAnswer {
-  const fieldPath = `${item.answerPath}.answer.0.value`;
   let calculated: TypedValue[];
   try {
-    calculated = evaluateResponseExpression(values, expression);
+    calculated = evaluateResponseExpression(values, response, expression);
   } catch (err) {
-    return { fieldPath, error: `Expression evaluation failed: ${normalizeErrorString(err)}` };
+    return { answerPath, error: `Expression evaluation failed: ${normalizeErrorString(err)}` };
   }
 
   if (calculated.length === 0) {
-    return { fieldPath, value: null };
+    return { answerPath, answer: {} };
   }
-  const answer = typedValueToResponseItem({ linkId: item.linkId, type: original.type }, calculated[0]);
+  const answer = typedValueToResponseItem({ linkId: item.linkId, type: item.type }, calculated[0]);
   if (!answer) {
-    return { fieldPath, error: `The expression's result is a ${calculated[0].type}, not a ${original.type}` };
+    return { answerPath, error: `The expression's result is a ${calculated[0].type}, not a ${item.type}` };
   }
-  return { fieldPath, value: fromQuestionnaireResponseItemAnswer([answer], original.type)[0].value };
+  // Written as its input would write it, so an unchanged result is the same answer.
+  return { answerPath, answer: toDraftAnswer(item, fromQuestionnaireResponseItemAnswer([answer], item.type)[0].value) };
 }
 
 /**

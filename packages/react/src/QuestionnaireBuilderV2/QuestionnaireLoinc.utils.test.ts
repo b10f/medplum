@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
-import type { QuestionnaireItem } from '@medplum/fhirtypes';
+import type { QuestionnaireItem, QuestionnaireResponse } from '@medplum/fhirtypes';
 import {
   evaluateEnableWhen,
   fromFhirAnswerOptions,
   fromFhirQuestionnaireItem,
   hasFollowUpItems,
+  toDraftResponse,
   toFhirQuestionnaireItem,
 } from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import type { LFormsItem, LoincFormDefinition } from './QuestionnaireLoinc.utils';
@@ -391,12 +392,16 @@ describe('QuestionnaireLoinc.utils', () => {
       ]);
       const questionnaire = { resourceType: 'Questionnaire' as const, status: 'active' as const, item: [question] };
       const values = { ...questionnaire, item: [fromFhirQuestionnaireItem(question, questionnaire, 0)] };
-      const followUp = values.item[0].answer[0].item[0];
+      const followUp = values.item[0].item[0];
+      const answered = (code: string): QuestionnaireResponse =>
+        toDraftResponse(values.item, {
+          resourceType: 'QuestionnaireResponse',
+          status: 'in-progress',
+          item: [{ linkId: question.linkId, answer: [{ valueCoding: { system: 'http://loinc.org', code } }] }],
+        });
 
-      values.item[0].answer[0].value = { system: 'http://loinc.org', code: 'LA33-6', display: 'Yes' };
-      expect(evaluateEnableWhen(values, followUp)).toBe(true);
-      values.item[0].answer[0].value = { system: 'http://loinc.org', code: 'LA32-8', display: 'No' };
-      expect(evaluateEnableWhen(values, followUp)).toBe(false);
+      expect(evaluateEnableWhen(values, answered('LA33-6'), followUp, 'item.0.answer.0.item')).toBe(true);
+      expect(evaluateEnableWhen(values, answered('LA32-8'), followUp, 'item.0.answer.0.item')).toBe(false);
     });
   });
 

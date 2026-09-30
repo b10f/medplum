@@ -44,7 +44,7 @@ import {
   setQuestionnaireItemReferenceTargetTypes,
   typedValueToResponseItem,
 } from '@medplum/react-hooks';
-import type { QuestionnaireForm } from './QuestionnaireFormContext';
+import type { QuestionnaireForm } from '../QuestionnaireFormV2/QuestionnaireFormContext';
 
 export interface ExtendedQuestionnaireItem extends Omit<QuestionnaireItem, 'enableWhen' | 'item' | 'answerOption'> {
   /**

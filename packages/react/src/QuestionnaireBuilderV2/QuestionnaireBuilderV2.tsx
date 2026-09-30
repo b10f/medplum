@@ -9,6 +9,12 @@ import { IconSettings } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
 import { CodingInput } from '../CodingInput/CodingInput';
+import {
+  QuestionnaireFormProvider,
+  useQuestionnaireForm,
+  useQuestionnaireFormContext,
+} from '../QuestionnaireFormV2/QuestionnaireFormContext';
+import { QuestionnairePreview } from '../QuestionnaireFormV2/QuestionnairePreview';
 import classes from './QuestionnaireBuilderV2.module.css';
 import type { ExtendedQuestionnaireItem } from './QuestionnaireBuilderV2.utils';
 import {
@@ -22,15 +28,9 @@ import {
   setRequiredSignatureType,
   toFhirQuestionnaire,
 } from './QuestionnaireBuilderV2.utils';
-import {
-  QuestionnaireFormProvider,
-  useQuestionnaireForm,
-  useQuestionnaireFormContext,
-} from './QuestionnaireFormContext';
 import { QuestionnaireGroupMenu } from './QuestionnaireGroupMenu';
 import { QuestionnaireItemSettings } from './QuestionnaireItemSettings';
 import { QuestionnaireItemTree } from './QuestionnaireItemTree';
-import { QuestionnairePreview } from './QuestionnairePreview';
 
 export interface QuestionnaireBuilderV2Props {
   readonly questionnaire: Partial<Questionnaire> | Reference<Questionnaire>;

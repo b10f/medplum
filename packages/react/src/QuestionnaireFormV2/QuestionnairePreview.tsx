@@ -41,17 +41,13 @@ import { createContext, Fragment, useContext, useEffect, useRef, useState } from
 import { AttachmentInput } from '../AttachmentInput/AttachmentInput';
 import { Form } from '../Form/Form';
 import { SubmitButton } from '../Form/SubmitButton';
-import { QuestionnaireFormStepper } from '../QuestionnaireForm/QuestionnaireFormStepper';
-import { ReferenceInput } from '../ReferenceInput/ReferenceInput';
-import { SignatureInput } from '../SignatureInput/SignatureInput';
-import { ValueSetAutocomplete } from '../ValueSetAutocomplete/ValueSetAutocomplete';
 import type {
   ExtendedQuestionnaireItem,
   ExtendedQuestionnaireItemAnswer,
   ExtendedQuestionnaireItemAnswerOption,
   QuestionDisplayText,
   QuestionnaireMode,
-} from './QuestionnaireBuilderV2.utils';
+} from '../QuestionnaireBuilderV2/QuestionnaireBuilderV2.utils';
 import {
   applyExclusiveOptions,
   evaluateEnableWhen,
@@ -78,7 +74,11 @@ import {
   toQuantityUnit,
   validateAnswerValue,
   validateFormAnswers,
-} from './QuestionnaireBuilderV2.utils';
+} from '../QuestionnaireBuilderV2/QuestionnaireBuilderV2.utils';
+import { QuestionnaireFormStepper } from '../QuestionnaireForm/QuestionnaireFormStepper';
+import { ReferenceInput } from '../ReferenceInput/ReferenceInput';
+import { SignatureInput } from '../SignatureInput/SignatureInput';
+import { ValueSetAutocomplete } from '../ValueSetAutocomplete/ValueSetAutocomplete';
 import type { QuestionnaireForm } from './QuestionnaireFormContext';
 import { useQuestionnaireFormContext } from './QuestionnaireFormContext';
 import classes from './QuestionnairePreview.module.css';

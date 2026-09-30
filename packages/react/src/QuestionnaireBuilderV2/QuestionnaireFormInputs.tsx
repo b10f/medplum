@@ -7,8 +7,8 @@ import type { JSX, ReactNode } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
 import type { AsyncAutocompleteOption } from '../AsyncAutocomplete/AsyncAutocomplete';
 import { AsyncAutocomplete } from '../AsyncAutocomplete/AsyncAutocomplete';
+import type { QuestionnaireForm } from '../QuestionnaireFormV2/QuestionnaireFormContext';
 import { getValueByPath } from './QuestionnaireBuilderV2.utils';
-import type { QuestionnaireForm } from './QuestionnaireFormContext';
 import { useDebouncedFormValue } from './useDebouncedFormValue';
 
 export interface FormTextInputProps {

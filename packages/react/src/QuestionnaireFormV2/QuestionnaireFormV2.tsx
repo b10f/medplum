@@ -4,13 +4,16 @@ import type { Questionnaire, QuestionnaireItem, QuestionnaireResponse, Reference
 import { useResource } from '@medplum/react-hooks';
 import type { JSX } from 'react';
 import { useEffect } from 'react';
-import type { ExtendedQuestionnaireItem, QuestionnaireMode } from './QuestionnaireBuilderV2.utils';
+import type {
+  ExtendedQuestionnaireItem,
+  QuestionnaireMode,
+} from '../QuestionnaireBuilderV2/QuestionnaireBuilderV2.utils';
 import {
   addFormAnswer,
   fromFhirQuestionnaireItem,
   getResponseSignature,
   toFhirQuestionnaireResponse,
-} from './QuestionnaireBuilderV2.utils';
+} from '../QuestionnaireBuilderV2/QuestionnaireBuilderV2.utils';
 import { QuestionnaireFormProvider, useQuestionnaireForm } from './QuestionnaireFormContext';
 import { QuestionnairePreview } from './QuestionnairePreview';
 

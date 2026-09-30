@@ -39,6 +39,8 @@ import {
 } from '@tabler/icons-react';
 import type { JSX, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
+import type { QuestionnaireForm } from '../QuestionnaireFormV2/QuestionnaireFormContext';
+import { useQuestionnaireFormContext } from '../QuestionnaireFormV2/QuestionnaireFormContext';
 import { ResourceInput } from '../ResourceInput/ResourceInput';
 import { ResourceTypeInput } from '../ResourceTypeInput/ResourceTypeInput';
 import { ValueSetAutocomplete } from '../ValueSetAutocomplete/ValueSetAutocomplete';
@@ -64,8 +66,6 @@ import {
   isCodedAnswerOption,
   isManualAnswerOption,
 } from './QuestionnaireBuilderV2.utils';
-import type { QuestionnaireForm } from './QuestionnaireFormContext';
-import { useQuestionnaireFormContext } from './QuestionnaireFormContext';
 import {
   FormFlatCollection,
   FormRadioGroup,

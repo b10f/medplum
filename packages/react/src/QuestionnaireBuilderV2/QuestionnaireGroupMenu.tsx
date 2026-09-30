@@ -16,6 +16,7 @@ import {
 } from '@tabler/icons-react';
 import type { JSX, SyntheticEvent } from 'react';
 import { useCallback, useState } from 'react';
+import { useQuestionnaireFormContext } from '../QuestionnaireFormV2/QuestionnaireFormContext';
 import { killEvent } from '../utils/dom';
 import type { ExtendedQuestionnaireItem } from './QuestionnaireBuilderV2.utils';
 import {
@@ -29,7 +30,6 @@ import {
   rebuildFormItems,
   toFhirQuestionnaireItem,
 } from './QuestionnaireBuilderV2.utils';
-import { useQuestionnaireFormContext } from './QuestionnaireFormContext';
 import { QuestionnaireLoincSearchDrawer } from './QuestionnaireLoincSearch';
 
 export interface QuestionnaireGroupMenuProps {

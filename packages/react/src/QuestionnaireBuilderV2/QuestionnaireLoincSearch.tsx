@@ -6,7 +6,7 @@ import type { Questionnaire, QuestionnaireItem } from '@medplum/fhirtypes';
 import { IconEye, IconPlus, IconSearch } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { useState } from 'react';
-import { QuestionnaireFormV2 } from './QuestionnaireFormV2';
+import { QuestionnaireFormV2 } from '../QuestionnaireFormV2/QuestionnaireFormV2';
 import type { LoincFormDefinition, LoincQuestion } from './QuestionnaireLoinc.utils';
 import {
   fetchLoincFormDefinition,

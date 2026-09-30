@@ -7,7 +7,7 @@ import {
   fromFhirQuestionnaireItem,
   hasFollowUpItems,
   toFhirQuestionnaireItem,
-} from './QuestionnaireBuilderV2.utils';
+} from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import type { LFormsItem, LoincFormDefinition } from './QuestionnaireLoinc.utils';
 import {
   groupLoincAnswerLists,

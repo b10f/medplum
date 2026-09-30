@@ -37,18 +37,17 @@ import cx from 'clsx';
 import type { CSSProperties, JSX, MouseEvent } from 'react';
 import { useMemo, useState } from 'react';
 import { useQuestionnaireFormContext } from '../QuestionnaireFormV2/QuestionnaireFormContext';
-import type { ExtendedQuestionnaireItem, FlattenedFormItem } from './QuestionnaireBuilderV2.utils';
+import type { ExtendedQuestionnaireItem } from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import {
   findFormItemByLinkId,
-  flattenFormItems,
-  getFormItemDropTarget,
   getPageItems,
   hasFollowUpItems,
   isHeaderOrFooterItem,
   isPageItem,
   isQuestionItem,
-  moveFormItem,
-} from './QuestionnaireBuilderV2.utils';
+} from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
+import type { FlattenedFormItem } from './QuestionnaireBuilderV2.utils';
+import { flattenFormItems, getFormItemDropTarget, moveFormItem } from './QuestionnaireBuilderV2.utils';
 import { QuestionnaireGroupMenu } from './QuestionnaireGroupMenu';
 import { QuestionnaireItemMenu } from './QuestionnaireItemMenu';
 import classes from './QuestionnaireItemTree.module.css';

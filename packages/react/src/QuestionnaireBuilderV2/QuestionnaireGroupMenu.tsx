@@ -17,10 +17,8 @@ import {
 import type { JSX, SyntheticEvent } from 'react';
 import { useCallback, useState } from 'react';
 import { useQuestionnaireFormContext } from '../QuestionnaireFormV2/QuestionnaireFormContext';
-import { killEvent } from '../utils/dom';
-import type { ExtendedQuestionnaireItem } from './QuestionnaireBuilderV2.utils';
+import type { ExtendedQuestionnaireItem } from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import {
-  createFollowUpEnableWhen,
   FOOTER_ITEM_CONTROL,
   fromFhirQuestionnaireItem,
   getValueByPath,
@@ -29,7 +27,9 @@ import {
   PAGE_ITEM_CONTROL,
   rebuildFormItems,
   toFhirQuestionnaireItem,
-} from './QuestionnaireBuilderV2.utils';
+} from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
+import { killEvent } from '../utils/dom';
+import { createFollowUpEnableWhen } from './QuestionnaireBuilderV2.utils';
 import { QuestionnaireLoincSearchDrawer } from './QuestionnaireLoincSearch';
 
 export interface QuestionnaireGroupMenuProps {

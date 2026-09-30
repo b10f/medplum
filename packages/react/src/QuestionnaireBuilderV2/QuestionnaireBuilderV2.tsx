@@ -11,22 +11,24 @@ import { useEffect, useState } from 'react';
 import { CodingInput } from '../CodingInput/CodingInput';
 import {
   QuestionnaireFormProvider,
-  useQuestionnaireForm,
+  useQuestionnaireEditorForm,
   useQuestionnaireFormContext,
 } from '../QuestionnaireFormV2/QuestionnaireFormContext';
-import { QuestionnairePreview } from '../QuestionnaireFormV2/QuestionnairePreview';
-import classes from './QuestionnaireBuilderV2.module.css';
-import type { ExtendedQuestionnaireItem } from './QuestionnaireBuilderV2.utils';
+import type { ExtendedQuestionnaireItem } from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import {
   addFormAnswer,
-  DEFAULT_SIGNATURE_TYPE,
   findFormItemByLinkId,
   fromFhirQuestionnaireItem,
-  getQuestionnaireDesignNote,
   getRequiredSignatureType,
+  toFhirQuestionnaire,
+} from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
+import { QuestionnaireRenderer } from '../QuestionnaireFormV2/QuestionnaireRenderer';
+import classes from './QuestionnaireBuilderV2.module.css';
+import {
+  DEFAULT_SIGNATURE_TYPE,
+  getQuestionnaireDesignNote,
   setQuestionnaireDesignNote,
   setRequiredSignatureType,
-  toFhirQuestionnaire,
 } from './QuestionnaireBuilderV2.utils';
 import { QuestionnaireGroupMenu } from './QuestionnaireGroupMenu';
 import { QuestionnaireItemSettings } from './QuestionnaireItemSettings';
@@ -41,7 +43,7 @@ export function QuestionnaireBuilderV2(props: QuestionnaireBuilderV2Props): JSX.
   const defaultValue = useResource(props.questionnaire);
   const [selectedLinkId, setSelectedLinkId] = useState<string>();
   const [settingsOpened, setSettingsOpened] = useState(false);
-  const form = useQuestionnaireForm({
+  const form = useQuestionnaireEditorForm({
     mode: 'uncontrolled',
     initialValues: { resourceType: 'Questionnaire', status: 'active' },
   });
@@ -117,7 +119,7 @@ export function QuestionnaireBuilderV2(props: QuestionnaireBuilderV2Props): JSX.
         </div>
         <div className={classes.preview}>
           <ScrollArea h="100%">
-            <QuestionnairePreview
+            <QuestionnaireRenderer
               items={items}
               selectedItem={selectedItem}
               addAnswer={addAnswer}

@@ -4,18 +4,17 @@ import type { Questionnaire, QuestionnaireItem, QuestionnaireResponse, Reference
 import { useResource } from '@medplum/react-hooks';
 import type { JSX } from 'react';
 import { useEffect } from 'react';
-import type {
-  ExtendedQuestionnaireItem,
-  QuestionnaireMode,
-} from '../QuestionnaireBuilderV2/QuestionnaireBuilderV2.utils';
+import { QuestionnaireFormProvider, useQuestionnaireEditorForm } from './QuestionnaireFormContext';
+import type { ExtendedQuestionnaireItem, QuestionnaireMode } from './QuestionnaireFormV2.utils';
 import {
   addFormAnswer,
   fromFhirQuestionnaireItem,
   getResponseSignature,
   toFhirQuestionnaireResponse,
-} from '../QuestionnaireBuilderV2/QuestionnaireBuilderV2.utils';
-import { QuestionnaireFormProvider, useQuestionnaireForm } from './QuestionnaireFormContext';
-import { QuestionnairePreview } from './QuestionnairePreview';
+} from './QuestionnaireFormV2.utils';
+import { QuestionnaireRenderer } from './QuestionnaireRenderer';
+
+export type { QuestionnaireMode } from './QuestionnaireFormV2.utils';
 
 export interface QuestionnaireFormV2Props {
   readonly questionnaire: Questionnaire | Reference<Questionnaire>;
@@ -30,7 +29,7 @@ export interface QuestionnaireFormV2Props {
 }
 
 /**
- * Renders a questionnaire for a respondent with the Builder v2 preview renderer, and produces a QuestionnaireResponse
+ * Renders a questionnaire for a respondent with QuestionnaireRenderer, and produces a QuestionnaireResponse
  * on submit.
  * @param props - The QuestionnaireFormV2 React props.
  * @returns The QuestionnaireFormV2 React node.
@@ -39,7 +38,7 @@ export function QuestionnaireFormV2(props: QuestionnaireFormV2Props): JSX.Elemen
   const questionnaire = useResource(props.questionnaire);
   const questionnaireResponse = useResource(props.questionnaireResponse);
   const responseLoaded = !props.questionnaireResponse || !!questionnaireResponse;
-  const form = useQuestionnaireForm({
+  const form = useQuestionnaireEditorForm({
     mode: 'uncontrolled',
     initialValues: { resourceType: 'Questionnaire', status: 'active' },
   });
@@ -64,7 +63,7 @@ export function QuestionnaireFormV2(props: QuestionnaireFormV2Props): JSX.Elemen
 
   return (
     <QuestionnaireFormProvider form={form}>
-      <QuestionnairePreview
+      <QuestionnaireRenderer
         items={items}
         addAnswer={(item, original) => addFormAnswer(form, item, original)}
         submitButtonText={props.submitButtonText}

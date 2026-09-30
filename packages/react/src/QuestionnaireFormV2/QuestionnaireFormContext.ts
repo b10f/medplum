@@ -14,4 +14,4 @@ const [provider, useFormContext, useForm] = createFormContext<QuestionnaireFormV
 export const QuestionnaireFormProvider: FC<{ readonly form: QuestionnaireForm; readonly children: ReactNode }> =
   provider;
 export const useQuestionnaireFormContext: () => QuestionnaireForm = useFormContext;
-export const useQuestionnaireForm: UseForm<QuestionnaireFormValues> = useForm;
+export const useQuestionnaireEditorForm: UseForm<QuestionnaireFormValues> = useForm;

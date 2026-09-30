@@ -41,29 +41,31 @@ import type { JSX, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import type { QuestionnaireForm } from '../QuestionnaireFormV2/QuestionnaireFormContext';
 import { useQuestionnaireFormContext } from '../QuestionnaireFormV2/QuestionnaireFormContext';
-import { ResourceInput } from '../ResourceInput/ResourceInput';
-import { ResourceTypeInput } from '../ResourceTypeInput/ResourceTypeInput';
-import { ValueSetAutocomplete } from '../ValueSetAutocomplete/ValueSetAutocomplete';
 import type {
   ExtendedQuestionnaireItem,
   ExtendedQuestionnaireItemAnswerOption,
   ExtendedQuestionnaireItemEnableWhen,
-  ItemControlCodes,
-} from './QuestionnaireBuilderV2.utils';
+} from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import {
-  createManualAnswerOption,
   findFormItemByLinkId,
   fromFhirAnswerOptions,
   getAnswerItems,
   getAnswerOptionLabel,
-  getAnswerOptionProblems,
   getChoiceValueKey,
-  getItemControlOptions,
-  getLocalAnswerOptionSystem,
   getReferenceFilterError,
   getValueByPath,
-  hasFixedItemControl,
   isCodedAnswerOption,
+} from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
+import { ResourceInput } from '../ResourceInput/ResourceInput';
+import { ResourceTypeInput } from '../ResourceTypeInput/ResourceTypeInput';
+import { ValueSetAutocomplete } from '../ValueSetAutocomplete/ValueSetAutocomplete';
+import type { ItemControlCodes } from './QuestionnaireBuilderV2.utils';
+import {
+  createManualAnswerOption,
+  getAnswerOptionProblems,
+  getItemControlOptions,
+  getLocalAnswerOptionSystem,
+  hasFixedItemControl,
   isManualAnswerOption,
 } from './QuestionnaireBuilderV2.utils';
 import {

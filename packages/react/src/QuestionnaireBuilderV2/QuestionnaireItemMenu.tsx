@@ -4,8 +4,8 @@ import { ActionIcon, Menu } from '@mantine/core';
 import { IconArrowDown, IconArrowUp, IconDots, IconTrash } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { useQuestionnaireFormContext } from '../QuestionnaireFormV2/QuestionnaireFormContext';
-import type { ExtendedQuestionnaireItem } from './QuestionnaireBuilderV2.utils';
-import { getValueByPath, rebuildFormItems } from './QuestionnaireBuilderV2.utils';
+import type { ExtendedQuestionnaireItem } from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
+import { getValueByPath, rebuildFormItems } from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 
 export interface QuestionnaireItemMenuProps {
   readonly item: ExtendedQuestionnaireItem;

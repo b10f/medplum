@@ -3,7 +3,7 @@
 import { useDebouncedState } from '@mantine/hooks';
 import { useEffect, useRef, useTransition } from 'react';
 import type { QuestionnaireForm } from '../QuestionnaireFormV2/QuestionnaireFormContext';
-import { getValueByPath } from './QuestionnaireBuilderV2.utils';
+import { getValueByPath } from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 
 /**
  * Keeps a text input's value in a debounced local state and writes it to the form after 100ms.

@@ -1,0 +1,2782 @@
+{
+  "resourceType": "Questionnaire",
+  "url": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit",
+  "version": "2026.1",
+  "name": "PediatricWellChildVisit",
+  "title": "Pediatric Well-Child Visit",
+  "status": "active",
+  "subjectType": ["Patient"],
+  "description": "Completed by a parent or guardian before their child's routine check-up.",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-signatureRequired",
+      "valueCodeableConcept": {
+        "coding": [
+          {
+            "system": "urn:iso-astm:E1762-95:2013",
+            "code": "1.2.840.10065.1.12.1.1",
+            "display": "Author's Signature"
+          }
+        ]
+      }
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/designNote",
+      "valueMarkdown": "Milestone, feeding and safety questions follow the age group the parent picks. Milestones are a conversation starter, not a developmental screening instrument."
+    }
+  ],
+  "item": [
+    {
+      "linkId": "child-page",
+      "text": "Your child",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "intro",
+          "text": "Please fill in this form before your child's check-up. Answer for how your child is now.",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "instructions",
+                    "display": "Instructions"
+                  }
+                ],
+                "text": "Instructions"
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "child",
+          "text": "Child",
+          "type": "group",
+          "required": true,
+          "item": [
+            {
+              "linkId": "child-first-name",
+              "text": "First name",
+              "type": "string",
+              "required": true,
+              "maxLength": 50
+            },
+            {
+              "linkId": "child-last-name",
+              "text": "Last name",
+              "type": "string",
+              "required": true,
+              "maxLength": 50
+            },
+            {
+              "linkId": "child-birth-date",
+              "text": "Date of birth",
+              "type": "date",
+              "required": true,
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueDate": "2007-01-01"
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueDate": "2026-12-31"
+                }
+              ]
+            },
+            {
+              "linkId": "child-sex",
+              "text": "Sex",
+              "type": "choice",
+              "required": true,
+              "answerValueSet": "http://hl7.org/fhir/ValueSet/administrative-gender",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "autocomplete"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "age-group",
+              "text": "Age group",
+              "type": "choice",
+              "required": true,
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Under 1 year"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "1–2 years"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "3–5 years"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "4",
+                    "display": "6–11 years"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "5",
+                    "display": "12–17 years"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "item": [
+                {
+                  "linkId": "age-group-help",
+                  "text": "We use this to show the questions that fit your child’s age.",
+                  "type": "display",
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                      "valueCodeableConcept": {
+                        "coding": [
+                          {
+                            "system": "http://hl7.org/fhir/questionnaire-item-control",
+                            "code": "inline"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "parent",
+          "text": "Parent or guardian filling in this form",
+          "type": "group",
+          "item": [
+            {
+              "linkId": "parent-name",
+              "text": "Your name",
+              "type": "string",
+              "required": true
+            },
+            {
+              "linkId": "relationship",
+              "text": "Relationship to the child",
+              "type": "open-choice",
+              "required": true,
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Mother"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Father"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Grandparent"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "4",
+                    "display": "Legal guardian"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "5",
+                    "display": "Foster parent"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "parent-phone",
+              "text": "Phone number",
+              "type": "string",
+              "required": true,
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/entryFormat",
+                  "valueString": "+1 555 123 4567"
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/regex",
+                  "valueString": "\\+?[0-9 ()-]{7,20}"
+                }
+              ]
+            },
+            {
+              "linkId": "pediatrician",
+              "text": "Child's regular doctor",
+              "type": "reference",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-referenceResource",
+                  "valueCode": "Practitioner"
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-referenceFilter",
+                  "valueString": "active:not=false"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "linkId": "growth-page",
+      "text": "Growth and eating",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "growth-intro",
+          "text": "If you have weighed or measured your child recently, enter it here. Otherwise leave it blank: we will measure at the visit.",
+          "type": "display"
+        },
+        {
+          "linkId": "growth",
+          "text": "Measurements",
+          "type": "group",
+          "item": [
+            {
+              "linkId": "weight",
+              "text": "Weight",
+              "type": "quantity",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "29463-7",
+                  "display": "Body weight"
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-unitOption",
+                  "valueCoding": {
+                    "system": "http://unitsofmeasure.org",
+                    "code": "kg",
+                    "display": "kg"
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-unitOption",
+                  "valueCoding": {
+                    "system": "http://unitsofmeasure.org",
+                    "code": "[lb_av]",
+                    "display": "lb"
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxDecimalPlaces",
+                  "valueInteger": 2
+                }
+              ]
+            },
+            {
+              "linkId": "height",
+              "text": "Height or length",
+              "type": "decimal",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "8302-2",
+                  "display": "Body height"
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-unit",
+                  "valueCoding": {
+                    "system": "http://unitsofmeasure.org",
+                    "code": "cm",
+                    "display": "cm"
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueDecimal": 30
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueDecimal": 210
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxDecimalPlaces",
+                  "valueInteger": 1
+                }
+              ]
+            },
+            {
+              "linkId": "head",
+              "text": "Head circumference",
+              "type": "quantity",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "9843-4",
+                  "display": "Head Occipital-frontal circumference"
+                }
+              ],
+              "enableBehavior": "any",
+              "enableWhen": [
+                {
+                  "question": "age-group",
+                  "operator": "=",
+                  "answerCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1"
+                  }
+                },
+                {
+                  "question": "age-group",
+                  "operator": "=",
+                  "answerCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-unitOption",
+                  "valueCoding": {
+                    "system": "http://unitsofmeasure.org",
+                    "code": "cm",
+                    "display": "cm"
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxDecimalPlaces",
+                  "valueInteger": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "infant-feeding",
+          "text": "Feeding",
+          "type": "group",
+          "enableWhen": [
+            {
+              "question": "age-group",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "1"
+              }
+            }
+          ],
+          "item": [
+            {
+              "linkId": "milk",
+              "text": "What does your baby drink?",
+              "type": "choice",
+              "repeats": true,
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Breast milk"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Formula"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Cow’s milk"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "4",
+                    "display": "Water"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "check-box"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-choiceOrientation",
+                  "valueCode": "horizontal"
+                }
+              ]
+            },
+            {
+              "linkId": "feeds",
+              "text": "Feeds in 24 hours",
+              "type": "integer",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "spinner"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueInteger": 1
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueInteger": 20
+                }
+              ]
+            },
+            {
+              "linkId": "solids",
+              "text": "Has your baby started solid foods?",
+              "type": "boolean",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "vitamin-d",
+              "text": "Does your baby get vitamin D drops?",
+              "type": "boolean",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "check-box"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "eating",
+          "text": "Eating and drinking",
+          "type": "group",
+          "enableBehavior": "any",
+          "enableWhen": [
+            {
+              "question": "age-group",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "2"
+              }
+            },
+            {
+              "question": "age-group",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "3"
+              }
+            },
+            {
+              "question": "age-group",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "4"
+              }
+            },
+            {
+              "question": "age-group",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "5"
+              }
+            }
+          ],
+          "item": [
+            {
+              "linkId": "fruit-veg",
+              "text": "Servings of fruit and vegetables on a typical day",
+              "type": "integer",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "spinner"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueInteger": 0
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueInteger": 15
+                }
+              ]
+            },
+            {
+              "linkId": "sweet-drinks",
+              "text": "Sweetened drinks (juice, soda, sports drinks) on a typical day",
+              "type": "integer",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueInteger": 0
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueInteger": 15
+                }
+              ],
+              "item": [
+                {
+                  "linkId": "sweet-drinks-unit",
+                  "text": "cups",
+                  "type": "display",
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                      "valueCodeableConcept": {
+                        "coding": [
+                          {
+                            "system": "http://hl7.org/fhir/questionnaire-item-control",
+                            "code": "unit"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "picky",
+              "text": "Are you worried about how your child eats?",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "A little"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Yes"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-choiceOrientation",
+                  "valueCode": "horizontal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "linkId": "development-page",
+      "text": "Development",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "development-intro",
+          "text": "Every child develops at their own pace. Answer for what your child does now.",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "instructions",
+                    "display": "Instructions"
+                  }
+                ],
+                "text": "Instructions"
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "milestones-infant",
+          "text": "Does your baby…",
+          "type": "group",
+          "enableWhen": [
+            {
+              "question": "age-group",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "1"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "table"
+                  }
+                ]
+              }
+            }
+          ],
+          "item": [
+            {
+              "linkId": "milestones-infant-1",
+              "text": "Smile back when you smile",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "milestones-infant-2",
+              "text": "Hold their head steady",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "milestones-infant-3",
+              "text": "Roll over",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "milestones-infant-4",
+              "text": "Sit without support",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "milestones-infant-5",
+              "text": "Babble, like \"mama\" or \"baba\"",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "milestones-infant-6",
+              "text": "Pick up small things with thumb and finger",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "milestones-toddler",
+          "text": "Does your child…",
+          "type": "group",
+          "enableWhen": [
+            {
+              "question": "age-group",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "2"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "table"
+                  }
+                ]
+              }
+            }
+          ],
+          "item": [
+            {
+              "linkId": "milestones-toddler-1",
+              "text": "Walk without holding on",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "milestones-toddler-2",
+              "text": "Say several words",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "milestones-toddler-3",
+              "text": "Point to show you something",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "milestones-toddler-4",
+              "text": "Drink from a cup",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "milestones-toddler-5",
+              "text": "Follow simple directions, like \"give me the ball\"",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "milestones-toddler-6",
+              "text": "Play pretend, like feeding a doll",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "milestones-preschool",
+          "text": "Does your child…",
+          "type": "group",
+          "enableWhen": [
+            {
+              "question": "age-group",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "3"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "table"
+                  }
+                ]
+              }
+            }
+          ],
+          "item": [
+            {
+              "linkId": "milestones-preschool-1",
+              "text": "Talk in sentences",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "milestones-preschool-2",
+              "text": "Hop on one foot",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "milestones-preschool-3",
+              "text": "Draw a circle",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "milestones-preschool-4",
+              "text": "Play with other children",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "milestones-preschool-5",
+              "text": "Use the toilet during the day",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "milestones-preschool-6",
+              "text": "Name some colors",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Not yet"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Not sure"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "school",
+          "text": "School",
+          "type": "group",
+          "enableBehavior": "any",
+          "enableWhen": [
+            {
+              "question": "age-group",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "4"
+              }
+            },
+            {
+              "question": "age-group",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "5"
+              }
+            }
+          ],
+          "item": [
+            {
+              "linkId": "grade",
+              "text": "Grade",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueString": "Kindergarten"
+                },
+                {
+                  "valueString": "1st"
+                },
+                {
+                  "valueString": "2nd"
+                },
+                {
+                  "valueString": "3rd"
+                },
+                {
+                  "valueString": "4th"
+                },
+                {
+                  "valueString": "5th"
+                },
+                {
+                  "valueString": "6th"
+                },
+                {
+                  "valueString": "7th"
+                },
+                {
+                  "valueString": "8th"
+                },
+                {
+                  "valueString": "9th"
+                },
+                {
+                  "valueString": "10th"
+                },
+                {
+                  "valueString": "11th"
+                },
+                {
+                  "valueString": "12th"
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "drop-down"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "school-performance",
+              "text": "How is your child doing at school?",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Above average"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Average"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Below average"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "4",
+                    "display": "Struggling"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "activities",
+              "text": "Activities outside school",
+              "type": "open-choice",
+              "repeats": true,
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Sports"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Music"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Art"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "4",
+                    "display": "Clubs"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "5",
+                    "display": "Part-time job"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "autocomplete"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "screen-time",
+              "text": "Hours of screen time on a school day, outside schoolwork",
+              "type": "decimal",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "slider"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueDecimal": 0
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueDecimal": 12
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-sliderStepValue",
+                  "valueInteger": 1
+                }
+              ],
+              "item": [
+                {
+                  "linkId": "screen-time-lower",
+                  "text": "None",
+                  "type": "display",
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                      "valueCodeableConcept": {
+                        "coding": [
+                          {
+                            "system": "http://hl7.org/fhir/questionnaire-item-control",
+                            "code": "lower"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "linkId": "screen-time-upper",
+                  "text": "12 hours",
+                  "type": "display",
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                      "valueCodeableConcept": {
+                        "coding": [
+                          {
+                            "system": "http://hl7.org/fhir/questionnaire-item-control",
+                            "code": "upper"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "bullying",
+              "text": "Has your child been bullied, or bullied others?",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-choiceOrientation",
+                  "valueCode": "horizontal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "senses",
+          "text": "Are you worried about your child’s…",
+          "type": "choice",
+          "repeats": true,
+          "answerOption": [
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "1",
+                "display": "Hearing"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "2",
+                "display": "Vision"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "3",
+                "display": "Speech"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "4",
+                "display": "Behavior"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "5",
+                "display": "Learning"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "6",
+                "display": "None of these"
+              },
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-optionExclusive",
+                  "valueBoolean": true
+                }
+              ]
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "multi-select"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "development-concerns",
+          "text": "Tell us more about any worries",
+          "type": "text",
+          "maxLength": 1000,
+          "enableWhen": [
+            {
+              "question": "senses",
+              "operator": "!=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "6"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "linkId": "sleep-safety-page",
+      "text": "Sleep and safety",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "sleep",
+          "text": "Sleep",
+          "type": "group",
+          "item": [
+            {
+              "linkId": "bedtime",
+              "text": "Usual bedtime",
+              "type": "time",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueTime": "17:00:00"
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueTime": "23:59:00"
+                }
+              ]
+            },
+            {
+              "linkId": "sleep-hours",
+              "text": "Hours of sleep in 24 hours, including naps",
+              "type": "decimal",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "slider"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueDecimal": 0
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueDecimal": 20
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-sliderStepValue",
+                  "valueInteger": 1
+                }
+              ]
+            },
+            {
+              "linkId": "sleep-position",
+              "text": "How does your baby sleep?",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "On their back"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "On their side"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "On their tummy"
+                  }
+                }
+              ],
+              "enableWhen": [
+                {
+                  "question": "age-group",
+                  "operator": "=",
+                  "answerCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "safe-sleep",
+              "text": "Babies should always be put to sleep on their back, on a firm, flat surface, with no pillows, bumpers or toys.",
+              "type": "display",
+              "enableWhen": [
+                {
+                  "question": "sleep-position",
+                  "operator": "!=",
+                  "answerCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-display-category",
+                        "code": "security",
+                        "display": "Security"
+                      }
+                    ],
+                    "text": "Security"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "safety",
+          "text": "Safety",
+          "type": "group",
+          "item": [
+            {
+              "linkId": "car-seat",
+              "text": "How does your child ride in the car?",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Rear-facing car seat"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Forward-facing car seat"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Booster seat"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "4",
+                    "display": "Seat belt only"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "drop-down"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "smoke-alarms",
+              "text": "Do you have working smoke alarms at home?",
+              "type": "boolean",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "check-box"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "second-hand-smoke",
+              "text": "Does anyone smoke or vape around your child?",
+              "type": "boolean",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "firearms",
+              "text": "Is there a gun where your child lives or often visits?",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Yes, locked and unloaded with ammunition stored separately"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "Yes, stored another way"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "firearm-advice",
+              "text": "Guns should be stored locked and unloaded, with ammunition locked separately. Ask us about free gun locks.",
+              "type": "display",
+              "enableWhen": [
+                {
+                  "question": "firearms",
+                  "operator": "=",
+                  "answerCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-display-category",
+                        "code": "instructions",
+                        "display": "Instructions"
+                      }
+                    ],
+                    "text": "Instructions"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "helmet",
+              "text": "Does your child wear a helmet when cycling, skating or scootering?",
+              "type": "boolean",
+              "enableBehavior": "any",
+              "enableWhen": [
+                {
+                  "question": "age-group",
+                  "operator": "=",
+                  "answerCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3"
+                  }
+                },
+                {
+                  "question": "age-group",
+                  "operator": "=",
+                  "answerCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "4"
+                  }
+                },
+                {
+                  "question": "age-group",
+                  "operator": "=",
+                  "answerCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "5"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "swim",
+              "text": "Can your child swim?",
+              "type": "boolean",
+              "enableBehavior": "any",
+              "enableWhen": [
+                {
+                  "question": "age-group",
+                  "operator": "=",
+                  "answerCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "4"
+                  }
+                },
+                {
+                  "question": "age-group",
+                  "operator": "=",
+                  "answerCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "5"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "linkId": "health-page",
+      "text": "Health",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "immunizations",
+          "text": "Immunizations",
+          "type": "group",
+          "item": [
+            {
+              "linkId": "immunizations-up-to-date",
+              "text": "Is your child up to date on vaccines?",
+              "type": "choice",
+              "required": true,
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-choiceOrientation",
+                  "valueCode": "horizontal"
+                }
+              ]
+            },
+            {
+              "linkId": "immunization-record",
+              "text": "Upload your child’s vaccination record",
+              "type": "attachment",
+              "enableWhen": [
+                {
+                  "question": "immunizations-up-to-date",
+                  "operator": "=",
+                  "answerCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/mimeType",
+                  "valueCode": "application/pdf"
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/mimeType",
+                  "valueCode": "image/jpeg"
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/mimeType",
+                  "valueCode": "image/png"
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxSize",
+                  "valueDecimal": 10485760
+                }
+              ],
+              "item": [
+                {
+                  "linkId": "immunization-record-help",
+                  "text": "A photo or PDF of the record from a previous clinic or your state registry.",
+                  "type": "display",
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                      "valueCodeableConcept": {
+                        "coding": [
+                          {
+                            "system": "http://hl7.org/fhir/questionnaire-item-control",
+                            "code": "help"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "vaccine-concerns",
+              "text": "Do you have any questions about vaccines?",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Yes, I would like to talk about it"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "conditions",
+          "text": "Has your child been diagnosed with any of these?",
+          "type": "choice",
+          "repeats": true,
+          "answerOption": [
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "1",
+                "display": "Asthma"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "2",
+                "display": "Eczema"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "3",
+                "display": "Food allergy"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "4",
+                "display": "ADHD"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "5",
+                "display": "Autism"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "6",
+                "display": "Diabetes"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "7",
+                "display": "Seizures"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "8",
+                "display": "Heart condition"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "9",
+                "display": "None of these"
+              },
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-optionExclusive",
+                  "valueBoolean": true
+                }
+              ]
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "check-box"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "medications",
+          "text": "Medications",
+          "type": "group",
+          "repeats": true,
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "gtable"
+                  }
+                ]
+              }
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-maxOccurs",
+              "valueInteger": 10
+            }
+          ],
+          "item": [
+            {
+              "linkId": "medication",
+              "text": "Medication",
+              "type": "string"
+            },
+            {
+              "linkId": "medication-dose",
+              "text": "Dose",
+              "type": "string",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/entryFormat",
+                  "valueString": "e.g. 5 ml"
+                }
+              ]
+            },
+            {
+              "linkId": "medication-frequency",
+              "text": "How often",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "1",
+                    "display": "Once a day"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "2",
+                    "display": "Twice a day"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                    "code": "3",
+                    "display": "As needed"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "drop-down"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "er-visits",
+          "text": "Has your child been to the emergency room or hospital since the last check-up?",
+          "type": "boolean",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "radio-button"
+                  }
+                ]
+              }
+            }
+          ],
+          "item": [
+            {
+              "linkId": "er-visit-count",
+              "text": "How many times?",
+              "type": "integer",
+              "enableWhen": [
+                {
+                  "question": "er-visits",
+                  "operator": "=",
+                  "answerBoolean": true
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueInteger": 1
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueInteger": 50
+                }
+              ]
+            },
+            {
+              "linkId": "er-visit-reason",
+              "text": "What for?",
+              "type": "text",
+              "enableWhen": [
+                {
+                  "question": "er-visits",
+                  "operator": "=",
+                  "answerBoolean": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "dentist",
+          "text": "Date of your child’s last dental visit",
+          "type": "date",
+          "enableBehavior": "any",
+          "enableWhen": [
+            {
+              "question": "age-group",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "2"
+              }
+            },
+            {
+              "question": "age-group",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "3"
+              }
+            },
+            {
+              "question": "age-group",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "4"
+              }
+            },
+            {
+              "question": "age-group",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "5"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+              "valueDate": "2007-01-01"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "linkId": "visit-page",
+      "text": "Today’s visit",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "topics",
+          "text": "What would you like to talk about today?",
+          "type": "choice",
+          "repeats": true,
+          "answerOption": [
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "1",
+                "display": "Growth"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "2",
+                "display": "Eating"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "3",
+                "display": "Sleep"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "4",
+                "display": "Behavior"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "5",
+                "display": "Development"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "6",
+                "display": "School"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "7",
+                "display": "Puberty"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "8",
+                "display": "Vaccines"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "drop-down"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "questions",
+          "text": "Any other questions for the doctor?",
+          "type": "text",
+          "maxLength": 2000,
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-usageMode",
+              "valueCode": "capture-display-non-empty"
+            }
+          ]
+        },
+        {
+          "linkId": "teen-private-time",
+          "text": "I understand the doctor may talk with my teen alone for part of the visit",
+          "type": "boolean",
+          "enableWhen": [
+            {
+              "question": "age-group",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pediatric-well-child-visit/answer-options",
+                "code": "5"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "check-box"
+                  }
+                ]
+              }
+            }
+          ],
+          "item": [
+            {
+              "linkId": "teen-private-time-help",
+              "text": "Spending time alone with teens is a routine part of adolescent care and helps them learn to manage their own health.",
+              "type": "display",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "flyover"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "consent",
+          "text": "I am the parent or legal guardian and consent to my child’s examination",
+          "type": "boolean",
+          "required": true,
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "check-box"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "submitted",
+          "text": "Completed by the parent or guardian before the visit.",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-usageMode",
+              "valueCode": "display"
+            }
+          ]
+        },
+        {
+          "linkId": "visit-type",
+          "text": "Visit type",
+          "type": "string",
+          "initial": [
+            {
+              "valueString": "well-child"
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-hidden",
+              "valueBoolean": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,3414 @@
+{
+  "resourceType": "Questionnaire",
+  "url": "https://example.com/fhir/Questionnaire/mental-health-intake",
+  "version": "2026.1",
+  "name": "MentalHealthIntake",
+  "title": "Mental Health Intake",
+  "status": "active",
+  "subjectType": ["Patient"],
+  "description": "Completed by new patients before their first appointment with the behavioral health team.",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-signatureRequired",
+      "valueCodeableConcept": {
+        "coding": [
+          {
+            "system": "urn:iso-astm:E1762-95:2013",
+            "code": "1.2.840.10065.1.12.1.1",
+            "display": "Author's Signature"
+          }
+        ]
+      }
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/designNote",
+      "valueMarkdown": "PHQ-9 and GAD-7 are scored automatically. Severity bands are shown to clinicians only, when viewing answers. A positive PHQ-9 item 9 must be reviewed the same day."
+    }
+  ],
+  "item": [
+    {
+      "linkId": "concerns-page",
+      "text": "What brings you here",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "crisis",
+          "text": "If you are thinking about harming yourself, you don't have to wait for your appointment. Call or text 988 (Suicide & Crisis Lifeline) at any time, or call 911 in an emergency.",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "security",
+                    "display": "Security"
+                  }
+                ],
+                "text": "Security"
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "privacy",
+          "text": "What you share is confidential. We only share it without your permission if someone is at immediate risk of serious harm, or if the law requires it.",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "instructions",
+                    "display": "Instructions"
+                  }
+                ],
+                "text": "Instructions"
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "concerns",
+          "text": "Your concerns",
+          "type": "group",
+          "required": true,
+          "item": [
+            {
+              "linkId": "reason",
+              "text": "In your own words, what would you like help with?",
+              "type": "text",
+              "required": true,
+              "maxLength": 2000,
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minLength",
+                  "valueInteger": 10
+                }
+              ]
+            },
+            {
+              "linkId": "concern-areas",
+              "text": "Which of these apply?",
+              "type": "open-choice",
+              "repeats": true,
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "1",
+                    "display": "Low mood"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "2",
+                    "display": "Anxiety or worry"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "3",
+                    "display": "Stress"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "4",
+                    "display": "Sleep"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "5",
+                    "display": "Relationships"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "6",
+                    "display": "Grief or loss"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "7",
+                    "display": "Trauma"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "8",
+                    "display": "Alcohol or drugs"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "9",
+                    "display": "Anger"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "check-box"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "concern-duration",
+              "text": "How long have you felt this way?",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "1",
+                    "display": "Less than a month"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "2",
+                    "display": "1–6 months"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "3",
+                    "display": "6–12 months"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "4",
+                    "display": "More than a year"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "drop-down"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "impact",
+              "text": "How much is this affecting your daily life?",
+              "type": "integer",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "slider"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueInteger": 0
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueInteger": 10
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-sliderStepValue",
+                  "valueInteger": 1
+                }
+              ],
+              "item": [
+                {
+                  "linkId": "impact-lower",
+                  "text": "Not at all",
+                  "type": "display",
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                      "valueCodeableConcept": {
+                        "coding": [
+                          {
+                            "system": "http://hl7.org/fhir/questionnaire-item-control",
+                            "code": "lower"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "linkId": "impact-upper",
+                  "text": "Completely",
+                  "type": "display",
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                      "valueCodeableConcept": {
+                        "coding": [
+                          {
+                            "system": "http://hl7.org/fhir/questionnaire-item-control",
+                            "code": "upper"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "goals",
+              "text": "What would you like to be different after treatment?",
+              "type": "text",
+              "maxLength": 1000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "linkId": "phq9-page",
+      "text": "Mood",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "phq9",
+          "text": "Over the last 2 weeks, how often have you been bothered by any of the following problems?",
+          "type": "group",
+          "code": [
+            {
+              "system": "http://loinc.org",
+              "code": "44249-1",
+              "display": "PHQ-9 quick depression assessment panel"
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "atable"
+                  }
+                ]
+              }
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-supportLink",
+              "valueUri": "https://www.phqscreeners.com/"
+            }
+          ],
+          "item": [
+            {
+              "linkId": "phq9-1",
+              "text": "Little interest or pleasure in doing things",
+              "type": "choice",
+              "required": true,
+              "prefix": "1.",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "44250-9",
+                  "display": "Little interest or pleasure in doing things"
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6568-5",
+                    "display": "Not at all"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 0
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6569-3",
+                    "display": "Several days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 1
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6570-1",
+                    "display": "More than half the days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 2
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6571-9",
+                    "display": "Nearly every day"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "phq9-2",
+              "text": "Feeling down, depressed, or hopeless",
+              "type": "choice",
+              "required": true,
+              "prefix": "2.",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "44255-8",
+                  "display": "Feeling down, depressed, or hopeless"
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6568-5",
+                    "display": "Not at all"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 0
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6569-3",
+                    "display": "Several days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 1
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6570-1",
+                    "display": "More than half the days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 2
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6571-9",
+                    "display": "Nearly every day"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "phq9-3",
+              "text": "Trouble falling or staying asleep, or sleeping too much",
+              "type": "choice",
+              "required": true,
+              "prefix": "3.",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "44259-0",
+                  "display": "Trouble falling or staying asleep, or sleeping too much"
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6568-5",
+                    "display": "Not at all"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 0
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6569-3",
+                    "display": "Several days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 1
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6570-1",
+                    "display": "More than half the days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 2
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6571-9",
+                    "display": "Nearly every day"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "phq9-4",
+              "text": "Feeling tired or having little energy",
+              "type": "choice",
+              "required": true,
+              "prefix": "4.",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "44254-1",
+                  "display": "Feeling tired or having little energy"
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6568-5",
+                    "display": "Not at all"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 0
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6569-3",
+                    "display": "Several days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 1
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6570-1",
+                    "display": "More than half the days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 2
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6571-9",
+                    "display": "Nearly every day"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "phq9-5",
+              "text": "Poor appetite or overeating",
+              "type": "choice",
+              "required": true,
+              "prefix": "5.",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "44251-7",
+                  "display": "Poor appetite or overeating"
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6568-5",
+                    "display": "Not at all"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 0
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6569-3",
+                    "display": "Several days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 1
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6570-1",
+                    "display": "More than half the days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 2
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6571-9",
+                    "display": "Nearly every day"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "phq9-6",
+              "text": "Feeling bad about yourself, or that you are a failure or have let yourself or your family down",
+              "type": "choice",
+              "required": true,
+              "prefix": "6.",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "44258-2",
+                  "display": "Feeling bad about yourself, or that you are a failure or have let yourself or your family down"
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6568-5",
+                    "display": "Not at all"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 0
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6569-3",
+                    "display": "Several days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 1
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6570-1",
+                    "display": "More than half the days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 2
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6571-9",
+                    "display": "Nearly every day"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "phq9-7",
+              "text": "Trouble concentrating on things, such as reading the newspaper or watching television",
+              "type": "choice",
+              "required": true,
+              "prefix": "7.",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "44252-5",
+                  "display": "Trouble concentrating on things, such as reading the newspaper or watching television"
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6568-5",
+                    "display": "Not at all"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 0
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6569-3",
+                    "display": "Several days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 1
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6570-1",
+                    "display": "More than half the days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 2
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6571-9",
+                    "display": "Nearly every day"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "phq9-8",
+              "text": "Moving or speaking so slowly that other people could have noticed, or the opposite: being so fidgety or restless that you have been moving around a lot more than usual",
+              "type": "choice",
+              "required": true,
+              "prefix": "8.",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "44253-3",
+                  "display": "Moving or speaking so slowly that other people could have noticed, or the opposite: being so fidgety or restless that you have been moving around a lot more than usual"
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6568-5",
+                    "display": "Not at all"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 0
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6569-3",
+                    "display": "Several days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 1
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6570-1",
+                    "display": "More than half the days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 2
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6571-9",
+                    "display": "Nearly every day"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "phq9-9",
+              "text": "Thoughts that you would be better off dead, or of hurting yourself in some way",
+              "type": "choice",
+              "required": true,
+              "prefix": "9.",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "44260-8",
+                  "display": "Thoughts that you would be better off dead, or of hurting yourself in some way"
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6568-5",
+                    "display": "Not at all"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 0
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6569-3",
+                    "display": "Several days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 1
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6570-1",
+                    "display": "More than half the days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 2
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6571-9",
+                    "display": "Nearly every day"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 3
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "phq9-item9-alert",
+          "text": "If you are thinking about harming yourself, you don't have to wait for your appointment. Call or text 988 (Suicide & Crisis Lifeline) at any time, or call 911 in an emergency.",
+          "type": "display",
+          "enableWhen": [
+            {
+              "question": "phq9-9",
+              "operator": "!=",
+              "answerCoding": {
+                "system": "http://loinc.org",
+                "code": "LA6568-5"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "security",
+                    "display": "Security"
+                  }
+                ],
+                "text": "Security"
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "phq9-difficulty",
+          "text": "If you checked off any problems, how difficult have these problems made it for you to do your work, take care of things at home, or get along with other people?",
+          "type": "choice",
+          "code": [
+            {
+              "system": "http://loinc.org",
+              "code": "69722-7",
+              "display": "How difficult have these made it for you to do your work, take care of things at home, or get along with other people"
+            }
+          ],
+          "answerOption": [
+            {
+              "valueCoding": {
+                "system": "http://loinc.org",
+                "code": "LA6572-7",
+                "display": "Not difficult at all"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "http://loinc.org",
+                "code": "LA6573-5",
+                "display": "Somewhat difficult"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "http://loinc.org",
+                "code": "LA6575-0",
+                "display": "Very difficult"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "http://loinc.org",
+                "code": "LA6574-3",
+                "display": "Extremely difficult"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "radio-button"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "phq9-total",
+          "text": "PHQ-9 total score",
+          "type": "integer",
+          "readOnly": true,
+          "code": [
+            {
+              "system": "http://loinc.org",
+              "code": "44261-6",
+              "display": "Patient Health Questionnaire 9 item (PHQ-9) total score [Reported]"
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-calculatedExpression",
+              "valueExpression": {
+                "language": "text/fhirpath",
+                "expression": "iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-1').answer.value.exists() and %resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-2').answer.value.exists() and %resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-3').answer.value.exists() and %resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-4').answer.value.exists() and %resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-5').answer.value.exists() and %resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-6').answer.value.exists() and %resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-7').answer.value.exists() and %resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-8').answer.value.exists() and %resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-9').answer.value.exists(), iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-1').answer.value.code = 'LA6571-9', 3, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-1').answer.value.code = 'LA6570-1', 2, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-1').answer.value.code = 'LA6569-3', 1, 0))) + iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-2').answer.value.code = 'LA6571-9', 3, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-2').answer.value.code = 'LA6570-1', 2, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-2').answer.value.code = 'LA6569-3', 1, 0))) + iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-3').answer.value.code = 'LA6571-9', 3, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-3').answer.value.code = 'LA6570-1', 2, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-3').answer.value.code = 'LA6569-3', 1, 0))) + iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-4').answer.value.code = 'LA6571-9', 3, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-4').answer.value.code = 'LA6570-1', 2, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-4').answer.value.code = 'LA6569-3', 1, 0))) + iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-5').answer.value.code = 'LA6571-9', 3, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-5').answer.value.code = 'LA6570-1', 2, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-5').answer.value.code = 'LA6569-3', 1, 0))) + iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-6').answer.value.code = 'LA6571-9', 3, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-6').answer.value.code = 'LA6570-1', 2, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-6').answer.value.code = 'LA6569-3', 1, 0))) + iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-7').answer.value.code = 'LA6571-9', 3, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-7').answer.value.code = 'LA6570-1', 2, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-7').answer.value.code = 'LA6569-3', 1, 0))) + iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-8').answer.value.code = 'LA6571-9', 3, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-8').answer.value.code = 'LA6570-1', 2, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-8').answer.value.code = 'LA6569-3', 1, 0))) + iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-9').answer.value.code = 'LA6571-9', 3, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-9').answer.value.code = 'LA6570-1', 2, iif(%resource.item.where(linkId='phq9-page').item.where(linkId='phq9').item.where(linkId='phq9-9').answer.value.code = 'LA6569-3', 1, 0))), {})"
+              }
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/designNote",
+              "valueMarkdown": "Sum of the 9 item scores (0–27), once all are answered."
+            }
+          ]
+        },
+        {
+          "linkId": "phq9-minimal",
+          "text": "PHQ-9 0–4: minimal depression",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-usageMode",
+              "valueCode": "display"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "instructions",
+                    "display": "Instructions"
+                  }
+                ],
+                "text": "Instructions"
+              }
+            }
+          ],
+          "enableBehavior": "all",
+          "enableWhen": [
+            {
+              "question": "phq9-total",
+              "operator": ">=",
+              "answerInteger": 0
+            },
+            {
+              "question": "phq9-total",
+              "operator": "<",
+              "answerInteger": 5
+            }
+          ]
+        },
+        {
+          "linkId": "phq9-mild",
+          "text": "PHQ-9 5–9: mild depression",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-usageMode",
+              "valueCode": "display"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "instructions",
+                    "display": "Instructions"
+                  }
+                ],
+                "text": "Instructions"
+              }
+            }
+          ],
+          "enableBehavior": "all",
+          "enableWhen": [
+            {
+              "question": "phq9-total",
+              "operator": ">=",
+              "answerInteger": 5
+            },
+            {
+              "question": "phq9-total",
+              "operator": "<",
+              "answerInteger": 10
+            }
+          ]
+        },
+        {
+          "linkId": "phq9-moderate",
+          "text": "PHQ-9 10–14: moderate depression",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-usageMode",
+              "valueCode": "display"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "instructions",
+                    "display": "Instructions"
+                  }
+                ],
+                "text": "Instructions"
+              }
+            }
+          ],
+          "enableBehavior": "all",
+          "enableWhen": [
+            {
+              "question": "phq9-total",
+              "operator": ">=",
+              "answerInteger": 10
+            },
+            {
+              "question": "phq9-total",
+              "operator": "<",
+              "answerInteger": 15
+            }
+          ]
+        },
+        {
+          "linkId": "phq9-moderately-severe",
+          "text": "PHQ-9 15–19: moderately severe depression",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-usageMode",
+              "valueCode": "display"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "instructions",
+                    "display": "Instructions"
+                  }
+                ],
+                "text": "Instructions"
+              }
+            }
+          ],
+          "enableBehavior": "all",
+          "enableWhen": [
+            {
+              "question": "phq9-total",
+              "operator": ">=",
+              "answerInteger": 15
+            },
+            {
+              "question": "phq9-total",
+              "operator": "<",
+              "answerInteger": 20
+            }
+          ]
+        },
+        {
+          "linkId": "phq9-severe",
+          "text": "PHQ-9 20–27: severe depression",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-usageMode",
+              "valueCode": "display"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "instructions",
+                    "display": "Instructions"
+                  }
+                ],
+                "text": "Instructions"
+              }
+            }
+          ],
+          "enableWhen": [
+            {
+              "question": "phq9-total",
+              "operator": ">=",
+              "answerInteger": 20
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "linkId": "gad7-page",
+      "text": "Anxiety",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "gad7",
+          "text": "Over the last 2 weeks, how often have you been bothered by the following problems?",
+          "type": "group",
+          "code": [
+            {
+              "system": "http://loinc.org",
+              "code": "69737-5",
+              "display": "Generalized anxiety disorder 7 item (GAD-7)"
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "table"
+                  }
+                ]
+              }
+            }
+          ],
+          "item": [
+            {
+              "linkId": "gad7-1",
+              "text": "Feeling nervous, anxious, or on edge",
+              "type": "choice",
+              "required": true,
+              "prefix": "1.",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "69725-0",
+                  "display": "Feeling nervous, anxious, or on edge"
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6568-5",
+                    "display": "Not at all"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 0
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6569-3",
+                    "display": "Several days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 1
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6570-1",
+                    "display": "More than half the days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 2
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6571-9",
+                    "display": "Nearly every day"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "gad7-2",
+              "text": "Not being able to stop or control worrying",
+              "type": "choice",
+              "required": true,
+              "prefix": "2.",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "68509-9",
+                  "display": "Not being able to stop or control worrying"
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6568-5",
+                    "display": "Not at all"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 0
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6569-3",
+                    "display": "Several days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 1
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6570-1",
+                    "display": "More than half the days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 2
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6571-9",
+                    "display": "Nearly every day"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "gad7-3",
+              "text": "Worrying too much about different things",
+              "type": "choice",
+              "required": true,
+              "prefix": "3.",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "69733-4",
+                  "display": "Worrying too much about different things"
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6568-5",
+                    "display": "Not at all"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 0
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6569-3",
+                    "display": "Several days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 1
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6570-1",
+                    "display": "More than half the days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 2
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6571-9",
+                    "display": "Nearly every day"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "gad7-4",
+              "text": "Trouble relaxing",
+              "type": "choice",
+              "required": true,
+              "prefix": "4.",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "69734-2",
+                  "display": "Trouble relaxing"
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6568-5",
+                    "display": "Not at all"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 0
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6569-3",
+                    "display": "Several days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 1
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6570-1",
+                    "display": "More than half the days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 2
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6571-9",
+                    "display": "Nearly every day"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "gad7-5",
+              "text": "Being so restless that it is hard to sit still",
+              "type": "choice",
+              "required": true,
+              "prefix": "5.",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "69735-9",
+                  "display": "Being so restless that it is hard to sit still"
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6568-5",
+                    "display": "Not at all"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 0
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6569-3",
+                    "display": "Several days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 1
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6570-1",
+                    "display": "More than half the days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 2
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6571-9",
+                    "display": "Nearly every day"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "gad7-6",
+              "text": "Becoming easily annoyed or irritable",
+              "type": "choice",
+              "required": true,
+              "prefix": "6.",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "69689-8",
+                  "display": "Becoming easily annoyed or irritable"
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6568-5",
+                    "display": "Not at all"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 0
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6569-3",
+                    "display": "Several days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 1
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6570-1",
+                    "display": "More than half the days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 2
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6571-9",
+                    "display": "Nearly every day"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "gad7-7",
+              "text": "Feeling afraid, as if something awful might happen",
+              "type": "choice",
+              "required": true,
+              "prefix": "7.",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "69736-7",
+                  "display": "Feeling afraid, as if something awful might happen"
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6568-5",
+                    "display": "Not at all"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 0
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6569-3",
+                    "display": "Several days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 1
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6570-1",
+                    "display": "More than half the days"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 2
+                    }
+                  ]
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://loinc.org",
+                    "code": "LA6571-9",
+                    "display": "Nearly every day"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/ordinalValue",
+                      "valueDecimal": 3
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "gad7-total",
+          "text": "GAD-7 total score",
+          "type": "integer",
+          "readOnly": true,
+          "code": [
+            {
+              "system": "http://loinc.org",
+              "code": "70274-6",
+              "display": "Generalized anxiety disorder 7 item (GAD-7) total score [Reported.PHQ]"
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-calculatedExpression",
+              "valueExpression": {
+                "language": "text/fhirpath",
+                "expression": "iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-1').answer.value.exists() and %resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-2').answer.value.exists() and %resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-3').answer.value.exists() and %resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-4').answer.value.exists() and %resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-5').answer.value.exists() and %resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-6').answer.value.exists() and %resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-7').answer.value.exists(), iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-1').answer.value.code = 'LA6571-9', 3, iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-1').answer.value.code = 'LA6570-1', 2, iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-1').answer.value.code = 'LA6569-3', 1, 0))) + iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-2').answer.value.code = 'LA6571-9', 3, iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-2').answer.value.code = 'LA6570-1', 2, iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-2').answer.value.code = 'LA6569-3', 1, 0))) + iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-3').answer.value.code = 'LA6571-9', 3, iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-3').answer.value.code = 'LA6570-1', 2, iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-3').answer.value.code = 'LA6569-3', 1, 0))) + iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-4').answer.value.code = 'LA6571-9', 3, iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-4').answer.value.code = 'LA6570-1', 2, iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-4').answer.value.code = 'LA6569-3', 1, 0))) + iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-5').answer.value.code = 'LA6571-9', 3, iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-5').answer.value.code = 'LA6570-1', 2, iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-5').answer.value.code = 'LA6569-3', 1, 0))) + iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-6').answer.value.code = 'LA6571-9', 3, iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-6').answer.value.code = 'LA6570-1', 2, iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-6').answer.value.code = 'LA6569-3', 1, 0))) + iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-7').answer.value.code = 'LA6571-9', 3, iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-7').answer.value.code = 'LA6570-1', 2, iif(%resource.item.where(linkId='gad7-page').item.where(linkId='gad7').item.where(linkId='gad7-7').answer.value.code = 'LA6569-3', 1, 0))), {})"
+              }
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/designNote",
+              "valueMarkdown": "Sum of the 7 item scores (0–21), once all are answered."
+            }
+          ]
+        },
+        {
+          "linkId": "gad7-minimal",
+          "text": "GAD-7 0–4: minimal anxiety",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-usageMode",
+              "valueCode": "display"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "instructions",
+                    "display": "Instructions"
+                  }
+                ],
+                "text": "Instructions"
+              }
+            }
+          ],
+          "enableBehavior": "all",
+          "enableWhen": [
+            {
+              "question": "gad7-total",
+              "operator": ">=",
+              "answerInteger": 0
+            },
+            {
+              "question": "gad7-total",
+              "operator": "<",
+              "answerInteger": 5
+            }
+          ]
+        },
+        {
+          "linkId": "gad7-mild",
+          "text": "GAD-7 5–9: mild anxiety",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-usageMode",
+              "valueCode": "display"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "instructions",
+                    "display": "Instructions"
+                  }
+                ],
+                "text": "Instructions"
+              }
+            }
+          ],
+          "enableBehavior": "all",
+          "enableWhen": [
+            {
+              "question": "gad7-total",
+              "operator": ">=",
+              "answerInteger": 5
+            },
+            {
+              "question": "gad7-total",
+              "operator": "<",
+              "answerInteger": 10
+            }
+          ]
+        },
+        {
+          "linkId": "gad7-moderate",
+          "text": "GAD-7 10–14: moderate anxiety",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-usageMode",
+              "valueCode": "display"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "instructions",
+                    "display": "Instructions"
+                  }
+                ],
+                "text": "Instructions"
+              }
+            }
+          ],
+          "enableBehavior": "all",
+          "enableWhen": [
+            {
+              "question": "gad7-total",
+              "operator": ">=",
+              "answerInteger": 10
+            },
+            {
+              "question": "gad7-total",
+              "operator": "<",
+              "answerInteger": 15
+            }
+          ]
+        },
+        {
+          "linkId": "gad7-severe",
+          "text": "GAD-7 15–21: severe anxiety",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-usageMode",
+              "valueCode": "display"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "instructions",
+                    "display": "Instructions"
+                  }
+                ],
+                "text": "Instructions"
+              }
+            }
+          ],
+          "enableWhen": [
+            {
+              "question": "gad7-total",
+              "operator": ">=",
+              "answerInteger": 15
+            }
+          ]
+        },
+        {
+          "linkId": "panic",
+          "text": "In the last month, have you had a sudden attack of fear or panic?",
+          "type": "choice",
+          "answerOption": [
+            {
+              "valueCoding": {
+                "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                "code": "Y",
+                "display": "Yes"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                "code": "N",
+                "display": "No"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                "code": "asked-unknown",
+                "display": "Don't know"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "radio-button"
+                  }
+                ]
+              }
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-choiceOrientation",
+              "valueCode": "horizontal"
+            }
+          ],
+          "item": [
+            {
+              "linkId": "panic-help",
+              "text": "For example a racing heart, shortness of breath or feeling you might faint, that came on suddenly.",
+              "type": "display",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "flyover"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "linkId": "safety-page",
+      "text": "Safety and substance use",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "safety",
+          "text": "Safety",
+          "type": "group",
+          "item": [
+            {
+              "linkId": "self-harm-history",
+              "text": "Have you ever tried to harm or kill yourself?",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "2",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "3",
+                    "display": "Prefer to discuss in person"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-choiceOrientation",
+                  "valueCode": "horizontal"
+                }
+              ],
+              "item": [
+                {
+                  "linkId": "self-harm-when",
+                  "text": "When was the most recent time?",
+                  "type": "date",
+                  "enableWhen": [
+                    {
+                      "question": "self-harm-history",
+                      "operator": "=",
+                      "answerCoding": {
+                        "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                        "code": "1"
+                      }
+                    }
+                  ],
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                      "valueDate": "1920-01-01"
+                    },
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                      "valueDate": "2026-12-31"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "feel-safe",
+              "text": "Do you feel safe where you live?",
+              "type": "choice",
+              "required": true,
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "2",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "3",
+                    "display": "Not always"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-choiceOrientation",
+                  "valueCode": "horizontal"
+                }
+              ]
+            },
+            {
+              "linkId": "safety-alert",
+              "text": "If you are thinking about harming yourself, you don't have to wait for your appointment. Call or text 988 (Suicide & Crisis Lifeline) at any time, or call 911 in an emergency.",
+              "type": "display",
+              "enableBehavior": "any",
+              "enableWhen": [
+                {
+                  "question": "self-harm-history",
+                  "operator": "=",
+                  "answerCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "1"
+                  }
+                },
+                {
+                  "question": "feel-safe",
+                  "operator": "=",
+                  "answerCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "2"
+                  }
+                },
+                {
+                  "question": "feel-safe",
+                  "operator": "=",
+                  "answerCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "3"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-display-category",
+                        "code": "security",
+                        "display": "Security"
+                      }
+                    ],
+                    "text": "Security"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "firearms",
+              "text": "Are there firearms where you live?",
+              "type": "boolean",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "item": [
+                {
+                  "linkId": "firearm-storage",
+                  "text": "How are they stored?",
+                  "type": "choice",
+                  "enableWhen": [
+                    {
+                      "question": "firearms",
+                      "operator": "=",
+                      "answerBoolean": true
+                    }
+                  ],
+                  "answerOption": [
+                    {
+                      "valueCoding": {
+                        "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                        "code": "1",
+                        "display": "Locked and unloaded"
+                      }
+                    },
+                    {
+                      "valueCoding": {
+                        "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                        "code": "2",
+                        "display": "Locked or unloaded"
+                      }
+                    },
+                    {
+                      "valueCoding": {
+                        "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                        "code": "3",
+                        "display": "Neither locked nor unloaded"
+                      }
+                    }
+                  ],
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                      "valueCodeableConcept": {
+                        "coding": [
+                          {
+                            "system": "http://hl7.org/fhir/questionnaire-item-control",
+                            "code": "drop-down"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "substances",
+          "text": "Alcohol and other substances",
+          "type": "group",
+          "item": [
+            {
+              "linkId": "drinks-per-week",
+              "text": "How many alcoholic drinks do you have in a typical week?",
+              "type": "integer",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "spinner"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueInteger": 0
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueInteger": 100
+                }
+              ],
+              "item": [
+                {
+                  "linkId": "drinks-unit",
+                  "text": "drinks",
+                  "type": "display",
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                      "valueCodeableConcept": {
+                        "coding": [
+                          {
+                            "system": "http://hl7.org/fhir/questionnaire-item-control",
+                            "code": "unit"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "binge",
+              "text": "How often do you have 5 or more drinks on one occasion?",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "1",
+                    "display": "Never"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "2",
+                    "display": "Less than monthly"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "3",
+                    "display": "Monthly"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "4",
+                    "display": "Weekly"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "5",
+                    "display": "Daily or almost daily"
+                  }
+                }
+              ],
+              "enableWhen": [
+                {
+                  "question": "drinks-per-week",
+                  "operator": ">",
+                  "answerInteger": 0
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "drop-down"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "drugs",
+              "text": "In the past year, have you used any of these?",
+              "type": "choice",
+              "repeats": true,
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "1",
+                    "display": "Cannabis"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "2",
+                    "display": "Prescription medicines not as prescribed"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "3",
+                    "display": "Stimulants such as cocaine or methamphetamine"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "4",
+                    "display": "Opioids such as heroin or fentanyl"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "5",
+                    "display": "Other drugs"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "6",
+                    "display": "None of these"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-optionExclusive",
+                      "valueBoolean": true
+                    }
+                  ]
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "multi-select"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "caffeine",
+              "text": "Cups of coffee, tea or energy drinks per day",
+              "type": "integer",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueInteger": 0
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueInteger": 30
+                }
+              ]
+            },
+            {
+              "linkId": "sleep-hours",
+              "text": "Hours of sleep on a typical night",
+              "type": "decimal",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "slider"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueDecimal": 0
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueDecimal": 14
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-sliderStepValue",
+                  "valueInteger": 1
+                }
+              ],
+              "item": [
+                {
+                  "linkId": "sleep-lower",
+                  "text": "0",
+                  "type": "display",
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                      "valueCodeableConcept": {
+                        "coding": [
+                          {
+                            "system": "http://hl7.org/fhir/questionnaire-item-control",
+                            "code": "lower"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "linkId": "sleep-upper",
+                  "text": "14 hours",
+                  "type": "display",
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                      "valueCodeableConcept": {
+                        "coding": [
+                          {
+                            "system": "http://hl7.org/fhir/questionnaire-item-control",
+                            "code": "upper"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "linkId": "history-page",
+      "text": "History and support",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "treatment-history",
+          "text": "Previous treatment",
+          "type": "group",
+          "item": [
+            {
+              "linkId": "previous-therapy",
+              "text": "Have you seen a counselor, therapist or psychiatrist before?",
+              "type": "boolean",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "item": [
+                {
+                  "linkId": "previous-therapy-details",
+                  "text": "Who did you see, when, and did it help?",
+                  "type": "text",
+                  "enableWhen": [
+                    {
+                      "question": "previous-therapy",
+                      "operator": "=",
+                      "answerBoolean": true
+                    }
+                  ],
+                  "maxLength": 1000
+                }
+              ]
+            },
+            {
+              "linkId": "hospitalized",
+              "text": "Have you ever been admitted to hospital for your mental health?",
+              "type": "boolean",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "item": [
+                {
+                  "linkId": "hospitalized-when",
+                  "text": "When was the most recent admission?",
+                  "type": "date",
+                  "enableWhen": [
+                    {
+                      "question": "hospitalized",
+                      "operator": "=",
+                      "answerBoolean": true
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "prescriber",
+              "text": "Who prescribes your mental health medications, if anyone?",
+              "type": "reference",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-referenceResource",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "code": "Practitioner"
+                      },
+                      {
+                        "code": "Organization"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "psych-medications",
+          "text": "Current mental health medications",
+          "type": "group",
+          "repeats": true,
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "gtable"
+                  }
+                ]
+              }
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-maxOccurs",
+              "valueInteger": 10
+            }
+          ],
+          "item": [
+            {
+              "linkId": "psych-medication",
+              "text": "Medication",
+              "type": "string"
+            },
+            {
+              "linkId": "psych-dose",
+              "text": "Dose",
+              "type": "string",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/entryFormat",
+                  "valueString": "e.g. 50 mg"
+                }
+              ]
+            },
+            {
+              "linkId": "psych-helpful",
+              "text": "Is it helping?",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "1",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "2",
+                    "display": "Somewhat"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "3",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "4",
+                    "display": "Too early to tell"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "drop-down"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "family-history",
+          "text": "Has a blood relative had any of these?",
+          "type": "group",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "htable"
+                  }
+                ]
+              }
+            }
+          ],
+          "item": [
+            {
+              "linkId": "family-1",
+              "text": "Depression",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "family-2",
+              "text": "Anxiety",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "family-3",
+              "text": "Bipolar disorder",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "family-4",
+              "text": "Schizophrenia",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "family-5",
+              "text": "Alcohol or drug problems",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "family-6",
+              "text": "Suicide",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "support",
+          "text": "Support",
+          "type": "group",
+          "item": [
+            {
+              "linkId": "lives-with",
+              "text": "Who do you live with?",
+              "type": "open-choice",
+              "repeats": true,
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "1",
+                    "display": "Alone"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "2",
+                    "display": "Partner or spouse"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "3",
+                    "display": "Children"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "4",
+                    "display": "Parents"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "5",
+                    "display": "Roommates"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "drop-down"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "employment",
+              "text": "Work or study",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "1",
+                    "display": "Working full time"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "2",
+                    "display": "Working part time"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "3",
+                    "display": "Student"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "4",
+                    "display": "Unemployed"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "5",
+                    "display": "Retired"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                    "code": "6",
+                    "display": "Unable to work"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "drop-down"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "support-person",
+              "text": "Someone we may contact in an emergency",
+              "type": "string",
+              "required": true
+            },
+            {
+              "linkId": "support-phone",
+              "text": "Their phone number",
+              "type": "string",
+              "required": true,
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/entryFormat",
+                  "valueString": "+1 555 123 4567"
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/regex",
+                  "valueString": "\\+?[0-9 ()-]{7,20}"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "linkId": "preferences-page",
+      "text": "Preferences and consent",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "session-format",
+          "text": "How would you like to meet?",
+          "type": "choice",
+          "repeats": true,
+          "answerOption": [
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                "code": "1",
+                "display": "In person"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                "code": "2",
+                "display": "Video"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                "code": "3",
+                "display": "Phone"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "check-box"
+                  }
+                ]
+              }
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-choiceOrientation",
+              "valueCode": "horizontal"
+            }
+          ]
+        },
+        {
+          "linkId": "clinician-gender",
+          "text": "Do you have a preference for your clinician?",
+          "type": "choice",
+          "answerOption": [
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                "code": "1",
+                "display": "No preference"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                "code": "2",
+                "display": "Woman"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                "code": "3",
+                "display": "Man"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                "code": "4",
+                "display": "Non-binary"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "radio-button"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "available-days",
+          "text": "Which days are you usually available?",
+          "type": "choice",
+          "repeats": true,
+          "answerOption": [
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                "code": "1",
+                "display": "Monday"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                "code": "2",
+                "display": "Tuesday"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                "code": "3",
+                "display": "Wednesday"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                "code": "4",
+                "display": "Thursday"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                "code": "5",
+                "display": "Friday"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/mental-health-intake/answer-options",
+                "code": "6",
+                "display": "Saturday"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "autocomplete"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "available-time",
+          "text": "What time of day works best?",
+          "type": "choice",
+          "answerOption": [
+            {
+              "valueTime": "08:00:00"
+            },
+            {
+              "valueTime": "12:00:00"
+            },
+            {
+              "valueTime": "17:00:00"
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "radio-button"
+                  }
+                ]
+              }
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-choiceOrientation",
+              "valueCode": "horizontal"
+            }
+          ],
+          "item": [
+            {
+              "linkId": "available-time-help",
+              "text": "Morning, lunchtime or after work.",
+              "type": "display",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "inline"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "anything-else",
+          "text": "Is there anything else you would like your clinician to know?",
+          "type": "text",
+          "maxLength": 2000,
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-usageMode",
+              "valueCode": "capture-display-non-empty"
+            }
+          ]
+        },
+        {
+          "linkId": "consent",
+          "text": "Consent",
+          "type": "group",
+          "item": [
+            {
+              "linkId": "consent-treatment",
+              "text": "I consent to assessment and treatment by the behavioral health team",
+              "type": "boolean",
+              "required": true,
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "check-box"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "consent-telehealth",
+              "text": "I consent to video or phone sessions when appropriate",
+              "type": "boolean",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "check-box"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "consent-share-pcp",
+              "text": "You may share a summary of my care with my primary care provider",
+              "type": "boolean",
+              "initial": [
+                {
+                  "valueBoolean": true
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "check-box"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "referral-source",
+          "text": "Referral source",
+          "type": "string",
+          "initial": [
+            {
+              "valueString": "self-referral"
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-hidden",
+              "valueBoolean": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

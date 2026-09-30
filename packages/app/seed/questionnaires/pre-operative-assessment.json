@@ -1,0 +1,2379 @@
+{
+  "resourceType": "Questionnaire",
+  "url": "https://example.com/fhir/Questionnaire/pre-operative-assessment",
+  "version": "2026.1",
+  "name": "PreOperativeAssessment",
+  "title": "Pre-operative Assessment",
+  "status": "active",
+  "subjectType": ["Patient"],
+  "description": "Completed by patients before a planned surgery or procedure, for the pre-admission and anesthesia team.",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-signatureRequired",
+      "valueCodeableConcept": {
+        "coding": [
+          {
+            "system": "urn:iso-astm:E1762-95:2013",
+            "code": "1.2.840.10065.1.12.1.1",
+            "display": "Author's Signature"
+          }
+        ]
+      }
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/designNote",
+      "valueMarkdown": "Reviewed by the pre-admission nurse and the anesthesiologist before the day of surgery."
+    }
+  ],
+  "item": [
+    {
+      "linkId": "surgery",
+      "text": "Your surgery",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "intro",
+          "text": "This form helps your anesthesia and surgical team plan a safe procedure. Please answer every question as accurately as you can.",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "instructions",
+                    "display": "Instructions"
+                  }
+                ],
+                "text": "Instructions"
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "procedure",
+          "text": "Planned procedure",
+          "type": "group",
+          "required": true,
+          "item": [
+            {
+              "linkId": "procedure-name",
+              "text": "What procedure are you having?",
+              "type": "string",
+              "required": true,
+              "maxLength": 200,
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/entryFormat",
+                  "valueString": "e.g. Right knee replacement"
+                }
+              ]
+            },
+            {
+              "linkId": "surgery-date",
+              "text": "Date of surgery",
+              "type": "date",
+              "required": true,
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueDate": "2026-01-01"
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueDate": "2027-12-31"
+                }
+              ]
+            },
+            {
+              "linkId": "surgeon",
+              "text": "Surgeon",
+              "type": "reference",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-referenceResource",
+                  "valueCode": "Practitioner"
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-referenceFilter",
+                  "valueString": "active:not=false"
+                }
+              ]
+            },
+            {
+              "linkId": "side",
+              "text": "Which side?",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "1",
+                    "display": "Left"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "2",
+                    "display": "Right"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "3",
+                    "display": "Both"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "4",
+                    "display": "Not applicable"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-choiceOrientation",
+                  "valueCode": "horizontal"
+                }
+              ]
+            },
+            {
+              "linkId": "anesthesia-type",
+              "text": "What type of anesthesia were you told to expect?",
+              "type": "open-choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "1",
+                    "display": "General"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "2",
+                    "display": "Spinal or epidural"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "3",
+                    "display": "Nerve block"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "4",
+                    "display": "Local with sedation"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "5",
+                    "display": "Don't know"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "drop-down"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "item": [
+                {
+                  "linkId": "anesthesia-type-help",
+                  "text": "It's fine if you don't know. Your anesthesiologist will discuss it with you.",
+                  "type": "display",
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                      "valueCodeableConcept": {
+                        "coding": [
+                          {
+                            "system": "http://hl7.org/fhir/questionnaire-item-control",
+                            "code": "inline"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "overnight",
+              "text": "Are you expected to stay overnight?",
+              "type": "boolean",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "patient",
+          "text": "About you",
+          "type": "group",
+          "item": [
+            {
+              "linkId": "birth-date",
+              "text": "Date of birth",
+              "type": "date",
+              "required": true,
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueDate": "1900-01-01"
+                }
+              ]
+            },
+            {
+              "linkId": "sex",
+              "text": "Sex",
+              "type": "choice",
+              "required": true,
+              "answerValueSet": "http://hl7.org/fhir/ValueSet/administrative-gender",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "autocomplete"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "pregnant",
+              "text": "Is there any chance you could be pregnant?",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ],
+              "enableWhen": [
+                {
+                  "question": "sex",
+                  "operator": "=",
+                  "answerCoding": {
+                    "system": "http://hl7.org/fhir/administrative-gender",
+                    "code": "female"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-choiceOrientation",
+                  "valueCode": "horizontal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "previous-surgeries",
+          "text": "Previous surgeries",
+          "type": "group",
+          "repeats": true,
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "gtable"
+                  }
+                ]
+              }
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-maxOccurs",
+              "valueInteger": 10
+            }
+          ],
+          "item": [
+            {
+              "linkId": "previous-procedure",
+              "text": "Procedure",
+              "type": "string"
+            },
+            {
+              "linkId": "previous-year",
+              "text": "Year",
+              "type": "integer",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueInteger": 1920
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueInteger": 2026
+                }
+              ]
+            },
+            {
+              "linkId": "previous-problems",
+              "text": "Any problems?",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "1",
+                    "display": "None"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "2",
+                    "display": "Minor"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "3",
+                    "display": "Serious"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "drop-down"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "linkId": "anesthesia",
+      "text": "Anesthesia history",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "had-anesthesia",
+          "text": "Have you had general anesthesia or sedation before?",
+          "type": "boolean",
+          "required": true,
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "radio-button"
+                  }
+                ]
+              }
+            }
+          ],
+          "item": [
+            {
+              "linkId": "anesthesia-problems",
+              "text": "Did you have any of these afterwards?",
+              "type": "choice",
+              "repeats": true,
+              "enableWhen": [
+                {
+                  "question": "had-anesthesia",
+                  "operator": "=",
+                  "answerBoolean": true
+                }
+              ],
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "1",
+                    "display": "Severe nausea or vomiting"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "2",
+                    "display": "Hard to wake up"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "3",
+                    "display": "Confusion lasting more than a day"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "4",
+                    "display": "Breathing problems"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "5",
+                    "display": "Sore throat or damaged teeth"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "6",
+                    "display": "None of these"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-optionExclusive",
+                      "valueBoolean": true
+                    }
+                  ]
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "check-box"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "family-anesthesia",
+          "text": "Has a blood relative had a serious reaction to anesthesia, such as a very high fever?",
+          "type": "choice",
+          "required": true,
+          "answerOption": [
+            {
+              "valueCoding": {
+                "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                "code": "Y",
+                "display": "Yes"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                "code": "N",
+                "display": "No"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                "code": "asked-unknown",
+                "display": "Don't know"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "radio-button"
+                  }
+                ]
+              }
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-choiceOrientation",
+              "valueCode": "horizontal"
+            }
+          ],
+          "item": [
+            {
+              "linkId": "family-anesthesia-help",
+              "text": "Some reactions to anesthesia run in families, for example malignant hyperthermia.",
+              "type": "display",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "flyover"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "family-anesthesia-alert",
+          "text": "Please make sure you tell your anesthesiologist about this before your surgery.",
+          "type": "display",
+          "enableWhen": [
+            {
+              "question": "family-anesthesia",
+              "operator": "=",
+              "answerCoding": {
+                "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                "code": "Y"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "security",
+                    "display": "Security"
+                  }
+                ],
+                "text": "Security"
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "airway",
+          "text": "Mouth, teeth and neck",
+          "type": "group",
+          "item": [
+            {
+              "linkId": "airway-issues",
+              "text": "Do you have any of these?",
+              "type": "choice",
+              "repeats": true,
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "1",
+                    "display": "Dentures or a removable plate"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "2",
+                    "display": "Loose, chipped or capped teeth"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "3",
+                    "display": "Braces"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "4",
+                    "display": "Difficulty opening your mouth wide"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "5",
+                    "display": "Stiff neck or limited neck movement"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "6",
+                    "display": "None of these"
+                  },
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-optionExclusive",
+                      "valueBoolean": true
+                    }
+                  ]
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "multi-select"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "sleep-apnea",
+          "text": "Sleep and breathing",
+          "type": "group",
+          "item": [
+            {
+              "linkId": "snoring",
+              "text": "Do you snore loudly?",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-choiceOrientation",
+                  "valueCode": "horizontal"
+                }
+              ]
+            },
+            {
+              "linkId": "apnea-diagnosed",
+              "text": "Have you been diagnosed with sleep apnea?",
+              "type": "boolean",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "item": [
+                {
+                  "linkId": "cpap",
+                  "text": "Do you use a CPAP or BiPAP machine?",
+                  "type": "boolean",
+                  "enableWhen": [
+                    {
+                      "question": "apnea-diagnosed",
+                      "operator": "=",
+                      "answerBoolean": true
+                    }
+                  ],
+                  "extension": [
+                    {
+                      "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                      "valueCodeableConcept": {
+                        "coding": [
+                          {
+                            "system": "http://hl7.org/fhir/questionnaire-item-control",
+                            "code": "check-box"
+                          }
+                        ]
+                      }
+                    }
+                  ],
+                  "item": [
+                    {
+                      "linkId": "cpap-prompt",
+                      "text": "If yes, please bring your machine on the day of surgery.",
+                      "type": "display",
+                      "extension": [
+                        {
+                          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                          "valueCodeableConcept": {
+                            "coding": [
+                              {
+                                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                                "code": "prompt"
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "linkId": "daytime-tiredness",
+              "text": "How often do you feel tired or sleepy during the day?",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "1",
+                    "display": "Rarely"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "2",
+                    "display": "Sometimes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "3",
+                    "display": "Often"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "4",
+                    "display": "Almost always"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "drop-down"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "linkId": "medical-history",
+      "text": "Medical history",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "conditions",
+          "text": "Do you have, or have you ever had, any of these?",
+          "type": "group",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "table"
+                  }
+                ]
+              }
+            }
+          ],
+          "item": [
+            {
+              "linkId": "condition-1",
+              "text": "Heart attack or chest pain (angina)",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "condition-2",
+              "text": "Heart failure",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "condition-3",
+              "text": "Irregular heartbeat",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "condition-4",
+              "text": "Stroke or mini-stroke",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "condition-5",
+              "text": "Asthma or COPD",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "condition-6",
+              "text": "Kidney disease",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "condition-7",
+              "text": "Liver disease",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "condition-8",
+              "text": "Diabetes",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "condition-9",
+              "text": "Bleeding or clotting disorder",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "condition-10",
+              "text": "Blood clots in the legs or lungs",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "Y",
+                    "display": "Yes"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0136",
+                    "code": "N",
+                    "display": "No"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "asked-unknown",
+                    "display": "Don't know"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "stairs",
+          "text": "Can you climb two flights of stairs without stopping?",
+          "type": "choice",
+          "required": true,
+          "answerOption": [
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "1",
+                "display": "Yes"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "2",
+                "display": "No, because of chest pain or shortness of breath"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "3",
+                "display": "No, for another reason"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "radio-button"
+                  }
+                ]
+              }
+            }
+          ],
+          "item": [
+            {
+              "linkId": "stairs-help",
+              "text": "This tells us how well your heart and lungs cope with exertion.",
+              "type": "display",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "help"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "blocks",
+          "text": "About how many blocks can you walk before you need to rest?",
+          "type": "integer",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "spinner"
+                  }
+                ]
+              }
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+              "valueInteger": 0
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+              "valueInteger": 50
+            }
+          ],
+          "item": [
+            {
+              "linkId": "blocks-unit",
+              "text": "blocks",
+              "type": "display",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "unit"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "implant",
+          "text": "Do you have a pacemaker, defibrillator or other implanted device?",
+          "type": "boolean",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "radio-button"
+                  }
+                ]
+              }
+            }
+          ],
+          "item": [
+            {
+              "linkId": "implant-type",
+              "text": "Which device?",
+              "type": "string",
+              "enableWhen": [
+                {
+                  "question": "implant",
+                  "operator": "=",
+                  "answerBoolean": true
+                }
+              ]
+            },
+            {
+              "linkId": "implant-card",
+              "text": "Photo of your device card",
+              "type": "attachment",
+              "enableWhen": [
+                {
+                  "question": "implant",
+                  "operator": "=",
+                  "answerBoolean": true
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/mimeType",
+                  "valueCode": "image/jpeg"
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/mimeType",
+                  "valueCode": "image/png"
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/mimeType",
+                  "valueCode": "image/heic"
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/mimeType",
+                  "valueCode": "application/pdf"
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxSize",
+                  "valueDecimal": 5242880
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "smoker",
+          "text": "Do you smoke or vape?",
+          "type": "choice",
+          "answerOption": [
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "1",
+                "display": "No"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "2",
+                "display": "Yes, cigarettes"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "3",
+                "display": "Yes, vaping"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "4",
+                "display": "I quit in the last 8 weeks"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "radio-button"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "smoking-advice",
+          "text": "Stopping smoking even a few days before surgery lowers the risk of breathing problems.",
+          "type": "display",
+          "enableBehavior": "any",
+          "enableWhen": [
+            {
+              "question": "smoker",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "2"
+              }
+            },
+            {
+              "question": "smoker",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "3"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "instructions",
+                    "display": "Instructions"
+                  }
+                ],
+                "text": "Instructions"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "linkId": "medications",
+      "text": "Medications and allergies",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "blood-thinners",
+          "text": "Do you take any of these blood thinners?",
+          "type": "choice",
+          "repeats": true,
+          "answerOption": [
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "1",
+                "display": "Warfarin"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "2",
+                "display": "Apixaban"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "3",
+                "display": "Rivaroxaban"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "4",
+                "display": "Dabigatran"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "5",
+                "display": "Clopidogrel"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "6",
+                "display": "Aspirin"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "7",
+                "display": "None of these"
+              },
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-optionExclusive",
+                  "valueBoolean": true
+                }
+              ]
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "check-box"
+                  }
+                ]
+              }
+            }
+          ],
+          "item": [
+            {
+              "linkId": "blood-thinner-last-dose",
+              "text": "When did you last take it?",
+              "type": "dateTime",
+              "enableWhen": [
+                {
+                  "question": "blood-thinners",
+                  "operator": "!=",
+                  "answerCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "7"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueDateTime": "2026-01-01T00:00:00.000Z"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "blood-thinner-advice",
+          "text": "Do not stop a blood thinner on your own. Your surgeon or doctor will tell you if and when to stop it.",
+          "type": "display",
+          "enableWhen": [
+            {
+              "question": "blood-thinners",
+              "operator": "!=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "7"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "security",
+                    "display": "Security"
+                  }
+                ],
+                "text": "Security"
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "medication-list",
+          "text": "Other medications",
+          "type": "group",
+          "repeats": true,
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-maxOccurs",
+              "valueInteger": 15
+            }
+          ],
+          "item": [
+            {
+              "linkId": "medication",
+              "text": "Medication",
+              "type": "string",
+              "required": true
+            },
+            {
+              "linkId": "medication-dose",
+              "text": "Dose",
+              "type": "string",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/entryFormat",
+                  "valueString": "e.g. 20 mg"
+                }
+              ]
+            },
+            {
+              "linkId": "medication-when",
+              "text": "When do you take it?",
+              "type": "choice",
+              "repeats": true,
+              "answerOption": [
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "1",
+                    "display": "Morning"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "2",
+                    "display": "Midday"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "3",
+                    "display": "Evening"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "4",
+                    "display": "Bedtime"
+                  }
+                },
+                {
+                  "valueCoding": {
+                    "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                    "code": "5",
+                    "display": "As needed"
+                  }
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "drop-down"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "supplements",
+          "text": "Do you take any herbal medicines or supplements?",
+          "type": "choice",
+          "repeats": true,
+          "answerOption": [
+            {
+              "valueString": "Fish oil"
+            },
+            {
+              "valueString": "Vitamin E"
+            },
+            {
+              "valueString": "Ginkgo"
+            },
+            {
+              "valueString": "Garlic"
+            },
+            {
+              "valueString": "St John's wort"
+            },
+            {
+              "valueString": "Ginseng"
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "autocomplete"
+                  }
+                ]
+              }
+            }
+          ],
+          "item": [
+            {
+              "linkId": "supplements-help",
+              "text": "Some supplements affect bleeding or anesthesia, so we need to know about them too.",
+              "type": "display",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "inline"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "allergies",
+          "text": "Are you allergic to any of these?",
+          "type": "open-choice",
+          "repeats": true,
+          "answerOption": [
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "1",
+                "display": "Penicillin"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "2",
+                "display": "Sulfa drugs"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "3",
+                "display": "Latex"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "4",
+                "display": "Iodine or X-ray contrast"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "5",
+                "display": "Adhesive tape or dressings"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "6",
+                "display": "Opioid pain medicines"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "autocomplete"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "latex-alert",
+          "text": "Latex allergy: your operating room will be prepared latex-free.",
+          "type": "display",
+          "enableWhen": [
+            {
+              "question": "allergies",
+              "operator": "=",
+              "answerCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "3"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "security",
+                    "display": "Security"
+                  }
+                ],
+                "text": "Security"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "linkId": "measurements",
+      "text": "Measurements",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "body",
+          "text": "Height and weight",
+          "type": "group",
+          "item": [
+            {
+              "linkId": "height",
+              "text": "Height",
+              "type": "decimal",
+              "required": true,
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "8302-2",
+                  "display": "Body height"
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-unit",
+                  "valueCoding": {
+                    "system": "http://unitsofmeasure.org",
+                    "code": "cm",
+                    "display": "cm"
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueDecimal": 100
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueDecimal": 250
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxDecimalPlaces",
+                  "valueInteger": 1
+                }
+              ]
+            },
+            {
+              "linkId": "weight",
+              "text": "Weight",
+              "type": "decimal",
+              "required": true,
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "29463-7",
+                  "display": "Body weight"
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-unit",
+                  "valueCoding": {
+                    "system": "http://unitsofmeasure.org",
+                    "code": "kg",
+                    "display": "kg"
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueDecimal": 25
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueDecimal": 400
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxDecimalPlaces",
+                  "valueInteger": 1
+                }
+              ]
+            },
+            {
+              "linkId": "bmi",
+              "text": "Body mass index (BMI)",
+              "type": "decimal",
+              "readOnly": true,
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "39156-5",
+                  "display": "Body mass index (BMI) [Ratio]"
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-unit",
+                  "valueCoding": {
+                    "system": "http://unitsofmeasure.org",
+                    "code": "kg/m2",
+                    "display": "kg/m²"
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxDecimalPlaces",
+                  "valueInteger": 1
+                },
+                {
+                  "url": "http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-calculatedExpression",
+                  "valueExpression": {
+                    "language": "text/fhirpath",
+                    "expression": "(%resource.item.where(linkId='measurements').item.where(linkId='body').item.where(linkId='weight').answer.value / (%resource.item.where(linkId='measurements').item.where(linkId='body').item.where(linkId='height').answer.value / 100).power(2)).round(1)"
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "bmi-anesthesia",
+              "text": "With a BMI of 40 or more, your anesthesiologist may want to see you before the day of surgery.",
+              "type": "display",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-enableWhenExpression",
+                  "valueExpression": {
+                    "language": "text/fhirpath",
+                    "expression": "%resource.item.where(linkId='measurements').item.where(linkId='body').item.where(linkId='bmi').answer.value >= 40"
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-display-category",
+                        "code": "instructions",
+                        "display": "Instructions"
+                      }
+                    ],
+                    "text": "Instructions"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "vitals",
+          "text": "If you know them",
+          "type": "group",
+          "item": [
+            {
+              "linkId": "systolic",
+              "text": "Blood pressure, top number",
+              "type": "integer",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-unit",
+                  "valueCoding": {
+                    "system": "http://unitsofmeasure.org",
+                    "code": "mm[Hg]",
+                    "display": "mmHg"
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueInteger": 60
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueInteger": 260
+                }
+              ]
+            },
+            {
+              "linkId": "diastolic",
+              "text": "Blood pressure, bottom number",
+              "type": "integer",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-unit",
+                  "valueCoding": {
+                    "system": "http://unitsofmeasure.org",
+                    "code": "mm[Hg]",
+                    "display": "mmHg"
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueInteger": 30
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueInteger": 160
+                }
+              ]
+            },
+            {
+              "linkId": "pulse",
+              "text": "Resting heart rate",
+              "type": "integer",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "8867-4",
+                  "display": "Heart rate"
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-unit",
+                  "valueCoding": {
+                    "system": "http://unitsofmeasure.org",
+                    "code": "/min",
+                    "display": "beats/min"
+                  }
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+                  "valueInteger": 30
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+                  "valueInteger": 220
+                }
+              ]
+            },
+            {
+              "linkId": "temperature",
+              "text": "Temperature today",
+              "type": "quantity",
+              "code": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "8310-5",
+                  "display": "Body temperature"
+                }
+              ],
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-unitValueSet",
+                  "valueCanonical": "http://hl7.org/fhir/ValueSet/ucum-bodytemp"
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/maxDecimalPlaces",
+                  "valueInteger": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "linkId": "day-of-surgery",
+      "text": "The day of surgery",
+      "type": "group",
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/questionnaire-item-control",
+                "code": "page"
+              }
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "linkId": "fasting",
+          "text": "Follow the eating and drinking instructions your care team gives you exactly. If you eat or drink when you should not, your surgery may be postponed for your safety.",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-displayCategory",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-display-category",
+                    "code": "instructions",
+                    "display": "Instructions"
+                  }
+                ],
+                "text": "Instructions"
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "escort",
+          "text": "Getting home",
+          "type": "group",
+          "required": true,
+          "item": [
+            {
+              "linkId": "escort-name",
+              "text": "Who will take you home?",
+              "type": "string",
+              "required": true
+            },
+            {
+              "linkId": "escort-phone",
+              "text": "Their phone number",
+              "type": "string",
+              "required": true,
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/entryFormat",
+                  "valueString": "+1 555 123 4567"
+                },
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/regex",
+                  "valueString": "\\+?[0-9 ()-]{7,20}"
+                }
+              ]
+            },
+            {
+              "linkId": "escort-overnight",
+              "text": "Will someone stay with you for the first 24 hours?",
+              "type": "boolean",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "radio-button"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "arrival-time",
+          "text": "What time were you asked to arrive?",
+          "type": "time",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/minValue",
+              "valueTime": "05:00:00"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/maxValue",
+              "valueTime": "18:00:00"
+            }
+          ]
+        },
+        {
+          "linkId": "update-method",
+          "text": "How should we update your family on the day?",
+          "type": "choice",
+          "answerOption": [
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "1",
+                "display": "Phone call"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "2",
+                "display": "Text message"
+              }
+            },
+            {
+              "valueCoding": {
+                "system": "https://example.com/fhir/Questionnaire/pre-operative-assessment/answer-options",
+                "code": "3",
+                "display": "In person in the waiting room"
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/questionnaire-item-control",
+                    "code": "radio-button"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "linkId": "questions",
+          "text": "Questions for your anesthesiologist",
+          "type": "text",
+          "maxLength": 2000,
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-usageMode",
+              "valueCode": "capture-display-non-empty"
+            }
+          ]
+        },
+        {
+          "linkId": "acknowledgements",
+          "text": "Please confirm",
+          "type": "group",
+          "item": [
+            {
+              "linkId": "ack-fasting",
+              "text": "I will follow the eating and drinking instructions I am given",
+              "type": "boolean",
+              "required": true,
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "check-box"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "ack-medications",
+              "text": "I will take only the medications I am told to take on the morning of surgery",
+              "type": "boolean",
+              "required": true,
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "check-box"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "linkId": "ack-jewelry",
+              "text": "I will remove jewelry, piercings and nail polish",
+              "type": "boolean",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-itemControl",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "system": "http://hl7.org/fhir/questionnaire-item-control",
+                        "code": "check-box"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "linkId": "reviewed",
+          "text": "Reviewed by the pre-admission team.",
+          "type": "display",
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-usageMode",
+              "valueCode": "display"
+            }
+          ]
+        },
+        {
+          "linkId": "form-type",
+          "text": "Form type",
+          "type": "string",
+          "initial": [
+            {
+              "valueString": "pre-admission"
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/questionnaire-hidden",
+              "valueBoolean": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

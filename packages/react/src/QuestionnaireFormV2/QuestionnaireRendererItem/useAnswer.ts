@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
 import type { ReactNode } from 'react';
-import type { QuestionnaireForm } from './QuestionnaireFormContext';
-import { useQuestionnaireResponseFormContext } from './QuestionnaireFormContext';
-import type { ExtendedQuestionnaireItem } from './QuestionnaireFormV2.utils';
-import { getAnswerValue, getValueByPath } from './QuestionnaireFormV2.utils';
-import { setAnswerValue } from './QuestionnaireRenderer.utils';
+import type { QuestionnaireForm } from '../QuestionnaireFormContext';
+import { useQuestionnaireResponseFormContext } from '../QuestionnaireFormContext';
+import type { ExtendedQuestionnaireItem } from '../QuestionnaireFormV2.utils';
+import { getAnswerValue, getValueByPath } from '../QuestionnaireFormV2.utils';
+import { setAnswerValue } from '../QuestionnaireRenderer.utils';
 
 /** Which answer an input shows and writes. */
 export interface AnswerProps {

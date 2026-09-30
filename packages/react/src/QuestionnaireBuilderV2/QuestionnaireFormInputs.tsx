@@ -18,6 +18,8 @@ export interface FormTextInputProps {
   readonly context: string;
   readonly type?: 'text' | 'number' | 'date' | 'time' | 'datetime-local' | 'email' | 'url';
   readonly placeholder?: string;
+  /** An error about the value; defaults to the form's error for it. */
+  readonly error?: ReactNode;
   readonly step?: string;
   readonly min?: string;
   readonly max?: string;
@@ -32,6 +34,7 @@ export function FormTextInput(props: FormTextInputProps): JSX.Element {
     label,
     description,
     placeholder,
+    error,
     type = 'text',
     step = '1',
     min = '1',
@@ -57,7 +60,7 @@ export function FormTextInput(props: FormTextInputProps): JSX.Element {
       disabled={disabled}
       withAsterisk={required}
       defaultValue={formValue}
-      error={form.errors[context]}
+      error={error ?? form.errors[context]}
       onChange={(e) => setValue(e.currentTarget.value)}
     />
   );

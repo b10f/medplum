@@ -30,10 +30,10 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
+import { useElementSize } from '@mantine/hooks';
 import { deepEquals, normalizeErrorString } from '@medplum/core';
 import type { Coding, Quantity, QuestionnaireItem, Signature, ValueSetExpansionContains } from '@medplum/fhirtypes';
 import type { QuestionnaireFormPaginationState } from '@medplum/react-hooks';
-import { getQuestionnaireItemReferenceFilter } from '@medplum/react-hooks';
 import { IconExternalLink, IconHelp, IconInfoCircle, IconLock, IconPlus, IconTrash } from '@tabler/icons-react';
 import cx from 'clsx';
 import type { JSX, ReactNode, RefObject, WheelEvent } from 'react';
@@ -62,6 +62,7 @@ import {
   getCalculatedAnswers,
   getChoiceValueKey,
   getPageItems,
+  getReferenceSearchCriteria,
   getRequiredGroupError,
   getRequiredSignatureType,
   getValueByPath,
@@ -167,6 +168,38 @@ function useCalculatedAnswers(form: QuestionnaireForm, enabled: boolean): RefObj
   return state;
 }
 
+interface PreviewSignatureProps {
+  readonly defaultValue: Signature | undefined;
+  readonly missing: boolean;
+  readonly onChange: (value: Signature | undefined) => void;
+}
+
+/**
+ * The respondent's signature, with Medplum's SignatureInput, as wide as the questions above it.
+ * @param props - The PreviewSignature React props.
+ * @returns The PreviewSignature React node.
+ */
+function PreviewSignature(props: PreviewSignatureProps): JSX.Element {
+  const { defaultValue, missing, onChange } = props;
+  const { ref, width } = useElementSize();
+
+  return (
+    <Stack gap={4} className={classes.item}>
+      <Text size="sm" fw={500}>
+        Signature
+      </Text>
+      <div ref={ref}>
+        {width > 0 && <SignatureInput width={Math.floor(width)} defaultValue={defaultValue} onChange={onChange} />}
+      </div>
+      {missing && (
+        <Text c="red" size="sm">
+          Signature is required.
+        </Text>
+      )}
+    </Stack>
+  );
+}
+
 /** The mode the preview renders in, for the items deep in its tree. */
 const PreviewModeContext = createContext<QuestionnaireMode>('capture');
 
@@ -257,23 +290,14 @@ export function QuestionnairePreview(props: QuestionnairePreviewProps): JSX.Elem
   };
 
   const signatureSection = signatureRequired && !viewing && (!pageItems || currentPage === pageItems.length - 1) && (
-    <Stack mt="md" gap={4}>
-      <Text size="sm" fw={500}>
-        Signature
-      </Text>
-      <SignatureInput
-        defaultValue={signature}
-        onChange={(value) => {
-          setSignature(value);
-          setSignatureMissing(false);
-        }}
-      />
-      {signatureMissing && (
-        <Text c="red" size="sm">
-          Signature is required.
-        </Text>
-      )}
-    </Stack>
+    <PreviewSignature
+      defaultValue={defaultSignature}
+      missing={signatureMissing}
+      onChange={(value) => {
+        setSignature(value);
+        setSignatureMissing(false);
+      }}
+    />
   );
 
   useEffect(() => {
@@ -1396,6 +1420,7 @@ function PreviewInput(props: PreviewAnswerProps): JSX.Element {
         {...getUnitSection(unit ? (unit.display ?? unit.code) : getAttachedText(original, 'unit'))}
         min={original.minValue === null || original.minValue === '' ? undefined : Number(original.minValue)}
         max={original.maxValue === null || original.maxValue === '' ? undefined : Number(original.maxValue)}
+        placeholder={original.entryFormat}
         value={value ?? ''}
         error={form.errors[fieldPath]}
         onChange={(val) => setAnswerValue(form, fieldPath, original, val, ignoreValidation)}
@@ -1413,6 +1438,7 @@ function PreviewInput(props: PreviewAnswerProps): JSX.Element {
         rightSectionWidth="auto"
         rightSectionProps={{ style: { paddingInline: 'var(--mantine-spacing-sm)' } }}
         step="any"
+        placeholder={original.entryFormat}
         value={value ?? ''}
         error={form.errors[fieldPath]}
         onChange={(e) => setAnswerValue(form, fieldPath, original, e.currentTarget.value, ignoreValidation)}
@@ -1453,12 +1479,8 @@ function PreviewReference(props: PreviewAnswerProps): JSX.Element {
   // `_profile`); otherwise it is any resource of the resource types.
   const profiles = (original.referenceProfile ?? []).filter(Boolean);
   const targetTypes = profiles.length > 0 ? profiles : (original.referenceResource ?? []).filter(Boolean);
-  // The filter extension is kept as the builder loaded it; Medplum's helper reads it the same way the form does.
-  const searchCriteria = getQuestionnaireItemReferenceFilter(
-    { linkId: original.linkId, type: 'reference', extension: original.preserved?.extension },
-    undefined,
-    undefined
-  );
+  // The preview has no subject or encounter, so it searches without the filter's $subj and $encounter parameters.
+  const searchCriteria = getReferenceSearchCriteria(original);
   const { label, labelProps } = getAnswerLabel(props);
 
   return (
@@ -1613,7 +1635,7 @@ function PreviewQuantity(props: PreviewAnswerProps): JSX.Element {
           disabled={readOnly}
           type="number"
           step="any"
-          placeholder="Value"
+          placeholder={original.entryFormat || 'Value'}
           // The typed text is kept as it is (e.g. "1."), and converted to a number when the response is written.
           value={quantity.value ?? ''}
           error={!!form.errors[fieldPath]}

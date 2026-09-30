@@ -18,6 +18,9 @@ const SignaturePad: Mock<
     addEventListener: Mock<() => void>;
     removeEventListener: Mock<() => void>;
     toDataURL: Mock<() => string>;
+    fromData: Mock<() => void>;
+    toData: Mock<() => unknown[]>;
+    off: Mock<() => void>;
   }
 > = vi.fn(function () {
   return {
@@ -26,6 +29,9 @@ const SignaturePad: Mock<
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
     toDataURL: vi.fn(() => 'data:image/png;base64,signature-data'),
+    fromData: vi.fn(),
+    toData: vi.fn(() => []),
+    off: vi.fn(),
   };
 });
 

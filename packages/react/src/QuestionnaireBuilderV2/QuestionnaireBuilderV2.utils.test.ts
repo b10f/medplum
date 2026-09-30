@@ -18,6 +18,8 @@ import {
   getLocalAnswerOptionSystem,
   getPageItems,
   getQuestionnaireDesignNote,
+  getReferenceFilterError,
+  getReferenceSearchCriteria,
   getRequiredGroupError,
   getRequiredSignatureType,
   getRespondedItems,
@@ -1554,6 +1556,42 @@ describe('QuestionnaireBuilderV2.utils', () => {
   describe('reference questions', () => {
     const referenceResource = 'http://hl7.org/fhir/StructureDefinition/questionnaire-referenceResource';
     const referenceFilter = 'http://hl7.org/fhir/StructureDefinition/questionnaire-referenceFilter';
+
+    test('search filter', () => {
+      const values = toFormValues({
+        resourceType: 'Questionnaire',
+        status: 'active',
+        item: [
+          { linkId: 'doctor', type: 'reference', extension: [{ url: referenceFilter, valueString: 'active=true' }] },
+        ],
+      });
+      expect(values.item[0].referenceFilter).toBe('active=true');
+
+      values.item[0].referenceFilter = ' active=true&subject=$subj ';
+      const filterOf = (v: Record<string, any>): unknown =>
+        toFhirQuestionnaire(v).item?.[0].extension?.filter((ext) => ext.url === referenceFilter);
+      expect(filterOf(values)).toStrictEqual([{ url: referenceFilter, valueString: 'active=true&subject=$subj' }]);
+      // Without a subject, its parameter is left out of the search.
+      expect(getReferenceSearchCriteria(values.item[0])).toStrictEqual({ active: 'true' });
+      expect(getReferenceSearchCriteria(values.item[0], { reference: 'Patient/123' })).toStrictEqual({
+        active: 'true',
+        subject: 'Patient/123',
+      });
+
+      values.item[0].referenceFilter = '';
+      expect(filterOf(values)).toStrictEqual([]);
+      expect(getReferenceSearchCriteria(values.item[0])).toBeUndefined();
+    });
+
+    test('search filter format', () => {
+      expect(getReferenceFilterError('')).toBeUndefined();
+      expect(getReferenceFilterError('active=true&address-state=CA')).toBeUndefined();
+      expect(getReferenceFilterError('active')).toBe(
+        '"active" is not name=value. Join several with &, e.g. active=true&address-state=CA'
+      );
+      expect(getReferenceFilterError('active=true&')).toMatch(/^"" is not name=value/);
+      expect(getReferenceFilterError('=true')).toMatch(/^"=true" is not name=value/);
+    });
 
     test('resource types are written as Medplum does: one as a code, several as a CodeableConcept', () => {
       const values = toFormValues({

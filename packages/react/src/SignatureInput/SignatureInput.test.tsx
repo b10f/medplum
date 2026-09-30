@@ -76,6 +76,9 @@ describe('SignatureInput', () => {
         clear: vi.fn(),
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
+        fromData: vi.fn(),
+        toData: vi.fn(() => []),
+        off: vi.fn(),
         toDataURL: vi.fn(() => mockDataURL),
       };
     });
@@ -140,6 +143,9 @@ describe('SignatureInput', () => {
           clear: vi.fn(),
           addEventListener: vi.fn(),
           removeEventListener: vi.fn(),
+          fromData: vi.fn(),
+          toData: vi.fn(() => []),
+          off: vi.fn(),
           toDataURL: vi.fn(() => testCase.dataURL),
         };
       });
@@ -183,6 +189,9 @@ describe('SignatureInput', () => {
         clear: vi.fn(),
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
+        fromData: vi.fn(),
+        toData: vi.fn(() => []),
+        off: vi.fn(),
         toDataURL: vi.fn(() => dataURL),
       };
     });
@@ -214,5 +223,73 @@ describe('SignatureInput', () => {
     expect(decodedData.codePointAt(1)).toBe(80); // 'P'
     expect(decodedData.codePointAt(2)).toBe(78); // 'N'
     expect(decodedData.codePointAt(3)).toBe(71); // 'G'
+  });
+
+  function mockSignaturePad(): void {
+    (SignaturePad as Mock).mockImplementation(function () {
+      return {
+        fromDataURL: vi.fn().mockResolvedValue(undefined),
+        clear: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        toDataURL: vi.fn(() => 'data:image/png;base64,signature-data'),
+        fromData: vi.fn(),
+        toData: vi.fn(() => []),
+        off: vi.fn(),
+      };
+    });
+  }
+
+  test('Draws the default value once', async () => {
+    mockSignaturePad();
+    const data = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    const input = (value: string): ReactNode => (
+      <MedplumProvider medplum={medplum}>
+        <SignatureInput defaultValue={{ type: [], when: '', who: {}, data: value }} onChange={vi.fn()} />
+      </MedplumProvider>
+    );
+    let rerender: (ui: ReactNode) => void = () => undefined;
+    await act(async () => {
+      rerender = render(input(data)).rerender;
+    });
+    const signaturePadInstance = (SignaturePad as Mock).mock.results[0].value;
+    expect(signaturePadInstance.fromDataURL).toHaveBeenCalledWith(`data:image/png;base64,${data}`);
+
+    // A new value, e.g. the one just drawn passed back as the default, does not replace the pad, which would clear it.
+    await act(async () => {
+      rerender(input('other'));
+    });
+    expect(SignaturePad).toHaveBeenCalledTimes(1);
+    expect(signaturePadInstance.fromDataURL).toHaveBeenCalledTimes(1);
+  });
+
+  test('Keeps the strokes when resized', async () => {
+    mockSignaturePad();
+    const strokes = [{ points: [] }];
+    let rerender: (ui: ReactNode) => void = () => undefined;
+    await act(async () => {
+      const result = render(
+        <MedplumProvider medplum={medplum}>
+          <SignatureInput width={300} onChange={vi.fn()} />
+        </MedplumProvider>
+      );
+      rerender = result.rerender;
+    });
+    const first = (SignaturePad as Mock).mock.results[0].value;
+    first.toData.mockReturnValue(strokes);
+    act(() => {
+      (first.addEventListener as Mock).mock.calls[0][1]();
+    });
+
+    await act(async () => {
+      rerender(
+        <MedplumProvider medplum={medplum}>
+          <SignatureInput width={400} onChange={vi.fn()} />
+        </MedplumProvider>
+      );
+    });
+    expect(first.off).toHaveBeenCalled();
+    const second = (SignaturePad as Mock).mock.results[1].value;
+    expect(second.fromData).toHaveBeenCalledWith(strokes);
   });
 });

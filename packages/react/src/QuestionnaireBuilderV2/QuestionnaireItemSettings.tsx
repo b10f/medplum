@@ -50,6 +50,7 @@ import {
   getChoiceValueKey,
   getItemControlOptions,
   getLocalAnswerOptionSystem,
+  getReferenceFilterError,
   getValueByPath,
   hasFixedItemControl,
   isCodedAnswerOption,
@@ -868,8 +869,14 @@ export function QuestionnaireItemSettings(props: QuestionnaireItemSettingsProps)
 
         {!isDisplay && (
           <>
-            {['string', 'text'].includes(type) && (
-              <FormTextInput form={form} label="Entry Format" context={`${path}.entryFormat`} disabled={disabled} />
+            {ENTRY_FORMAT_TYPES.includes(type) && itemControl?.code !== 'slider' && (
+              <FormTextInput
+                form={form}
+                label="Entry Format"
+                description="Shown in the empty answer field, e.g. nnn-nnn-nnnn"
+                context={`${path}.entryFormat`}
+                disabled={disabled}
+              />
             )}
 
             <FormTextarea form={form} label="Help Text" context={`${path}.help`} disabled={disabled} />
@@ -1189,9 +1196,24 @@ function QuestionnaireReferenceTypes(props: QuestionnaireReferenceTypesProps): J
         </Button>
       </Group>
       <QuestionnaireReferenceProfiles form={form} path={path} disabled={disabled} />
+      <FormTextInput
+        form={form}
+        label="Search filter"
+        description="FHIR search parameters the answer is searched with, e.g. active=true. $subj and $encounter stand for the form's subject and encounter."
+        placeholder="name=value&name=value"
+        context={`${path}.referenceFilter`}
+        error={getReferenceFilterError(getValueByPath(form.getValues(), `${path}.referenceFilter`))}
+        disabled={disabled}
+      />
     </Stack>
   );
 }
+
+/**
+ * The question types whose answer field shows an entry format (entryFormat). Date and time fields are the browser's own
+ * pickers, which show their own format.
+ */
+const ENTRY_FORMAT_TYPES = ['string', 'text', 'url', 'integer', 'decimal', 'quantity'];
 
 const MEGABYTE = 1024 * 1024;
 

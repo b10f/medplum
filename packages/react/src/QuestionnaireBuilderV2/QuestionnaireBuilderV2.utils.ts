@@ -13,6 +13,7 @@ import {
 } from '@medplum/core';
 import type {
   Coding,
+  Encounter,
   Extension,
   Quantity,
   Questionnaire,
@@ -23,17 +24,20 @@ import type {
   QuestionnaireResponse,
   QuestionnaireResponseItem,
   QuestionnaireResponseItemAnswer,
+  Reference,
   Signature,
   ValueSet,
   ValueSetExpansionContains,
 } from '@medplum/fhirtypes';
 import {
+  getQuestionnaireItemReferenceFilter,
   getQuestionnaireItemReferenceTargetTypes,
   QUESTIONNAIRE_CALCULATED_EXPRESSION_URL,
   QUESTIONNAIRE_ENABLED_WHEN_EXPRESSION_URL,
   QUESTIONNAIRE_HIDDEN_URL,
   QUESTIONNAIRE_ITEM_CONTROL_URL,
   QUESTIONNAIRE_OPTION_EXCLUSIVE_URL,
+  QUESTIONNAIRE_REFERENCE_FILTER_URL,
   QUESTIONNAIRE_REFERENCE_RESOURCE_URL,
   QUESTIONNAIRE_SIGNATURE_REQUIRED_URL,
   QUESTIONNAIRE_SIGNATURE_RESPONSE_URL,
@@ -66,6 +70,8 @@ export interface ExtendedQuestionnaireItem extends Omit<QuestionnaireItem, 'enab
   referenceResource: string[];
   /** The profiles a reference question's answer must conform to (questionnaire-referenceProfile). */
   referenceProfile: string[];
+  /** The search a reference question's answer is picked from, e.g. `active=true` (questionnaire-referenceFilter). */
+  referenceFilter: string;
   /** The value set a quantity's unit is picked from (questionnaire-unitValueSet). */
   unitValueSet: string | null;
   /** The most decimal places a decimal or quantity answer may have (maxDecimalPlaces). */
@@ -158,6 +164,7 @@ const EXTENSION_URLS = {
   sliderStepValue: `${STRUCTURE_DEFINITION_URL}/questionnaire-sliderStepValue`,
   referenceResource: QUESTIONNAIRE_REFERENCE_RESOURCE_URL,
   referenceProfile: `${STRUCTURE_DEFINITION_URL}/questionnaire-referenceProfile`,
+  referenceFilter: QUESTIONNAIRE_REFERENCE_FILTER_URL,
   maxSize: `${STRUCTURE_DEFINITION_URL}/maxSize`,
   unitValueSet: `${STRUCTURE_DEFINITION_URL}/questionnaire-unitValueSet`,
   maxDecimalPlaces: `${STRUCTURE_DEFINITION_URL}/maxDecimalPlaces`,
@@ -188,6 +195,7 @@ const MODELED_EXTENSIONS = {
     'sliderStepValue',
     'referenceResource',
     'referenceProfile',
+    'referenceFilter',
     'maxSize',
     'mimeType',
     'maxDecimalPlaces',
@@ -755,6 +763,7 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
     designNote,
     referenceResource,
     referenceProfile,
+    referenceFilter,
     maxSize,
     mimeType,
     maxDecimalPlaces,
@@ -1110,6 +1119,9 @@ export function toFhirQuestionnaireItem(item: any): QuestionnaireItem {
     for (const profile of (referenceProfile ?? []).filter(Boolean)) {
       extensions.push({ url: EXTENSION_URLS.referenceProfile, valueCanonical: profile });
     }
+    if (referenceFilter?.trim()) {
+      extensions.push({ url: EXTENSION_URLS.referenceFilter, valueString: referenceFilter.trim() });
+    }
   }
 
   extensions.push(...(preserved?.extension ?? []));
@@ -1290,6 +1302,8 @@ export function fromFhirQuestionnaireItem(
     formData.mimeType = extensions
       .filter((extension: Extension) => extension.url === EXTENSION_URLS.mimeType && extension.valueCode)
       .map((extension: Extension) => extension.valueCode);
+    formData.referenceFilter =
+      extensions.find((extension: Extension) => extension.url === EXTENSION_URLS.referenceFilter)?.valueString ?? '';
     formData.referenceProfile = extensions
       .filter((extension: Extension) => extension.url === EXTENSION_URLS.referenceProfile && extension.valueCanonical)
       .map((extension: Extension) => extension.valueCanonical);
@@ -2809,6 +2823,53 @@ function calculateAnswer(
     return { fieldPath, error: `The expression's result is a ${calculated[0].type}, not a ${original.type}` };
   }
   return { fieldPath, value: fromQuestionnaireResponseItemAnswer([answer], original.type)[0].value };
+}
+
+/**
+ * Checks a reference search filter (questionnaire-referenceFilter): search parameters as `name=value`, joined by `&`,
+ * as Medplum's QuestionnaireForm reads them.
+ * @param filter - The filter.
+ * @returns The error message, or undefined when the filter is empty or valid.
+ */
+export function getReferenceFilterError(filter: string | undefined): string | undefined {
+  const parts = filter?.trim() ? filter.trim().split('&') : [];
+  const invalid = parts.find((part) => !/^[^=\s]+=\S/.test(part));
+  if (invalid === undefined) {
+    return undefined;
+  }
+  return `"${invalid}" is not name=value. Join several with &, e.g. active=true&address-state=CA`;
+}
+
+/**
+ * Returns the search a reference answer is picked from: the question's filter (questionnaire-referenceFilter), with
+ * `$subj` and `$encounter` replaced by the form's subject and encounter, as Medplum's QuestionnaireForm does. Parameters
+ * whose variable has no value are left out, so the search is not narrowed by an unresolved variable.
+ * @param original - The reference question.
+ * @param subject - The form's subject.
+ * @param encounter - The form's encounter.
+ * @returns The search parameters, or undefined when there is no filter.
+ */
+export function getReferenceSearchCriteria(
+  original: ExtendedQuestionnaireItem,
+  subject?: Reference,
+  encounter?: Reference<Encounter>
+): Record<string, string> | undefined {
+  if (!original.referenceFilter?.trim() || getReferenceFilterError(original.referenceFilter)) {
+    return undefined;
+  }
+  const criteria = getQuestionnaireItemReferenceFilter(
+    {
+      linkId: original.linkId,
+      type: 'reference',
+      extension: [{ url: EXTENSION_URLS.referenceFilter, valueString: original.referenceFilter.trim() }],
+    },
+    subject,
+    encounter
+  );
+  const resolved = Object.entries(criteria ?? {}).filter(
+    ([, value]) => !value.includes('$subj') && !value.includes('$encounter')
+  );
+  return resolved.length > 0 ? Object.fromEntries(resolved) : undefined;
 }
 
 /**

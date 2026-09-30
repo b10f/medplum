@@ -1,17 +1,6 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
-import {
-  Alert,
-  Button,
-  Drawer,
-  Group,
-  Paper,
-  ScrollArea,
-  SegmentedControl,
-  Stack,
-  Switch,
-  Textarea,
-} from '@mantine/core';
+import { Alert, Button, Drawer, Group, Paper, ScrollArea, Stack, Switch, Textarea } from '@mantine/core';
 import { useDebouncedCallback } from '@mantine/hooks';
 import { showNotification } from '@mantine/notifications';
 import type { Questionnaire, QuestionnaireItem, Reference } from '@medplum/fhirtypes';
@@ -21,7 +10,7 @@ import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
 import { CodingInput } from '../CodingInput/CodingInput';
 import classes from './QuestionnaireBuilderV2.module.css';
-import type { ExtendedQuestionnaireItem, QuestionnaireMode } from './QuestionnaireBuilderV2.utils';
+import type { ExtendedQuestionnaireItem } from './QuestionnaireBuilderV2.utils';
 import {
   addFormAnswer,
   DEFAULT_SIGNATURE_TYPE,
@@ -52,7 +41,6 @@ export function QuestionnaireBuilderV2(props: QuestionnaireBuilderV2Props): JSX.
   const defaultValue = useResource(props.questionnaire);
   const [selectedLinkId, setSelectedLinkId] = useState<string>();
   const [settingsOpened, setSettingsOpened] = useState(false);
-  const [previewMode, setPreviewMode] = useState<QuestionnaireMode>('capture');
   const form = useQuestionnaireForm({
     mode: 'uncontrolled',
     initialValues: { resourceType: 'Questionnaire', status: 'active' },
@@ -129,23 +117,10 @@ export function QuestionnaireBuilderV2(props: QuestionnaireBuilderV2Props): JSX.
         </div>
         <div className={classes.preview}>
           <ScrollArea h="100%">
-            <Group justify="center" mb="xs">
-              <SegmentedControl
-                size="xs"
-                aria-label="Preview mode"
-                value={previewMode}
-                onChange={(value) => setPreviewMode(value as QuestionnaireMode)}
-                data={[
-                  { value: 'capture', label: 'Fill in' },
-                  { value: 'display', label: 'View answers' },
-                ]}
-              />
-            </Group>
             <QuestionnairePreview
               items={items}
               selectedItem={selectedItem}
               addAnswer={addAnswer}
-              mode={previewMode}
               onSubmit={() => showNotification({ color: 'green', message: 'All preview answers are valid' })}
             />
           </ScrollArea>

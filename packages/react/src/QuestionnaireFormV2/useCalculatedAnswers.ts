@@ -5,7 +5,8 @@ import type { QuestionnaireResponse, QuestionnaireResponseItemAnswer } from '@me
 import type { RefObject } from 'react';
 import { useEffect, useRef } from 'react';
 import type { QuestionnaireForm } from './QuestionnaireFormContext';
-import { getCalculatedAnswers, getValueByPath } from './QuestionnaireFormV2.utils';
+import { getValueByPath } from './QuestionnaireFormV2.utils';
+import { getCalculatedAnswers } from './QuestionnaireResponse.utils';
 
 export interface CalculationState {
   /** The form values the answers were last calculated from. */

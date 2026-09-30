@@ -6,12 +6,7 @@ import { IconPlus, IconTrash } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { useContext } from 'react';
 import { useQuestionnaireFormContext, useQuestionnaireResponseFormContext } from './QuestionnaireFormContext';
-import {
-  evaluateEnableWhen,
-  getResponseItemIndexes,
-  isReadOnlyFormItem,
-  isUsedInMode,
-} from './QuestionnaireFormV2.utils';
+import { isReadOnlyFormItem, isUsedInMode } from './QuestionnaireFormV2.utils';
 import { QuestionnaireModeContext } from './QuestionnaireModeContext';
 import { addRepetition } from './QuestionnaireRenderer.utils';
 import type { QuestionnaireRendererGroupProps } from './QuestionnaireRendererGroup';
@@ -19,6 +14,7 @@ import { QuestionnaireRendererItem } from './QuestionnaireRendererItem/Questionn
 import { QuestionnaireRendererLabel } from './QuestionnaireRendererLabel';
 import { QuestionnaireRendererRequiredGroupError } from './QuestionnaireRendererRequiredGroupError';
 import { QuestionnaireRendererSelectedItem } from './QuestionnaireRendererSelectedItem';
+import { evaluateEnableWhen, getResponseItemIndexes } from './QuestionnaireResponse.utils';
 
 /**
  * A group rendered as a table: its questions are the columns and each repetition is a row.

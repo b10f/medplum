@@ -6,16 +6,11 @@ import type { JSX } from 'react';
 import { useContext } from 'react';
 import { useQuestionnaireFormContext, useQuestionnaireResponseFormContext } from './QuestionnaireFormContext';
 import type { ExtendedQuestionnaireItem } from './QuestionnaireFormV2.utils';
-import {
-  evaluateEnableWhen,
-  getAnswerValue,
-  getValueByPath,
-  isEmptyAnswerValue,
-  isShownInMode,
-} from './QuestionnaireFormV2.utils';
+import { getValueByPath, isEmptyAnswerValue } from './QuestionnaireFormV2.utils';
 import { QuestionnaireModeContext } from './QuestionnaireModeContext';
 import classes from './QuestionnaireRenderer.module.css';
 import { QuestionnaireRendererItemArray } from './QuestionnaireRendererItemArray';
+import { evaluateEnableWhen, getAnswerValue, isShownInMode } from './QuestionnaireResponse.utils';
 
 export interface QuestionnaireRendererFollowUpItemsProps {
   /** The question the items are follow-up items of. */

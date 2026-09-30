@@ -16,15 +16,13 @@ import {
   findAnswerOption,
   getAnswerOptionDisplay,
   getAnswerOptionLabel,
-  getAnswerValue,
   getChoiceValueKey,
   getValueByPath,
   isChoiceItemType,
   isQuestionItem,
-  toDraftAnswer,
   toFhirQuestionnaireItem,
-  validateAnswerValue,
 } from './QuestionnaireFormV2.utils';
+import { getAnswerValue, toDraftAnswer, validateAnswerValue } from './QuestionnaireResponse.utils';
 
 /**
  * Returns the answers at a response path of the draft response.

@@ -6,20 +6,14 @@ import type { JSX } from 'react';
 import { Fragment } from 'react';
 import { useQuestionnaireFormContext, useQuestionnaireResponseFormContext } from './QuestionnaireFormContext';
 import type { ExtendedQuestionnaireItem } from './QuestionnaireFormV2.utils';
-import {
-  getAnswerValue,
-  getChoiceValueKey,
-  getNewAnswer,
-  getResponseItemIndexes,
-  isChoiceItemType,
-  isReadOnlyFormItem,
-} from './QuestionnaireFormV2.utils';
+import { getChoiceValueKey, isChoiceItemType, isReadOnlyFormItem } from './QuestionnaireFormV2.utils';
 import { getAnswers, toChoiceText } from './QuestionnaireRenderer.utils';
 import { QuestionnaireRendererAttachedTexts } from './QuestionnaireRendererAttachedTexts';
 import { QuestionnaireRendererFollowUpItems } from './QuestionnaireRendererFollowUpItems';
 import { QuestionnaireRendererItem } from './QuestionnaireRendererItem/QuestionnaireRendererItem';
 import { QuestionnaireRendererRepeatingChoiceInput } from './QuestionnaireRendererItem/QuestionnaireRendererRepeatingChoiceInput';
 import { QuestionnaireRendererSelectedItem } from './QuestionnaireRendererSelectedItem';
+import { getAnswerValue, getNewAnswer, getResponseItemIndexes } from './QuestionnaireResponse.utils';
 
 export interface QuestionnaireRendererRepeatableItemProps {
   readonly item: ExtendedQuestionnaireItem;

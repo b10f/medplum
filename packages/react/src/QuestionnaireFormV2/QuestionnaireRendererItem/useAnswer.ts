@@ -4,8 +4,9 @@ import type { ReactNode } from 'react';
 import type { QuestionnaireForm } from '../QuestionnaireFormContext';
 import { useQuestionnaireResponseFormContext } from '../QuestionnaireFormContext';
 import type { ExtendedQuestionnaireItem } from '../QuestionnaireFormV2.utils';
-import { getAnswerValue, getValueByPath } from '../QuestionnaireFormV2.utils';
+import { getValueByPath } from '../QuestionnaireFormV2.utils';
 import { setAnswerValue } from '../QuestionnaireRenderer.utils';
+import { getAnswerValue } from '../QuestionnaireResponse.utils';
 
 /** Which answer an input shows and writes. */
 export interface AnswerProps {

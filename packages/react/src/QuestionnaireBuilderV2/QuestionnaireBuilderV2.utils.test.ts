@@ -6,10 +6,9 @@ import {
   fromFhirQuestionnaireItem,
   getRequiredSignatureType,
   getRespondedItems,
-  toDraftResponse,
   toFhirQuestionnaire,
-  toFhirQuestionnaireResponse,
 } from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
+import { toDraftResponse, toFhirQuestionnaireResponse } from '../QuestionnaireFormV2/QuestionnaireResponse.utils';
 import {
   createFollowUpEnableWhen,
   createManualAnswerOption,

@@ -5,7 +5,7 @@ import type { QuestionnaireResponse } from '@medplum/fhirtypes';
 import type { JSX } from 'react';
 import { useQuestionnaireFormContext, useQuestionnaireResponseFormContext } from './QuestionnaireFormContext';
 import type { ExtendedQuestionnaireItem } from './QuestionnaireFormV2.utils';
-import { getGroupErrorKey, getRequiredGroupError } from './QuestionnaireFormV2.utils';
+import { getGroupErrorKey, getRequiredGroupError } from './QuestionnaireResponse.utils';
 
 /**
  * Shows a required group's error once validation has found it, until the group is answered.

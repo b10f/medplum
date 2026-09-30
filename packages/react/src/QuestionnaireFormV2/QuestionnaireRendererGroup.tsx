@@ -5,7 +5,6 @@ import type { JSX } from 'react';
 import { Fragment } from 'react';
 import { useQuestionnaireResponseFormContext } from './QuestionnaireFormContext';
 import type { ExtendedQuestionnaireItem } from './QuestionnaireFormV2.utils';
-import { getResponseItemIndexes } from './QuestionnaireFormV2.utils';
 import classes from './QuestionnaireRenderer.module.css';
 import { addRepetition, isChoiceTable, isGroupTable } from './QuestionnaireRenderer.utils';
 import { QuestionnaireRendererChoiceTable } from './QuestionnaireRendererChoiceTable';
@@ -14,6 +13,7 @@ import { QuestionnaireRendererItemArray } from './QuestionnaireRendererItemArray
 import { QuestionnaireRendererLabel } from './QuestionnaireRendererLabel';
 import { QuestionnaireRendererRequiredGroupError } from './QuestionnaireRendererRequiredGroupError';
 import { QuestionnaireRendererSelectedItem } from './QuestionnaireRendererSelectedItem';
+import { getResponseItemIndexes } from './QuestionnaireResponse.utils';
 
 export interface QuestionnaireRendererGroupProps {
   readonly item: ExtendedQuestionnaireItem;

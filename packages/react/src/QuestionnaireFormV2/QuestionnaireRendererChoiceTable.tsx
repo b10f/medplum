@@ -7,18 +7,20 @@ import { useContext } from 'react';
 import { useQuestionnaireFormContext, useQuestionnaireResponseFormContext } from './QuestionnaireFormContext';
 import type { ExtendedQuestionnaireItem, ExtendedQuestionnaireItemAnswerOption } from './QuestionnaireFormV2.utils';
 import {
-  evaluateEnableWhen,
   findAnswerOption,
   getAnswerOptionDisplay,
-  getAnswerValue,
   getChoiceValueKey,
-  getResponseItemIndexes,
   isEmptyAnswerValue,
   isReadOnlyFormItem,
-  isShownInMode,
 } from './QuestionnaireFormV2.utils';
 import { QuestionnaireModeContext } from './QuestionnaireModeContext';
 import { getAnswers, setAnswerValue, setChoiceAnswers } from './QuestionnaireRenderer.utils';
+import {
+  evaluateEnableWhen,
+  getAnswerValue,
+  getResponseItemIndexes,
+  isShownInMode,
+} from './QuestionnaireResponse.utils';
 
 export interface QuestionnaireRendererChoiceTableProps {
   readonly group: ExtendedQuestionnaireItem;

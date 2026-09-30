@@ -5,12 +5,12 @@ import type { JSX } from 'react';
 import { useContext } from 'react';
 import { useQuestionnaireFormContext, useQuestionnaireResponseFormContext } from './QuestionnaireFormContext';
 import type { ExtendedQuestionnaireItem } from './QuestionnaireFormV2.utils';
-import { evaluateEnableWhen, isShownInMode } from './QuestionnaireFormV2.utils';
 import { QuestionnaireModeContext } from './QuestionnaireModeContext';
 import { QuestionnaireRendererDisplay } from './QuestionnaireRendererDisplay';
 import { QuestionnaireRendererGroup } from './QuestionnaireRendererGroup';
 import { QuestionnaireRendererRepeatableItem } from './QuestionnaireRendererRepeatableItem';
 import { QuestionnaireRendererSelectedItem } from './QuestionnaireRendererSelectedItem';
+import { evaluateEnableWhen, isShownInMode } from './QuestionnaireResponse.utils';
 
 export interface QuestionnaireRendererItemArrayProps {
   readonly items: ExtendedQuestionnaireItem[];

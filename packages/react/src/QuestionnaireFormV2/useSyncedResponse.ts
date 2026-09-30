@@ -5,7 +5,7 @@ import type { QuestionnaireResponseItem } from '@medplum/fhirtypes';
 import { useLayoutEffect, useRef } from 'react';
 import type { QuestionnaireForm } from './QuestionnaireFormContext';
 import type { ExtendedQuestionnaireItem } from './QuestionnaireFormV2.utils';
-import { getInitialAnswerKeys, removeResponseItems, syncResponseItems } from './QuestionnaireFormV2.utils';
+import { getInitialAnswerKeys, removeResponseItems, syncResponseItems } from './QuestionnaireResponse.utils';
 
 /**
  * Keeps the draft response in line with the items it answers (see syncResponseItems) as they are edited in the

@@ -15,16 +15,10 @@ import {
 } from './QuestionnaireFormContext';
 import type { ExtendedQuestionnaireItem, QuestionnaireMode } from './QuestionnaireFormV2.utils';
 import {
-  evaluateEnableWhen,
   findRootItem,
   getPageItems,
   getRequiredSignatureType,
-  getResponseSignature,
   isHeaderOrFooterItem,
-  isShownInMode,
-  toDraftResponse,
-  toFhirQuestionnaireResponse,
-  validateFormAnswers,
 } from './QuestionnaireFormV2.utils';
 import { QuestionnaireModeContext } from './QuestionnaireModeContext';
 import classes from './QuestionnaireRenderer.module.css';
@@ -33,6 +27,14 @@ import { QuestionnaireRendererItemArray } from './QuestionnaireRendererItemArray
 import { QuestionnaireRendererPage } from './QuestionnaireRendererPage';
 import { QuestionnaireRendererSignature } from './QuestionnaireRendererSignature';
 import { QuestionnaireRendererViewOnly } from './QuestionnaireRendererViewOnly';
+import {
+  evaluateEnableWhen,
+  getResponseSignature,
+  isShownInMode,
+  toDraftResponse,
+  toFhirQuestionnaireResponse,
+  validateFormAnswers,
+} from './QuestionnaireResponse.utils';
 import { useCalculatedAnswers } from './useCalculatedAnswers';
 import { useSyncedResponse } from './useSyncedResponse';
 

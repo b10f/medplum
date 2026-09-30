@@ -8,7 +8,6 @@ import type { ExtendedQuestionnaireItemAnswerOption } from '../QuestionnaireForm
 import {
   getAnswerOptionDisplay,
   getAnswerOptionLabel,
-  getAnswerValue,
   getChoiceValueKey,
   isEmptyAnswerValue,
 } from '../QuestionnaireFormV2.utils';
@@ -21,6 +20,7 @@ import {
   toChoiceText,
   toOptionData,
 } from '../QuestionnaireRenderer.utils';
+import { getAnswerValue } from '../QuestionnaireResponse.utils';
 import type { QuestionnaireRendererItemProps } from './QuestionnaireRendererItem';
 import { OTHER_OPTION, getAnswerLabel } from './QuestionnaireRendererItem.utils';
 import { QuestionnaireRendererValueSetChoiceInput } from './QuestionnaireRendererValueSetChoiceInput';

@@ -5,9 +5,9 @@ import { IconExternalLink } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { useQuestionnaireResponseFormContext } from './QuestionnaireFormContext';
 import type { ExtendedQuestionnaireItem } from './QuestionnaireFormV2.utils';
-import { getResponseItemIndexes } from './QuestionnaireFormV2.utils';
 import { QuestionnaireRendererItemArray } from './QuestionnaireRendererItemArray';
 import { QuestionnaireRendererRequiredGroupError } from './QuestionnaireRendererRequiredGroupError';
+import { getResponseItemIndexes } from './QuestionnaireResponse.utils';
 
 export interface QuestionnaireRendererPageProps {
   readonly page: ExtendedQuestionnaireItem;

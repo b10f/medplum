@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { QuestionnaireItem, QuestionnaireResponse } from '@medplum/fhirtypes';
 import {
-  evaluateEnableWhen,
   fromFhirAnswerOptions,
   fromFhirQuestionnaireItem,
   hasFollowUpItems,
-  toDraftResponse,
   toFhirQuestionnaireItem,
 } from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
+import { evaluateEnableWhen, toDraftResponse } from '../QuestionnaireFormV2/QuestionnaireResponse.utils';
 import type { LFormsItem, LoincFormDefinition } from './QuestionnaireLoinc.utils';
 import {
   groupLoincAnswerLists,

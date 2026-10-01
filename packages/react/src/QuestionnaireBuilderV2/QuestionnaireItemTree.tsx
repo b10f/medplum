@@ -19,7 +19,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { UseTreeReturnType } from '@mantine/core';
-import { Group, Portal, Tooltip, useTree } from '@mantine/core';
+import { Group, Portal, Tooltip } from '@mantine/core';
 import {
   IconChevronDown,
   IconChevronRight,
@@ -58,6 +58,8 @@ interface DragState {
 export interface QuestionnaireItemTreeProps {
   readonly selectedItem: ExtendedQuestionnaireItem | undefined;
   readonly items: ExtendedQuestionnaireItem[];
+  /** Which items are expanded; kept by the builder, whose header expands or collapses them all. */
+  readonly tree: UseTreeReturnType;
   readonly onSelectItem?: (item: ExtendedQuestionnaireItem | undefined) => void;
 }
 
@@ -68,9 +70,8 @@ export interface QuestionnaireItemTreeProps {
  * @returns The QuestionnaireItemTree React node.
  */
 export function QuestionnaireItemTree(props: QuestionnaireItemTreeProps): JSX.Element | null {
-  const { selectedItem, items, onSelectItem } = props;
+  const { selectedItem, items, tree, onSelectItem } = props;
   const form = useQuestionnaireFormContext();
-  const tree = useTree();
   const [drag, setDrag] = useState<DragState>();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),

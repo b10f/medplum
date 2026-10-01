@@ -761,4 +761,43 @@ describe('QuestionnaireBuilderV2', () => {
     await selectItem('Drug');
     expect(highlighted()).toStrictEqual(['TH:Drug', 'TD:']);
   });
+
+  test('all items are expanded and collapsed at once', async () => {
+    await setup({
+      questionnaire: toQuestionnaire([
+        {
+          linkId: 'page',
+          type: 'group',
+          text: 'Page one',
+          extension: itemControl('page'),
+          item: [
+            {
+              linkId: 'group',
+              type: 'group',
+              text: 'Inner group',
+              item: [{ linkId: 'deep', type: 'string', text: 'Deep question' }],
+            },
+          ],
+        },
+        { linkId: 'plain', type: 'string', text: 'Plain question' },
+      ]),
+      onSubmit: vi.fn(),
+    });
+    expect(within(tree()).queryByText('Deep question')).not.toBeInTheDocument();
+
+    await click(screen.getByRole('button', { name: 'Expand all' }));
+    expect(within(tree()).getByText('Deep question')).toBeInTheDocument();
+
+    await click(screen.getByRole('button', { name: 'Collapse all' }));
+    expect(within(tree()).queryByText('Inner group')).not.toBeInTheDocument();
+    expect(within(tree()).getByText('Plain question')).toBeInTheDocument();
+  });
+
+  test('expand all is unavailable without groups to expand', async () => {
+    await setup({
+      questionnaire: toQuestionnaire([{ linkId: 'q', type: 'string', text: 'Question' }]),
+      onSubmit: vi.fn(),
+    });
+    expect(screen.getByRole('button', { name: 'Expand all' })).toBeDisabled();
+  });
 });

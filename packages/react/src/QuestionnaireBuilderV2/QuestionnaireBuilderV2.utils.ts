@@ -162,6 +162,15 @@ export function flattenFormItems(
 }
 
 /**
+ * Returns the items that can be expanded in the tree, at any depth: groups and questions that have items of their own.
+ * @param items - The builder form items.
+ * @returns Their linkIds.
+ */
+export function getExpandableLinkIds(items: ExtendedQuestionnaireItem[]): string[] {
+  return items.flatMap((item) => (item.item?.length ? [item.linkId, ...getExpandableLinkIds(item.item)] : []));
+}
+
+/**
  * Projects where a dragged tree row lands. The row it is dragged over sets the position; the horizontal drag offset
  * sets the depth, within what the neighbouring rows allow: only groups and questions that already have follow-up items
  * take children, and pages, headers and footers stay top level.

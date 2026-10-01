@@ -15,6 +15,7 @@ import {
   DEFAULT_SIGNATURE_TYPE,
   flattenFormItems,
   getAnswerOptionProblems,
+  getExpandableLinkIds,
   getFormItemDropTarget,
   getItemControlOptions,
   getLocalAnswerOptionSystem,
@@ -376,6 +377,15 @@ describe('QuestionnaireBuilderV2.utils', () => {
     const allExpanded = { p1: true, g1: true, p2: true };
     const toLinkIds = (items: any[]): any[] =>
       items.map((item) => (item.item?.length ? [item.linkId, toLinkIds(item.item)] : item.linkId));
+
+    test('getExpandableLinkIds lists the items with items of their own, at any depth', () => {
+      const values = createValues();
+      expect(getExpandableLinkIds(values.item)).toStrictEqual(Object.keys(allExpanded));
+      // A question with follow-up items expands too; an empty group does not.
+      values.item[0].item = [{ ...values.item[0], linkId: 'follow-up', item: [] }];
+      values.item.push({ ...values.item[2], linkId: 'empty', item: [] });
+      expect(getExpandableLinkIds(values.item)).toStrictEqual(['orphan', ...Object.keys(allExpanded)]);
+    });
 
     test('flattenFormItems lists expanded groups only, without the collapsed item', () => {
       const values = createValues();

@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
-import { Alert, Button, Group, Paper, ScrollArea } from '@mantine/core';
+import { Alert, Button, Group, Paper, ScrollArea, useTree } from '@mantine/core';
 import { showNotification } from '@mantine/notifications';
 import type { Questionnaire, QuestionnaireItem, Reference } from '@medplum/fhirtypes';
 import { useResource } from '@medplum/react-hooks';
-import { IconSettings } from '@tabler/icons-react';
+import { IconChevronsDown, IconChevronsUp, IconSettings } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
 import { QuestionnaireFormProvider, useQuestionnaireEditorForm } from '../QuestionnaireFormV2/QuestionnaireFormContext';
@@ -17,6 +17,7 @@ import {
 import { QuestionnaireRenderer } from '../QuestionnaireFormV2/QuestionnaireRenderer';
 import { QuestionnaireAddItemMenu } from './QuestionnaireAddItemMenu';
 import classes from './QuestionnaireBuilderV2.module.css';
+import { getExpandableLinkIds } from './QuestionnaireBuilderV2.utils';
 import { QuestionnaireItemSettings } from './QuestionnaireItemSettings/QuestionnaireItemSettings';
 import { useItemSettingsCodes } from './QuestionnaireItemSettings/useItemSettingsCodes';
 import { QuestionnaireItemTree } from './QuestionnaireItemTree';
@@ -38,6 +39,7 @@ export function QuestionnaireBuilderV2(props: QuestionnaireBuilderV2Props): JSX.
   const { initialize } = form;
   // Loaded once for the builder, not each time the settings of another item are shown.
   const itemSettingsCodes = useItemSettingsCodes();
+  const tree = useTree();
 
   useEffect(() => {
     if (defaultValue) {
@@ -58,6 +60,10 @@ export function QuestionnaireBuilderV2(props: QuestionnaireBuilderV2Props): JSX.
   // Resolved from the current values on every render: paths change whenever items are added, moved or deleted.
   const selectedItem = findFormItemByLinkId(items, selectedLinkId);
   const setSelectedItem = (item: ExtendedQuestionnaireItem | undefined): void => setSelectedLinkId(item?.linkId);
+  const expandableLinkIds = getExpandableLinkIds(items);
+  const allExpanded = expandableLinkIds.length > 0 && expandableLinkIds.every((linkId) => tree.expandedState[linkId]);
+  const toggleAllExpanded = (): void =>
+    tree.setExpandedState(allExpanded ? {} : Object.fromEntries(expandableLinkIds.map((linkId) => [linkId, true])));
 
   return (
     <QuestionnaireFormProvider form={form}>
@@ -82,6 +88,15 @@ export function QuestionnaireBuilderV2(props: QuestionnaireBuilderV2Props): JSX.
               >
                 <IconSettings size={16} />
               </Button>
+              <Button
+                variant="outline"
+                size="compact-sm"
+                aria-label={allExpanded ? 'Collapse all' : 'Expand all'}
+                disabled={expandableLinkIds.length === 0}
+                onClick={toggleAllExpanded}
+              >
+                {allExpanded ? <IconChevronsUp size={16} /> : <IconChevronsDown size={16} />}
+              </Button>
             </Group>
             <Button size="compact-sm" onClick={() => props.onSubmit(toFhirQuestionnaire(form.getValues()))}>
               Save
@@ -91,7 +106,12 @@ export function QuestionnaireBuilderV2(props: QuestionnaireBuilderV2Props): JSX.
             {items.length === 0 ? (
               <Alert color="blue">No items added yet.</Alert>
             ) : (
-              <QuestionnaireItemTree selectedItem={selectedItem} items={items} onSelectItem={setSelectedItem} />
+              <QuestionnaireItemTree
+                selectedItem={selectedItem}
+                items={items}
+                tree={tree}
+                onSelectItem={setSelectedItem}
+              />
             )}
           </ScrollArea>
         </Paper>

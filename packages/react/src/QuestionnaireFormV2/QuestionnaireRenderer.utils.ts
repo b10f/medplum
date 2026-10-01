@@ -1,21 +1,10 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
-import type {
-  QuestionnaireResponseItem,
-  QuestionnaireResponseItemAnswer,
-  ValueSetExpansionContains,
-} from '@medplum/fhirtypes';
+import type { QuestionnaireResponseItem, QuestionnaireResponseItemAnswer } from '@medplum/fhirtypes';
 import { applyOptionExclusive } from '@medplum/react-hooks';
 import type { QuestionnaireForm } from './QuestionnaireFormContext';
-import type {
-  ExtendedQuestionnaireItem,
-  ExtendedQuestionnaireItemAnswerOption,
-  QuestionDisplayText,
-} from './QuestionnaireFormV2.utils';
+import type { ExtendedQuestionnaireItem, QuestionDisplayText } from './QuestionnaireFormV2.utils';
 import {
-  findAnswerOption,
-  getAnswerOptionDisplay,
-  getAnswerOptionLabel,
   getChoiceValueKey,
   getValueByPath,
   isChoiceItemType,
@@ -106,11 +95,6 @@ export function getAttachedText(item: ExtendedQuestionnaireItem, code: QuestionD
   return item.displayTexts?.[code] || undefined;
 }
 
-export function getDecimalPlaces(item: ExtendedQuestionnaireItem): number | undefined {
-  const places = item.maxDecimalPlaces;
-  return places === null || places === undefined || (places as any) === '' ? undefined : Number(places);
-}
-
 /**
  * A choice table (`table`, `atable` or `htable` item control) has only choice questions with answer options: their
  * answers are picked in a grid of questions and options.
@@ -133,58 +117,4 @@ export function isChoiceTable(group: ExtendedQuestionnaireItem): boolean {
  */
 export function isGroupTable(group: ExtendedQuestionnaireItem): boolean {
   return group.itemControl?.code === 'gtable' && (group.item ?? []).length > 0 && group.item.every(isQuestionItem);
-}
-
-export function toValueSetContains(value: any): ValueSetExpansionContains {
-  if (value && typeof value === 'object') {
-    return { system: value.system, code: value.code, display: value.display };
-  }
-  return { code: String(value), display: String(value) };
-}
-
-/**
- * Returns true if an answer was typed by the respondent (an open-choice answer that is none of the options).
- * @param answerOption - The item's answer options.
- * @param value - The answer value.
- * @returns True for a typed answer.
- */
-export function isTypedAnswer(answerOption: ExtendedQuestionnaireItemAnswerOption[], value: any): boolean {
-  return typeof value === 'string' && value !== '' && !findAnswerOption(answerOption, value);
-}
-
-export function findOptionValue(answerOption: ExtendedQuestionnaireItemAnswerOption[], key: string | null): any {
-  return answerOption.find((option) => getChoiceValueKey(option.value) === key)?.value ?? '';
-}
-
-/**
- * The text of a choice answer in a free-text field: the selected option's label, or the typed answer.
- * @param answerOption - The item's answer options.
- * @param value - The answer value.
- * @returns The text.
- */
-export function toChoiceText(answerOption: ExtendedQuestionnaireItemAnswerOption[], value: any): string {
-  const option = findAnswerOption(answerOption, value);
-  if (option) {
-    return getAnswerOptionLabel(option);
-  }
-  return typeof value === 'string' ? value : String(value?.display ?? value?.code ?? '');
-}
-
-/**
- * The answer for text entered in a free-text field: the option with that label, or the text itself.
- * @param answerOption - The item's answer options.
- * @param text - The text.
- * @returns The answer value.
- */
-export function fromChoiceText(answerOption: ExtendedQuestionnaireItemAnswerOption[], text: string): any {
-  return answerOption.find((option) => getAnswerOptionLabel(option) === text)?.value ?? text;
-}
-
-export function toOptionData(
-  answerOption: ExtendedQuestionnaireItemAnswerOption[]
-): { value: string; label: string }[] {
-  return answerOption.map((option) => ({
-    value: getChoiceValueKey(option.value),
-    label: getAnswerOptionDisplay(option),
-  }));
 }

@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import { NumberInput, Slider, Stack, Text, TextInput } from '@mantine/core';
 import type { JSX } from 'react';
-import { getAttachedText, getDecimalPlaces } from '../QuestionnaireRenderer.utils';
+import { getAttachedText } from '../QuestionnaireRenderer.utils';
 import type { QuestionnaireRendererItemProps } from './QuestionnaireRendererItem';
-import { getAnswerLabel, getUnitSection } from './QuestionnaireRendererItem.utils';
+import { getAnswerLabel, getDecimalPlaces, getUnitSection } from './QuestionnaireRendererItem.utils';
 import { useAnswer } from './useAnswer';
 import { useNumberText } from './useNumberText';
 

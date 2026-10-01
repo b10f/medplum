@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { JSX } from 'react';
 import { ValueSetAutocomplete } from '../../ValueSetAutocomplete/ValueSetAutocomplete';
-import { setChoiceAnswers, toValueSetContains } from '../QuestionnaireRenderer.utils';
+import { setChoiceAnswers } from '../QuestionnaireRenderer.utils';
 import type { QuestionnaireRendererItemProps } from './QuestionnaireRendererItem';
-import { getAnswerLabel } from './QuestionnaireRendererItem.utils';
+import { getAnswerLabel, toValueSetContains } from './QuestionnaireRendererItem.utils';
 import { useAnswer } from './useAnswer';
 
 export interface QuestionnaireRendererValueSetChoiceInputProps extends QuestionnaireRendererItemProps {

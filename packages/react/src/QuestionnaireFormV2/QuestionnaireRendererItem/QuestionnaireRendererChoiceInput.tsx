@@ -11,15 +11,16 @@ import {
   isEmptyAnswerValue,
   isHorizontalChoiceLayout,
 } from '../QuestionnaireFormV2.utils';
+import type { QuestionnaireRendererItemProps } from './QuestionnaireRendererItem';
 import {
+  OTHER_OPTION,
   findOptionValue,
   fromChoiceText,
+  getAnswerLabel,
   isTypedAnswer,
   toChoiceText,
   toOptionData,
-} from '../QuestionnaireRenderer.utils';
-import type { QuestionnaireRendererItemProps } from './QuestionnaireRendererItem';
-import { OTHER_OPTION, getAnswerLabel } from './QuestionnaireRendererItem.utils';
+} from './QuestionnaireRendererItem.utils';
 import { QuestionnaireRendererValueSetChoiceInput } from './QuestionnaireRendererValueSetChoiceInput';
 import { useAnswer } from './useAnswer';
 

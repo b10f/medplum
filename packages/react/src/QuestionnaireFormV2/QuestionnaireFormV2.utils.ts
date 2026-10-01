@@ -1444,7 +1444,7 @@ export function getReferenceSearchCriteria(
  * @param value - The FHIR dateTime.
  * @returns The local date and time (`YYYY-MM-DDTHH:mm`, with seconds when not zero), or the value when it has no time.
  */
-export function toLocalDateTime(value: string | undefined): string | undefined {
+function toLocalDateTime(value: string | undefined): string | undefined {
   if (!value?.includes('T')) {
     return value;
   }

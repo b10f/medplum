@@ -11,18 +11,18 @@ import {
   getChoiceValueKey,
   isEmptyAnswerValue,
 } from '../QuestionnaireFormV2.utils';
-import {
-  findOptionValue,
-  fromChoiceText,
-  getAnswers,
-  isTypedAnswer,
-  setChoiceAnswers,
-  toChoiceText,
-  toOptionData,
-} from '../QuestionnaireRenderer.utils';
+import { getAnswers, setChoiceAnswers } from '../QuestionnaireRenderer.utils';
 import { getAnswerValue } from '../QuestionnaireResponse.utils';
 import type { QuestionnaireRendererItemProps } from './QuestionnaireRendererItem';
-import { OTHER_OPTION, getAnswerLabel } from './QuestionnaireRendererItem.utils';
+import {
+  OTHER_OPTION,
+  findOptionValue,
+  fromChoiceText,
+  getAnswerLabel,
+  isTypedAnswer,
+  toChoiceText,
+  toOptionData,
+} from './QuestionnaireRendererItem.utils';
 import { QuestionnaireRendererValueSetChoiceInput } from './QuestionnaireRendererValueSetChoiceInput';
 
 /**

@@ -1,15 +1,16 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
-import { Alert, Button, Center, Drawer, Group, Loader, Modal, Table, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Center, Group, Loader, Modal, Table, Text, TextInput } from '@mantine/core';
 import { normalizeErrorString } from '@medplum/core';
 import type { Questionnaire, QuestionnaireItem } from '@medplum/fhirtypes';
 import { IconEye, IconPlus, IconSearch } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { useState } from 'react';
 import { QuestionnaireFormV2 } from '../QuestionnaireFormV2/QuestionnaireFormV2';
-import type { LoincFormDefinition, LoincQuestion } from './QuestionnaireLoinc.utils';
+import type { LoincFormDefinition, LoincQuestion, LoincSearchType } from './QuestionnaireLoinc.utils';
 import {
   fetchLoincFormDefinition,
+  LOINC_SEARCH_LABELS,
   searchLoincPanels,
   searchLoincQuestions,
   toFhirItemFromLoincPanel,
@@ -19,13 +20,7 @@ import {
 import classes from './QuestionnaireLoincSearch.module.css';
 import { useLoincSearch } from './useLoincSearch';
 
-export type LoincSearchType = 'question' | 'panel' | 'questionnaire';
-
-const SEARCH_LABELS: Record<LoincSearchType, string> = {
-  question: 'questions',
-  panel: 'panels',
-  questionnaire: 'questionnaires',
-};
+export type { LoincSearchType } from './QuestionnaireLoinc.utils';
 
 interface LoincFormPreview {
   readonly definition: LoincFormDefinition;
@@ -108,7 +103,7 @@ export function QuestionnaireLoincSearch(props: QuestionnaireLoincSearchProps): 
       return (
         <Center py="md">
           <Text size="sm" c="dimmed">
-            Type a keyword in the search bar above to find {SEARCH_LABELS[type]}.
+            Type a keyword in the search bar above to find {LOINC_SEARCH_LABELS[type]}.
           </Text>
         </Center>
       );
@@ -217,27 +212,6 @@ export function QuestionnaireLoincSearch(props: QuestionnaireLoincSearchProps): 
         )}
       </Modal>
     </>
-  );
-}
-
-export interface QuestionnaireLoincSearchDrawerProps {
-  readonly type: 'question' | 'panel';
-  readonly opened: boolean;
-  readonly onClose: () => void;
-  readonly onAdd: (item: QuestionnaireItem) => void;
-}
-
-/**
- * The LOINC question or panel search, in a drawer beside the builder.
- * @param props - The QuestionnaireLoincSearchDrawer React props.
- * @returns The QuestionnaireLoincSearchDrawer React node.
- */
-export function QuestionnaireLoincSearchDrawer(props: QuestionnaireLoincSearchDrawerProps): JSX.Element {
-  const { type, opened, onClose, onAdd } = props;
-  return (
-    <Drawer opened={opened} onClose={onClose} position="right" size={800} title={`Search LOINC ${SEARCH_LABELS[type]}`}>
-      <QuestionnaireLoincSearch type={type} onAddItem={onAdd} />
-    </Drawer>
   );
 }
 

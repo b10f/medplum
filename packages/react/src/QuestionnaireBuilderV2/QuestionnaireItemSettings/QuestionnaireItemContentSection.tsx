@@ -3,11 +3,11 @@
 import type { JSX } from 'react';
 import { useQuestionnaireFormContext } from '../../QuestionnaireFormV2/QuestionnaireFormContext';
 import { getValueByPath } from '../../QuestionnaireFormV2/QuestionnaireFormV2.utils';
+import { ItemTypeIcon } from '../ItemTypeIcon';
 import { hasFixedItemControl } from '../QuestionnaireBuilderV2.utils';
 import { FormSelect } from '../QuestionnaireFormInputs/FormSelect';
 import { FormTextarea } from '../QuestionnaireFormInputs/FormTextarea';
 import { FormTextInput } from '../QuestionnaireFormInputs/FormTextInput';
-import { ItemTypeIcon } from '../QuestionnaireItemTree';
 import { QuestionnaireAnswerOptions } from './QuestionnaireAnswerOptions';
 import { QuestionnaireAttachmentLimits } from './QuestionnaireAttachmentLimits';
 import { QuestionnaireInitialValues } from './QuestionnaireInitialValues';

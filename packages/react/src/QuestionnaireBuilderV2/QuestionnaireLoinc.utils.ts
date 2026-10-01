@@ -22,6 +22,16 @@ const QUESTIONNAIRE_UNIT_OPTION_URL = `${STRUCTURE_DEFINITION_URL}/questionnaire
 const QUESTIONNAIRE_ITEM_CONTROL_URL = `${STRUCTURE_DEFINITION_URL}/questionnaire-itemControl`;
 const QUESTIONNAIRE_ITEM_CONTROL_SYSTEM = `${HTTP_HL7_ORG}/fhir/questionnaire-item-control`;
 
+/** What a LOINC search finds: questions, panels (added as groups) or forms (created as questionnaires). */
+export type LoincSearchType = 'question' | 'panel' | 'questionnaire';
+
+/** What each LOINC search finds, as its prompt and title name it. */
+export const LOINC_SEARCH_LABELS: Record<LoincSearchType, string> = {
+  question: 'questions',
+  panel: 'panels',
+  questionnaire: 'questionnaires',
+};
+
 export interface LoincAnswer {
   readonly AnswerStringID: string;
   readonly DisplayText: string;

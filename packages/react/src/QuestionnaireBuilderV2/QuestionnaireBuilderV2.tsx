@@ -15,8 +15,8 @@ import {
   toFhirQuestionnaire,
 } from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import { QuestionnaireRenderer } from '../QuestionnaireFormV2/QuestionnaireRenderer';
+import { QuestionnaireAddItemMenu } from './QuestionnaireAddItemMenu';
 import classes from './QuestionnaireBuilderV2.module.css';
-import { QuestionnaireGroupMenu } from './QuestionnaireGroupMenu';
 import { QuestionnaireItemSettings } from './QuestionnaireItemSettings/QuestionnaireItemSettings';
 import { useItemSettingsCodes } from './QuestionnaireItemSettings/useItemSettingsCodes';
 import { QuestionnaireItemTree } from './QuestionnaireItemTree';
@@ -73,7 +73,7 @@ export function QuestionnaireBuilderV2(props: QuestionnaireBuilderV2Props): JSX.
         <Paper withBorder className={classes.column}>
           <Group justify="space-between" p="md" className={classes.toolbar}>
             <Group gap="xs">
-              <QuestionnaireGroupMenu onAddItem={(item) => setSelectedItem(item)} />
+              <QuestionnaireAddItemMenu onAddItem={(item) => setSelectedItem(item)} />
               <Button
                 variant="outline"
                 size="compact-sm"

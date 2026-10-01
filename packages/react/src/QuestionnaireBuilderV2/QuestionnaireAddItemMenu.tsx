@@ -30,16 +30,22 @@ import {
 } from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
 import { killEvent } from '../utils/dom';
 import { createFollowUpEnableWhen } from './QuestionnaireBuilderV2.utils';
-import { QuestionnaireLoincSearchDrawer } from './QuestionnaireLoincSearch';
+import { QuestionnaireLoincSearchDrawer } from './QuestionnaireLoincSearchDrawer';
 
-export interface QuestionnaireGroupMenuProps {
+export interface QuestionnaireAddItemMenuProps {
   /** The group, or the question to add follow-up items to; the questionnaire itself when undefined. */
   readonly item?: ExtendedQuestionnaireItem;
   readonly onAddItem?: (item: ExtendedQuestionnaireItem) => void;
   readonly variant?: 'icon' | 'action';
 }
 
-export function QuestionnaireGroupMenu(props: QuestionnaireGroupMenuProps): JSX.Element {
+/**
+ * The menu that adds an item: to the questionnaire, to a group, or as a follow-up item of a question. Items can also be
+ * added from LOINC.
+ * @param props - The QuestionnaireAddItemMenu React props.
+ * @returns The QuestionnaireAddItemMenu React node.
+ */
+export function QuestionnaireAddItemMenu(props: QuestionnaireAddItemMenuProps): JSX.Element {
   const { item, onAddItem, variant = 'icon' } = props;
   const form = useQuestionnaireFormContext();
   const [loincSearchType, setLoincSearchType] = useState<'question' | 'panel'>('question');
@@ -49,10 +55,10 @@ export function QuestionnaireGroupMenu(props: QuestionnaireGroupMenuProps): JSX.
   const addItem = useCallback(
     (
       type: 'group' | 'display' | 'question' | 'page' | 'header' | 'footer',
-      context?: ExtendedQuestionnaireItem,
+      parent?: ExtendedQuestionnaireItem,
       fhirItem?: QuestionnaireItem
     ) => {
-      const path: string = context ? `${context.path}.item` : 'item';
+      const path: string = parent ? `${parent.path}.item` : 'item';
       // Pages, headers and footers are top-level groups whose item control makes them what they are.
       const fixedControls = { page: PAGE_ITEM_CONTROL, header: HEADER_ITEM_CONTROL, footer: FOOTER_ITEM_CONTROL };
       let newItem: Record<string, any>;
@@ -64,19 +70,19 @@ export function QuestionnaireGroupMenu(props: QuestionnaireGroupMenuProps): JSX.
       }
 
       // A ready-made FHIR item (e.g. from LOINC) is already in FHIR form; converting it again would drop its extensions.
-      const extendedQuestionnaireItem = fhirItem ?? toFhirQuestionnaireItem(newItem);
+      const fhirQuestionnaireItem = fhirItem ?? toFhirQuestionnaireItem(newItem);
       const currentItems = getValueByPath(form.getValues(), path) || [];
 
-      const added = fromFhirQuestionnaireItem(extendedQuestionnaireItem, null, currentItems.length);
-      if (context && isQuestionItem(context)) {
-        added.enableWhen = [createFollowUpEnableWhen(context)];
+      const added = fromFhirQuestionnaireItem(fhirQuestionnaireItem, null, currentItems.length);
+      if (parent && isQuestionItem(parent)) {
+        added.enableWhen = [createFollowUpEnableWhen(parent)];
       }
 
       // A header goes first, as it is shown; everything else is added last.
       const atStart = type === 'header';
       form.setFieldValue(path, atStart ? [added, ...currentItems] : [...currentItems, added]);
 
-      if (context || atStart) {
+      if (parent || atStart) {
         // to rebuild the paths and parent item reference chain, and give each answer of a question its follow-up items
         form.setFieldValue('item', rebuildFormItems(form.getValues()));
       }

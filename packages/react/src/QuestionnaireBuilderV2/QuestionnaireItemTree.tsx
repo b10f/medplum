@@ -25,13 +25,7 @@ import {
   IconChevronRight,
   IconCornerDownRight,
   IconEyeOff,
-  IconFiles,
-  IconFileText,
-  IconFolders,
   IconGripVertical,
-  IconHelp,
-  IconLayoutBottombar,
-  IconLayoutNavbar,
 } from '@tabler/icons-react';
 import cx from 'clsx';
 import type { CSSProperties, JSX, MouseEvent } from 'react';
@@ -46,9 +40,10 @@ import {
   isPageItem,
   isQuestionItem,
 } from '../QuestionnaireFormV2/QuestionnaireFormV2.utils';
+import { ItemTypeIcon } from './ItemTypeIcon';
+import { QuestionnaireAddItemMenu } from './QuestionnaireAddItemMenu';
 import type { FlattenedFormItem } from './QuestionnaireBuilderV2.utils';
 import { flattenFormItems, getFormItemDropTarget, moveFormItem } from './QuestionnaireBuilderV2.utils';
-import { QuestionnaireGroupMenu } from './QuestionnaireGroupMenu';
 import { QuestionnaireItemMenu } from './QuestionnaireItemMenu';
 import classes from './QuestionnaireItemTree.module.css';
 
@@ -218,7 +213,7 @@ function SortableTreeNode(props: SortableTreeNodeProps): JSX.Element {
         actions={
           <Group gap={4} onClick={(e) => e.stopPropagation()}>
             {(isGroup || isQuestionItem(item)) && (
-              <QuestionnaireGroupMenu
+              <QuestionnaireAddItemMenu
                 item={item}
                 variant="action"
                 onAddItem={(newItem) => {
@@ -281,31 +276,4 @@ function TreeNodeContent(props: TreeNodeContentProps): JSX.Element {
       {actions}
     </Group>
   );
-}
-
-/**
- * The item's icon, the same as in the add item menu.
- * @param props - The item.
- * @param props.item - The builder form item.
- * @param props.size - The icon size; 16 by default.
- * @returns The icon.
- */
-export function ItemTypeIcon(props: { readonly item: ExtendedQuestionnaireItem; readonly size?: number }): JSX.Element {
-  const { item, size = 16 } = props;
-  if (isPageItem(item)) {
-    return <IconFiles size={size} />;
-  }
-  if (item.itemControl?.code === 'header' && item.type === 'group') {
-    return <IconLayoutNavbar size={size} />;
-  }
-  if (item.itemControl?.code === 'footer' && item.type === 'group') {
-    return <IconLayoutBottombar size={size} />;
-  }
-  if (item.type === 'group') {
-    return <IconFolders size={size} />;
-  }
-  if (item.type === 'display') {
-    return <IconFileText size={size} />;
-  }
-  return <IconHelp size={size} />;
 }

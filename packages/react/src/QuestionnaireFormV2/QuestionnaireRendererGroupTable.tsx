@@ -6,8 +6,10 @@ import { IconPlus, IconTrash } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { useContext } from 'react';
 import { useQuestionnaireFormContext, useQuestionnaireResponseFormContext } from './QuestionnaireFormContext';
+import type { ExtendedQuestionnaireItem } from './QuestionnaireFormV2.utils';
 import { isReadOnlyFormItem, isUsedInMode } from './QuestionnaireFormV2.utils';
 import { QuestionnaireModeContext } from './QuestionnaireModeContext';
+import classes from './QuestionnaireRenderer.module.css';
 import { addRepetition } from './QuestionnaireRenderer.utils';
 import type { QuestionnaireRendererGroupProps } from './QuestionnaireRendererGroup';
 import { QuestionnaireRendererItem } from './QuestionnaireRendererItem/QuestionnaireRendererItem';
@@ -33,6 +35,9 @@ export function QuestionnaireRendererGroupTable(props: QuestionnaireRendererGrou
   const rows = getResponseItemIndexes(response, context, item.linkId);
   const canRemove = item.repeats && !readOnly && rows.length > (+item.minOccurs || 1);
   const canAdd = item.repeats && !readOnly && (!item.maxOccurs || rows.length < +item.maxOccurs);
+  // The column of the question selected in the builder is highlighted.
+  const selectedClass = (column: ExtendedQuestionnaireItem): string | undefined =>
+    column.linkId === selectedItem?.linkId ? classes.selectedCell : undefined;
 
   return (
     <QuestionnaireRendererSelectedItem item={item} selectedItem={selectedItem} index={index}>
@@ -41,7 +46,7 @@ export function QuestionnaireRendererGroupTable(props: QuestionnaireRendererGrou
         <Table.Thead>
           <Table.Tr>
             {columns.map((column) => (
-              <Table.Th key={column.linkId}>
+              <Table.Th key={column.linkId} data-renderer-link-id={column.linkId} className={selectedClass(column)}>
                 {[column.prefix, column.text].filter(Boolean).join(' ')}
                 {column.required && (
                   <Text component="span" c="red">
@@ -62,7 +67,7 @@ export function QuestionnaireRendererGroupTable(props: QuestionnaireRendererGrou
                 {columns.map((column) => {
                   const cellIndexes = getResponseItemIndexes(response, rowContext, column.linkId);
                   return (
-                    <Table.Td key={column.linkId}>
+                    <Table.Td key={column.linkId} className={selectedClass(column)}>
                       {cellIndexes.length > 0 && evaluateEnableWhen(values, response, column, rowContext) && (
                         <QuestionnaireRendererItem
                           item={column}

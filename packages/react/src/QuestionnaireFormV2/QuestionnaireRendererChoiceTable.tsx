@@ -14,6 +14,7 @@ import {
   isReadOnlyFormItem,
 } from './QuestionnaireFormV2.utils';
 import { QuestionnaireModeContext } from './QuestionnaireModeContext';
+import classes from './QuestionnaireRenderer.module.css';
 import { getAnswers, setAnswerValue, setChoiceAnswers } from './QuestionnaireRenderer.utils';
 import {
   evaluateEnableWhen,
@@ -28,6 +29,8 @@ export interface QuestionnaireRendererChoiceTableProps {
   readonly context: string;
   /** False: questions are rows and options columns (`table`, `atable`); true: the other way round (`htable`). */
   readonly transposed: boolean;
+  /** The item selected in the builder: its question's row (or column) is highlighted. */
+  readonly selectedItem?: ExtendedQuestionnaireItem;
   readonly ignoreValidation?: boolean;
 }
 
@@ -38,7 +41,7 @@ export interface QuestionnaireRendererChoiceTableProps {
  * @returns The QuestionnaireRendererChoiceTable React node.
  */
 export function QuestionnaireRendererChoiceTable(props: QuestionnaireRendererChoiceTableProps): JSX.Element {
-  const { group, context, transposed, ignoreValidation } = props;
+  const { group, context, transposed, selectedItem, ignoreValidation } = props;
   const form = useQuestionnaireFormContext();
   const responseForm = useQuestionnaireResponseFormContext();
   const mode = useContext(QuestionnaireModeContext);
@@ -109,6 +112,10 @@ export function QuestionnaireRendererChoiceTable(props: QuestionnaireRendererCho
     );
   };
 
+  // The question selected in the builder is highlighted.
+  const selectedClass = (question: ExtendedQuestionnaireItem): string | undefined =>
+    question.linkId === selectedItem?.linkId ? classes.selectedCell : undefined;
+
   const questionHeader = (question: ExtendedQuestionnaireItem, answersPath: string): JSX.Element => {
     const errorPath = question.repeats ? answersPath : `${answersPath}.0`;
     return (
@@ -132,7 +139,9 @@ export function QuestionnaireRendererChoiceTable(props: QuestionnaireRendererCho
           <Table.Th />
           {transposed
             ? questions.map(({ question, answersPath }) => (
-                <Table.Th key={answersPath}>{questionHeader(question, answersPath)}</Table.Th>
+                <Table.Th key={answersPath} data-renderer-link-id={question.linkId} className={selectedClass(question)}>
+                  {questionHeader(question, answersPath)}
+                </Table.Th>
               ))
             : options.map((option) => (
                 <Table.Th key={getChoiceValueKey(option.value)} ta="center">
@@ -147,15 +156,15 @@ export function QuestionnaireRendererChoiceTable(props: QuestionnaireRendererCho
               <Table.Tr key={getChoiceValueKey(option.value)}>
                 <Table.Th>{getAnswerOptionDisplay(option)}</Table.Th>
                 {questions.map(({ question, answersPath }) => (
-                  <Table.Td key={answersPath}>
+                  <Table.Td key={answersPath} className={selectedClass(question)}>
                     <Center>{cell(question, answersPath, option)}</Center>
                   </Table.Td>
                 ))}
               </Table.Tr>
             ))
           : questions.map(({ question, answersPath }) => (
-              <Table.Tr key={answersPath}>
-                <Table.Td>{questionHeader(question, answersPath)}</Table.Td>
+              <Table.Tr key={answersPath} className={selectedClass(question)}>
+                <Table.Td data-renderer-link-id={question.linkId}>{questionHeader(question, answersPath)}</Table.Td>
                 {options.map((option) => (
                   <Table.Td key={getChoiceValueKey(option.value)}>
                     <Center>{cell(question, answersPath, option)}</Center>

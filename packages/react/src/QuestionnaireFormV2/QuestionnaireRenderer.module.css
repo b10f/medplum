@@ -15,6 +15,12 @@
   animation: soft-pulse 2s ease-in-out infinite;
 }
 
+/* A question selected in the builder that is a table row or column, rather than an item of its own. */
+.selectedCell {
+  background-color: var(--mantine-color-default-hover);
+  animation: soft-pulse 2s ease-in-out infinite;
+}
+
 .groupAnswers {
   border-left: 2px solid var(--mantine-color-gray-3);
   padding-left: 12px;

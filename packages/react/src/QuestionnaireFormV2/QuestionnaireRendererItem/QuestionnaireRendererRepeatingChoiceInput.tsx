@@ -24,6 +24,7 @@ import {
   toOptionData,
 } from './QuestionnaireRendererItem.utils';
 import { QuestionnaireRendererValueSetChoiceInput } from './QuestionnaireRendererValueSetChoiceInput';
+import { useTypedText } from './useTypedText';
 
 /**
  * A repeating choice question: multiple answers are allowed, one per selected option. Rendered as a multi-select
@@ -47,6 +48,10 @@ export function QuestionnaireRendererRepeatingChoiceInput(props: QuestionnaireRe
 
   const setValues = (requestedValues: any[]): void =>
     setChoiceAnswers(responseForm, item, answersPath, requestedValues);
+  const [otherText, setOtherText] = useTypedText(typedValues[0] ?? '', (text) => {
+    const optionValues = values.filter((value) => !isTypedAnswer(answerOption, value));
+    setValues([...optionValues, ...(text ? [text] : [])]);
+  });
 
   if (item.answerValueSet && answerOption.length === 0) {
     return <QuestionnaireRendererValueSetChoiceInput {...props} values={values} multiple />;
@@ -115,12 +120,8 @@ export function QuestionnaireRendererRepeatingChoiceInput(props: QuestionnaireRe
           aria-label="Other"
           placeholder="Please specify"
           disabled={readOnly}
-          value={typedValue}
-          onChange={(e) => {
-            const text = e.currentTarget.value;
-            const optionValues = values.filter((value) => !isTypedAnswer(answerOption, value));
-            setValues([...optionValues, ...(text ? [text] : [])]);
-          }}
+          value={otherText}
+          onChange={(e) => setOtherText(e.currentTarget.value)}
         />
       )}
     </Stack>

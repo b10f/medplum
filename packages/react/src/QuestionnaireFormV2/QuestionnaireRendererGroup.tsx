@@ -68,6 +68,7 @@ export function QuestionnaireRendererGroup(props: QuestionnaireRendererGroupProp
                 group={item}
                 context={repetitionContext}
                 transposed={item.itemControl?.code === 'htable'}
+                selectedItem={selectedItem}
                 ignoreValidation={ignoreValidation}
               />
             ) : (

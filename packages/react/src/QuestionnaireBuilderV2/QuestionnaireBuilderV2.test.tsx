@@ -719,4 +719,46 @@ describe('QuestionnaireBuilderV2', () => {
     await save();
     expect(saved(onSubmit).item?.[0].extension?.some((ext) => ext.url.endsWith('referenceProfile'))).toBe(false);
   });
+
+  test('a question in a table is highlighted in the preview when selected', async () => {
+    const answerOption = [{ valueCoding: { system: 'urn:test', code: 'never', display: 'Never' } }];
+    await setup({
+      questionnaire: toQuestionnaire([
+        {
+          linkId: 'symptoms',
+          type: 'group',
+          text: 'Symptoms',
+          extension: itemControl('table'),
+          item: [{ linkId: 'cough', type: 'choice', text: 'Cough', answerOption }],
+        },
+        {
+          linkId: 'family',
+          type: 'group',
+          text: 'Family history',
+          extension: itemControl('htable'),
+          item: [{ linkId: 'diabetes', type: 'choice', text: 'Diabetes', answerOption }],
+        },
+        {
+          linkId: 'medications',
+          type: 'group',
+          text: 'Medications',
+          extension: itemControl('gtable'),
+          item: [{ linkId: 'drug', type: 'string', text: 'Drug' }],
+        },
+      ]),
+      onSubmit: vi.fn(),
+    });
+    for (const row of within(tree()).getAllByRole('treeitem')) {
+      await click(row.querySelector('[class*="chevron"]') as HTMLElement);
+    }
+    const highlighted = (): string[] =>
+      [...document.querySelectorAll('[class*="selectedCell"]')].map((cell) => `${cell.tagName}:${cell.textContent}`);
+
+    await selectItem('Cough');
+    expect(highlighted()).toStrictEqual(['TR:Cough']);
+    await selectItem('Diabetes');
+    expect(highlighted()).toStrictEqual(['TH:Diabetes', 'TD:']);
+    await selectItem('Drug');
+    expect(highlighted()).toStrictEqual(['TH:Drug', 'TD:']);
+  });
 });

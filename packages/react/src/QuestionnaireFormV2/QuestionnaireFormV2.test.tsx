@@ -134,6 +134,28 @@ describe('QuestionnaireFormV2', () => {
     ]);
   });
 
+  test('a field shows what is typed, and clearing it clears the answer', async () => {
+    const onSubmit = vi.fn();
+    await setup({
+      questionnaire: toQuestionnaire([
+        { linkId: 'weight', type: 'decimal', text: 'Weight' },
+        { linkId: 'name', type: 'string', text: 'Name', initial: [{ valueString: 'Ada' }] },
+      ]),
+      onSubmit,
+    });
+    const weight = screen.getByLabelText('Weight');
+    await type(weight, '1.5');
+    expect(weight).toHaveValue(1.5);
+    expect(screen.getByLabelText('Name')).toHaveValue('Ada');
+    await type(screen.getByLabelText('Name'), '');
+    expect(screen.getByLabelText('Name')).toHaveValue('');
+    await submit();
+
+    expect(submitted(onSubmit).item).toStrictEqual([
+      { linkId: 'weight', text: 'Weight', answer: [{ valueDecimal: 1.5 }] },
+    ]);
+  });
+
   test('a required question must be answered before submitting', async () => {
     const onSubmit = vi.fn();
     await setup({

@@ -2,23 +2,27 @@
 // SPDX-License-Identifier: Apache-2.0
 import { NumberInput, Slider, Stack, Text, TextInput } from '@mantine/core';
 import type { JSX } from 'react';
+import { startTransition } from 'react';
 import { getAttachedText } from '../QuestionnaireRenderer.utils';
 import type { QuestionnaireRendererItemProps } from './QuestionnaireRendererItem';
 import { getAnswerLabel, getDecimalPlaces, getUnitSection } from './QuestionnaireRendererItem.utils';
 import { useAnswer } from './useAnswer';
 import { useNumberText } from './useNumberText';
+import { useTypedText } from './useTypedText';
 
 export function QuestionnaireRendererTextInput(props: QuestionnaireRendererItemProps): JSX.Element {
   const { item, ignoreValidation, readOnly } = props;
   const { value, error, setValue } = useAnswer(props);
   const [numberText, setNumberText] = useNumberText(typeof value === 'number' ? value : undefined);
   const type = item.type;
-  const isSlider = (type === 'integer' || type === 'decimal') && item.itemControl?.code === 'slider';
+  const isNumber = type === 'integer' || type === 'decimal';
+  const isSlider = isNumber && item.itemControl?.code === 'slider';
   const minValue = Number(item.minValue ?? 0);
   const maxValue = Number(item.maxValue ?? 100);
   const sliderStepValue = Number(item.sliderStepValue ?? 1);
   const unit = item.unit;
   const labelProps = getAnswerLabel(props);
+  const [text, setText] = useTypedText(value, setValue, isNumber);
 
   if (isSlider) {
     return (
@@ -37,7 +41,7 @@ export function QuestionnaireRendererTextInput(props: QuestionnaireRendererItemP
     );
   }
 
-  if ((type === 'integer' || type === 'decimal') && item.itemControl?.code === 'spinner') {
+  if (isNumber && item.itemControl?.code === 'spinner') {
     return (
       <NumberInput
         {...labelProps}
@@ -53,13 +57,14 @@ export function QuestionnaireRendererTextInput(props: QuestionnaireRendererItemP
         error={error}
         onChange={(val) => {
           setNumberText(val);
-          setValue(val);
+          // The rest of the form follows in a transition, so it does not hold up typing.
+          startTransition(() => setValue(val));
         }}
       />
     );
   }
 
-  if ((type === 'integer' && unit) || (type === 'decimal' && unit)) {
+  if (isNumber && unit) {
     return (
       <TextInput
         {...labelProps}
@@ -70,9 +75,9 @@ export function QuestionnaireRendererTextInput(props: QuestionnaireRendererItemP
         rightSectionProps={{ style: { paddingInline: 'var(--mantine-spacing-sm)' } }}
         step="any"
         placeholder={item.entryFormat}
-        value={value ?? ''}
+        value={text}
         error={error}
-        onChange={(e) => setValue(e.currentTarget.value)}
+        onChange={(e) => setText(e.currentTarget.value)}
       />
     );
   }
@@ -81,16 +86,16 @@ export function QuestionnaireRendererTextInput(props: QuestionnaireRendererItemP
     <TextInput
       {...labelProps}
       disabled={readOnly}
-      type={type === 'integer' || type === 'decimal' ? 'number' : 'text'}
+      type={isNumber ? 'number' : 'text'}
       // A URL keyboard on mobile, without the browser's own URL check: validateAnswerValue checks the value.
       inputMode={type === 'url' ? 'url' : undefined}
       step={type === 'decimal' ? 'any' : undefined}
       placeholder={item.entryFormat}
       maxLength={!ignoreValidation && item.maxLength ? item.maxLength : undefined}
       {...getUnitSection(getAttachedText(item, 'unit'))}
-      value={value ?? ''}
+      value={text}
       error={error}
-      onChange={(e) => setValue(e.currentTarget.value)}
+      onChange={(e) => setText(e.currentTarget.value)}
     />
   );
 }

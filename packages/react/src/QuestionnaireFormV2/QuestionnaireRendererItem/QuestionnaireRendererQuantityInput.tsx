@@ -8,6 +8,7 @@ import { isQuantityAnswer, toQuantityUnit } from '../QuestionnaireFormV2.utils';
 import type { QuestionnaireRendererItemProps } from './QuestionnaireRendererItem';
 import { getAnswerLabel } from './QuestionnaireRendererItem.utils';
 import { useAnswer } from './useAnswer';
+import { useTypedText } from './useTypedText';
 
 const QUANTITY_COMPARATORS = ['', '<', '<=', '>=', '>'];
 
@@ -37,6 +38,11 @@ export function QuestionnaireRendererQuantityInput(props: QuestionnaireRendererI
   const setQuantity = (changes: Partial<Quantity>): void => {
     setValue({ ...quantity, ...changes });
   };
+  const [valueText, setValueText] = useTypedText(
+    quantity.value,
+    (text) => setQuantity({ value: text as unknown as number }),
+    true
+  );
 
   let unitInput: JSX.Element;
   if (item.unitValueSet) {
@@ -112,11 +118,10 @@ export function QuestionnaireRendererQuantityInput(props: QuestionnaireRendererI
           type="number"
           step="any"
           placeholder={item.entryFormat || 'Value'}
-          // A number field keeps what is typed (e.g. "1.") while the answer holds its number.
-          value={quantity.value ?? ''}
+          value={valueText}
           error={!!error}
           onWheel={(e: WheelEvent<HTMLInputElement>) => e.currentTarget.blur()}
-          onChange={(e) => setQuantity({ value: e.currentTarget.value as unknown as number })}
+          onChange={(e) => setValueText(e.currentTarget.value)}
         />
         {unitInput}
       </Group>

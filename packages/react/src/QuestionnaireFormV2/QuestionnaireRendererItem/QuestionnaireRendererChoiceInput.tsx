@@ -23,6 +23,7 @@ import {
 } from './QuestionnaireRendererItem.utils';
 import { QuestionnaireRendererValueSetChoiceInput } from './QuestionnaireRendererValueSetChoiceInput';
 import { useAnswer } from './useAnswer';
+import { useTypedText } from './useTypedText';
 
 /**
  * A non-repeating choice question: one answer, rendered as a drop-down or radio buttons based on the item control.
@@ -39,6 +40,11 @@ export function QuestionnaireRendererChoiceInput(props: QuestionnaireRendererIte
   const labelProps = getAnswerLabel(props);
   const typedAnswer = isOpen && isTypedAnswer(answerOption, value);
   const [otherSelected, setOtherSelected] = useState(typedAnswer);
+  // An option's label, or the typed answer, in a drop-down that takes typed answers.
+  const [choiceText, setChoiceText] = useTypedText(toChoiceText(answerOption, value), (text) =>
+    setValue(fromChoiceText(answerOption, text))
+  );
+  const [otherText, setOtherText] = useTypedText(typeof value === 'string' ? value : '', setValue);
 
   if (item.answerValueSet && answerOption.length === 0) {
     return <QuestionnaireRendererValueSetChoiceInput {...props} values={isEmptyAnswerValue(value) ? [] : [value]} />;
@@ -53,9 +59,9 @@ export function QuestionnaireRendererChoiceInput(props: QuestionnaireRendererIte
           disabled={readOnly}
           placeholder="Select or type an answer"
           data={[...new Set(answerOption.map(getAnswerOptionLabel))]}
-          value={toChoiceText(answerOption, value)}
+          value={choiceText}
           error={error}
-          onChange={(text) => setValue(fromChoiceText(answerOption, text))}
+          onChange={setChoiceText}
         />
       );
     }
@@ -124,8 +130,8 @@ export function QuestionnaireRendererChoiceInput(props: QuestionnaireRendererIte
           aria-label="Other"
           placeholder="Please specify"
           disabled={readOnly}
-          value={typeof value === 'string' ? value : ''}
-          onChange={(e) => setValue(e.currentTarget.value)}
+          value={otherText}
+          onChange={(e) => setOtherText(e.currentTarget.value)}
         />
       )}
     </Stack>

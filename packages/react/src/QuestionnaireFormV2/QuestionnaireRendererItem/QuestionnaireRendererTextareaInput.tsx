@@ -5,10 +5,12 @@ import type { JSX } from 'react';
 import type { QuestionnaireRendererItemProps } from './QuestionnaireRendererItem';
 import { getAnswerLabel } from './QuestionnaireRendererItem.utils';
 import { useAnswer } from './useAnswer';
+import { useTypedText } from './useTypedText';
 
 export function QuestionnaireRendererTextareaInput(props: QuestionnaireRendererItemProps): JSX.Element {
   const { item, ignoreValidation, readOnly } = props;
   const { value, error, setValue } = useAnswer(props);
+  const [text, setText] = useTypedText(value, setValue);
 
   return (
     <Textarea
@@ -17,9 +19,9 @@ export function QuestionnaireRendererTextareaInput(props: QuestionnaireRendererI
       placeholder={item.entryFormat}
       rows={6}
       maxLength={!ignoreValidation && item.maxLength ? item.maxLength : undefined}
-      value={value ?? ''}
+      value={text}
       error={error}
-      onChange={(e) => setValue(e.currentTarget.value)}
+      onChange={(e) => setText(e.currentTarget.value)}
     />
   );
 }

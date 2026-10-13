@@ -3,9 +3,9 @@
 import type { WithId } from '@medplum/core';
 import { createReference, sleep } from '@medplum/core';
 import type { Appointment, Slot } from '@medplum/fhirtypes';
-import { DrAliceSmith, DrAliceSmithSchedule } from '@medplum/mock';
+import { DrAliceSmith, DrAliceSmithSchedule, HomerSimpson, MockClient } from '@medplum/mock';
 import { describe, expect, test, vi } from 'vitest';
-import { render, screen, userEvent } from '../test-utils/render';
+import { renderWithMedplum, screen, userEvent } from '../test-utils/render';
 import type { CalendarBaseProps } from './CalendarBase';
 import { CalendarBase } from './CalendarBase';
 
@@ -22,10 +22,7 @@ describe('CalendarBase', () => {
     end: new Date(baseDate.getTime() + 30 * 60 * 1000).toISOString(),
     participant: [
       {
-        actor: {
-          reference: 'Patient/123',
-          display: 'John Doe',
-        },
+        actor: createReference(HomerSimpson),
         status: 'accepted',
       },
       {
@@ -46,8 +43,8 @@ describe('CalendarBase', () => {
     ...overrides,
   });
 
-  const setup = (props: CalendarBaseProps): ReturnType<typeof render> => {
-    return render(<CalendarBase {...props} />);
+  const setup = (props: CalendarBaseProps): ReturnType<typeof renderWithMedplum> => {
+    return renderWithMedplum(<CalendarBase {...props} />, new MockClient());
   };
 
   describe('eventSources', () => {
@@ -58,7 +55,33 @@ describe('CalendarBase', () => {
         slots: [],
       };
       setup({ eventSources: [source] });
-      expect(screen.getByText(/John Doe/)).toBeInTheDocument();
+      expect(screen.getByText(/Homer Simpson/)).toBeInTheDocument();
+    });
+
+    test("titles an appointment with the patient's own name, not the reference's display", async () => {
+      const appointment = createAppointment({
+        participant: [{ actor: { reference: 'Patient/123', display: 'Old Name' }, status: 'accepted' }],
+      });
+      setup({ eventSources: [{ appointments: [appointment], slots: [] }] });
+      expect(await screen.findByText('Homer Simpson')).toBeInTheDocument();
+      expect(screen.queryByText('Old Name')).not.toBeInTheDocument();
+    });
+
+    test('says the patient is loading when the reference has no display', async () => {
+      const appointment = createAppointment({
+        participant: [{ actor: { reference: 'Patient/123' }, status: 'accepted' }],
+      });
+      setup({ eventSources: [{ appointments: [appointment], slots: [] }] });
+      expect(screen.getByText('Loading…')).toBeInTheDocument();
+      expect(await screen.findByText('Homer Simpson')).toBeInTheDocument();
+    });
+
+    test("shows the read's error when the patient can't be read and the reference has no display", async () => {
+      const appointment = createAppointment({
+        participant: [{ actor: { reference: 'Patient/missing' }, status: 'accepted' }],
+      });
+      setup({ eventSources: [{ appointments: [appointment], slots: [] }] });
+      expect(await screen.findByText('[Not found]')).toBeInTheDocument();
     });
 
     test('renders appointments without a patient', async () => {
@@ -125,6 +148,24 @@ describe('CalendarBase', () => {
       expect(screen.getByText(/Blocked/)).toBeInTheDocument();
     });
 
+    test('hides slots in the month view', async () => {
+      const source = {
+        schedule: DrAliceSmithSchedule,
+        appointments: [createAppointment()],
+        slots: [createSlot()],
+      };
+      setup({ eventSources: [source] });
+      expect(screen.getByText(/Homer Simpson/)).toBeInTheDocument();
+      expect(screen.getByText(/Available/)).toBeInTheDocument();
+
+      await userEvent.click(screen.getByText('Month'));
+      expect(screen.getByText(/Homer Simpson/)).toBeInTheDocument();
+      expect(screen.queryByText(/Available/)).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByText('Week'));
+      expect(screen.getByText(/Available/)).toBeInTheDocument();
+    });
+
     test('filters out slots backing rendered appointmenst', () => {
       const appointment = createAppointment({ slot: [{ reference: 'Slot/slot-1' }] });
       const source = {
@@ -133,7 +174,7 @@ describe('CalendarBase', () => {
         slots: [createSlot({ id: 'slot-1', status: 'busy', start: appointment.start, end: appointment.end })],
       };
       setup({ eventSources: [source] });
-      expect(screen.getByText(/John Doe/)).toBeInTheDocument();
+      expect(screen.getByText(/Homer Simpson/)).toBeInTheDocument();
       expect(screen.queryAllByText(/Blocked/)).toHaveLength(0);
     });
   });
@@ -165,6 +206,19 @@ describe('CalendarBase', () => {
       // Check for month/year format (e.g., "January 2024")
       const title = screen.getByText(/\w+\s+\d{4}/);
       expect(title).toBeInTheDocument();
+    });
+
+    test('jumps to the month picked from the title', async () => {
+      const onRangeChange = vi.fn();
+      setup({ eventSources: [], onRangeChange });
+      const target = new Date(now.getFullYear(), (now.getMonth() + 6) % 12, 1);
+
+      await userEvent.click(screen.getByRole('button', { name: /\d{4}/ }));
+      await userEvent.click(screen.getByRole('button', { name: target.toLocaleString('en-US', { month: 'short' }) }));
+
+      const range = onRangeChange.mock.lastCall?.[0];
+      expect(range.start.getTime()).toBeLessThanOrEqual(target.getTime());
+      expect(range.end.getTime()).toBeGreaterThan(target.getTime());
     });
 
     test('navigates to previous period when clicking prev button', async () => {
@@ -283,7 +337,7 @@ describe('CalendarBase', () => {
         onSelectAppointment,
         onSelectSlot,
       });
-      await userEvent.click(screen.getByText('John Doe'));
+      await userEvent.click(screen.getByText('Homer Simpson'));
       expect(onSelectAppointment).toHaveBeenCalled();
       expect(onSelectSlot).not.toHaveBeenCalled();
     });
@@ -306,7 +360,7 @@ describe('CalendarBase', () => {
         onDoubleClickSlot,
       });
 
-      await userEvent.dblClick(screen.getByText('John Doe'));
+      await userEvent.dblClick(screen.getByText('Homer Simpson'));
       expect(onDoubleClickAppointment).toHaveBeenCalled();
       expect(onDoubleClickSlot).not.toHaveBeenCalled();
       expect(onSelectAppointment).not.toHaveBeenCalled();

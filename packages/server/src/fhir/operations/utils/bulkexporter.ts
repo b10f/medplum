@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
 import type { WithId } from '@medplum/core';
-import { EMPTY, getReferenceString } from '@medplum/core';
-import type { AsyncJob, Binary, Bundle, Parameters, Project, Resource } from '@medplum/fhirtypes';
+import { getReferenceString } from '@medplum/core';
+import type { AsyncJob, Binary, Parameters, Project, Resource } from '@medplum/fhirtypes';
 import { once } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { getBinaryStorage } from '../../../storage/loader';
@@ -43,8 +43,9 @@ export class BulkExporter {
   readonly writers: Record<string, BulkFileWriter> = {};
   readonly resourceSets = new Map<string, Set<string>>();
 
-  constructor(repo: Repository) {
+  constructor(repo: Repository, resource?: WithId<AsyncJob>) {
     this.repo = repo;
+    this.resource = resource;
   }
 
   async start(url: string): Promise<WithId<AsyncJob>> {
@@ -106,14 +107,6 @@ export class BulkExporter {
 
     // Clear tracking for this resource type to free memory
     this.resourceSets.delete(resourceType);
-  }
-
-  async writeBundle(bundle: Bundle<WithId<Resource>>): Promise<void> {
-    for (const entry of bundle.entry ?? EMPTY) {
-      if (entry.resource) {
-        await this.writeResource(entry.resource);
-      }
-    }
   }
 
   async writeResource(resource: WithId<Resource>, options?: { skipDedupe?: boolean }): Promise<void> {

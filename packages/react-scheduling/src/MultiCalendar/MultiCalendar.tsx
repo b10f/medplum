@@ -5,10 +5,13 @@ import { useMantineTheme } from '@mantine/core';
 import type { WithId } from '@medplum/core';
 import { getExtensionValue, SchedulingScheduleColorURI } from '@medplum/core';
 import type { Appointment, HealthcareServiceAvailableTime, Schedule, Slot } from '@medplum/fhirtypes';
+import cx from 'clsx';
 import type { JSX } from 'react';
 import { useMemo } from 'react';
-import type { FhirEventSource } from '../CalendarBase/CalendarBase';
+import { AppointmentEvent } from '../CalendarBase/AppointmentEvent';
+import type { ExtendedEvent, FhirEventSource } from '../CalendarBase/CalendarBase';
 import { CalendarBase } from '../CalendarBase/CalendarBase';
+import { SlotEvent } from '../CalendarBase/SlotEvent';
 import { resolveThemeColor } from '../colors';
 import type { DateTimeRange } from '../types';
 import classes from './MultiCalendar.module.css';
@@ -34,7 +37,8 @@ export interface MultiCalendarProps {
 }
 
 /**
- * A component that can display appointments and slots from several color-coded calendars.
+ * A component that can display appointments and slots from several Schedules, with each
+ * schedule's appointments color-coded. Slots are drawn in gray, whichever schedule holds them.
  *
  * If you pass a Schedule as an attribute of a source, it will be passed back
  * to event handlers alongside the interacted Appointment/Slot resources. It may also
@@ -47,7 +51,7 @@ export interface MultiCalendarProps {
 export function MultiCalendar(props: MultiCalendarProps): JSX.Element {
   const theme = useMantineTheme();
 
-  const { sources, ...calendarBaseProps } = props;
+  const { sources, className, ...calendarBaseProps } = props;
 
   const eventSources = useMemo((): FhirEventSource[] => {
     return sources.map((source, i) => {
@@ -70,10 +74,22 @@ export function MultiCalendar(props: MultiCalendarProps): JSX.Element {
     <CalendarBase
       eventSources={eventSources}
       nowIndicator
+      className={cx(className, classes.wrapper)}
       {...calendarBaseProps}
       eventInnerClass={classes.eventInner}
       eventTimeClass={classes.eventTime}
       availableTime={props.availableTime}
+      eventContent={(info) => {
+        const ext = info.event.extendedProps as ExtendedEvent;
+        if (ext.type === 'appointment') {
+          return <AppointmentEvent appointment={ext.appointment} info={info} />;
+        } else if (ext.type === 'slot') {
+          return <SlotEvent slot={ext.slot} schedule={ext.schedule} info={info} />;
+        } else {
+          // `true` renders unknown event types via FullCalendar's default UI
+          return true;
+        }
+      }}
       eventTimeFormat={{
         hour: 'numeric',
         minute: '2-digit',

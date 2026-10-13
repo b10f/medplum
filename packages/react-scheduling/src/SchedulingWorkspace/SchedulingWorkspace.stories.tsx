@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
 import { showNotification } from '@mantine/notifications';
-import type { Appointment } from '@medplum/fhirtypes';
+import type { Appointment, Location, Reference } from '@medplum/fhirtypes';
 import type { Meta } from '@storybook/react';
 import { IconCalendarCancel, IconCalendarCheck, IconCalendarEvent } from '@tabler/icons-react';
 import type { JSX } from 'react';
@@ -12,13 +12,18 @@ import {
   withFixtures,
   withMockedDate,
   withRescheduleStub,
-  withValueSetStub,
+  withValueSets,
 } from '../stories/decorators';
+import { CancellationReasonValueSets } from '../stories/mockValueSet';
 import {
+  AppointmentPatientFixtures,
+  AuthorizationValueSets,
   CalendarWeekFixtures,
+  DIAGNOSIS_VALUE_SET,
   ImagingBenchFixtures,
   inViewerTimezone,
   PatientFixtures,
+  PROCEDURE_VALUE_SET,
   SchedulingFixtures,
 } from '../stories/scheduling';
 import { SchedulingWorkspace } from './SchedulingWorkspace';
@@ -36,6 +41,7 @@ const ELSEWHERE_FIXTURES = [
   ...ImagingBenchFixtures,
   ...CalendarWeekFixtures,
   ...PatientFixtures,
+  ...AppointmentPatientFixtures,
 ];
 
 /** The same clinic, moved onto whatever clock the reader is on. */
@@ -50,7 +56,8 @@ export default {
     withBookStub(),
     withCancelStub(),
     withRescheduleStub(),
-    withValueSetStub(),
+    // Cancellation reasons, plus the code value sets for visit types that ask for codes.
+    withValueSets({ ...CancellationReasonValueSets, ...AuthorizationValueSets }),
     withFindStub(),
     withMockedDate,
   ],
@@ -94,12 +101,21 @@ export default {
  * beside it is drawn as cancelled without a reload, because the cancellation announces
  * what it wrote the way booking does.
  *
+ * Thursday's infusion on Dr. Chen's calendar (select **Providers → Dr. Wei Chen**) is booked
+ * for a visit type asking for procedure codes, diagnosis codes, and a medical necessity
+ * attestation, so its details offer all three for editing beside the patient. Booking
+ * **Infusion Therapy** from the form asks for the same three.
+ *
  * The same drawer offers to move the visit. "Reschedule" swaps the details for the form
  * that finds it another time, opened on the visit type and the actors it is held on —
  * for Tuesday's imaging visit, Dr. Rivera, Ultrasound 1 and Exam Room A. Swap the room
  * and find a time and its own hour is offered again, since the search is told to ignore
  * the visit being moved. Move it and the drawer goes back to the details, with the event
  * redrawn at its new time behind them.
+ *
+ * Blocked time opens in that pane too: click Exam Room A's "Blocked" block on Thursday to
+ * see whose time it holds, when, and why. "Edit" moves it or changes its notes, and
+ * "Delete" takes it off the calendar.
  *
  * Everything here is kept on your own clock, so no time names a zone and nothing is
  * said under the calendar. `From A Different Timezone` is the same clinic scheduled
@@ -169,13 +185,30 @@ FromADifferentTimezone.decorators = [withFixtures(ELSEWHERE_FIXTURES)];
 export const BypassSchedulingRules = (): JSX.Element => <Workspace canBypassSchedulingRules />;
 BypassSchedulingRules.decorators = [withFixtures(LOCAL_FIXTURES)];
 
+/**
+ * The workspace as a host opens it on one site, such as the facility a user launched
+ * scheduling from.
+ *
+ * The host passes a reference to the Location, and the Location filter starts on **Uro Associates
+ * - Satellite**: only the calendars held there are listed, and the visit types on offer
+ * are the ones the satellite holds. Click open time and the booking form starts on the
+ * satellite too, which is the site the booked appointment records.
+ *
+ * It is only where the filter starts. Take the pill off and every calendar comes back.
+ *
+ * @returns The story.
+ */
+export const AtASite = (): JSX.Element => <Workspace defaultLocation={{ reference: 'Location/satellite-clinic' }} />;
+AtASite.decorators = [withFixtures(LOCAL_FIXTURES)];
+
 interface WorkspaceProps {
   readonly canBypassSchedulingRules?: boolean;
+  readonly defaultLocation?: Reference<Location>;
 }
 
 /**
  * Fills the viewport under the package banner, which is 72px.
- * @param props - Whether the story lets a time be typed.
+ * @param props - Whether the story lets a time be typed, and the site it starts on.
  * @returns The workspace as a host would mount it.
  */
 function Workspace(props: WorkspaceProps): JSX.Element {
@@ -186,12 +219,18 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     <div style={{ height: 'calc(100vh - 72px)', padding: '1em', boxSizing: 'border-box' }}>
       <SchedulingWorkspace
         canBypassSchedulingRules={props.canBypassSchedulingRules}
-        onBooked={({ appointment }) => {
+        defaultLocation={props.defaultLocation}
+        procedureBinding={PROCEDURE_VALUE_SET}
+        diagnosisBinding={DIAGNOSIS_VALUE_SET}
+        onBooked={({ appointments }) => {
+          // A series reports every occurrence, in the order they fall.
+          const [first] = appointments;
+          const series = appointments.length > 1;
           showNotification({
             color: 'green',
             icon: <IconCalendarCheck size={18} />,
-            title: 'Appointment booked',
-            message: describeBooking(appointment),
+            title: series ? `${appointments.length} appointments booked` : 'Appointment booked',
+            message: series ? `${describeBooking(first)} · weekly` : describeBooking(first),
           });
         }}
         onCancelled={(appointment) => {
@@ -202,7 +241,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             message: describeBooking(appointment),
           });
         }}
-        onRescheduled={({ appointment }) => {
+        onRescheduled={({ appointments: [appointment] }) => {
           showNotification({
             color: 'blue',
             icon: <IconCalendarEvent size={18} />,

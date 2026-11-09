@@ -33,6 +33,7 @@ export function addDefaults(config: MedplumServerConfig): ServerConfig {
   config.maxBatchSize ||= '50mb';
   config.awsRegion ||= DEFAULT_AWS_REGION;
   config.botLambdaLayerName ||= 'medplum-bot-layer';
+  config.botLambdaArchitecture ||= 'x86_64';
   config.bcryptHashSalt ||= 10;
   config.bullmq = { concurrency: 20, removeOnComplete: { count: 1 }, removeOnFail: { count: 1 }, ...config.bullmq };
   config.shutdownTimeoutMilliseconds ??= 30_000;
@@ -116,6 +117,7 @@ type DefaultConfigKeys =
   | 'maxBatchSize'
   | 'awsRegion'
   | 'botLambdaLayerName'
+  | 'botLambdaArchitecture'
   | 'bcryptHashSalt'
   | 'bullmq'
   | 'shutdownTimeoutMilliseconds'

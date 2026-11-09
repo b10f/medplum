@@ -268,6 +268,7 @@ export async function createLambda(bot: Bot, client: LambdaClient, name: string,
       Runtime: LAMBDA_RUNTIME,
       Handler: LAMBDA_HANDLER,
       MemorySize: LAMBDA_MEMORY,
+      Architectures: [getConfig().botLambdaArchitecture],
       PackageType: PackageType.Zip,
       Layers: [layerVersion],
       Description: bot.name || '',
@@ -354,6 +355,8 @@ async function updateLambdaCode(client: LambdaClient, name: string, zipFile: Uin
         new UpdateFunctionCodeCommand({
           FunctionName: name,
           ZipFile: zipFile,
+          // UpdateFunctionConfiguration can't change the architecture; only a code update can
+          Architectures: [getConfig().botLambdaArchitecture],
           Publish: true,
         })
       );

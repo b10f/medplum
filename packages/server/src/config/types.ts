@@ -71,6 +71,8 @@ export interface MedplumServerConfig {
   sseCustomerKey?: string;
   botLambdaRoleArn: string;
   botLambdaLayerName: string;
+  /** Instruction set architecture for bot Lambda functions. Default is `x86_64`. */
+  botLambdaArchitecture?: 'x86_64' | 'arm64';
   /** Write each bot invocation's input to binary storage (e.g. S3) for debugging and analytics. Default is `true`. */
   storeBotInput?: boolean;
   logRequests?: boolean;

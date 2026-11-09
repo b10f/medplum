@@ -208,6 +208,7 @@ describe('Deploy', () => {
 
     // Verify that this was uploaded as a CJS zip file
     const createCall = mockLambdaClient.commandCalls(CreateFunctionCommand)[0];
+    expect(createCall.args[0].input.Architectures).toEqual(['x86_64']);
     const createCodeBytes = createCall.args[0].input.Code?.ZipFile;
     expect(createCodeBytes).toBeInstanceOf(Uint8Array);
     const createZip = await new JSZip().loadAsync(createCodeBytes as Uint8Array);
@@ -242,6 +243,7 @@ describe('Deploy', () => {
 
     // Verify that this was uploaded as a MJS zip file
     const updateCall = mockLambdaClient.commandCalls(UpdateFunctionCodeCommand)[0];
+    expect(updateCall.args[0].input.Architectures).toEqual(['x86_64']);
     const updateCodeBytes = updateCall.args[0].input?.ZipFile;
     expect(updateCodeBytes).toBeInstanceOf(Uint8Array);
     const updateZip = await new JSZip().loadAsync(updateCodeBytes as Uint8Array);
@@ -250,6 +252,32 @@ describe('Deploy', () => {
     expect(esmIndex).not.toContain("import * as userCode from './user.mjs'");
     expect(esmIndex.indexOf(DELETE_AWS_ENV_CODE)).toBeGreaterThan(-1);
     expect(esmIndex.indexOf(DELETE_AWS_ENV_CODE)).toBeLessThan(esmIndex.indexOf('./user.mjs'));
+  });
+
+  test('Deploys with the configured architecture', async () => {
+    const config = getConfig();
+    const originalArchitecture = config.botLambdaArchitecture;
+    config.botLambdaArchitecture = 'arm64';
+    try {
+      const bot = await createTestBot();
+      const deploy = (): request.Test =>
+        request(app)
+          .post(`/fhir/R4/Bot/${bot.id}/$deploy`)
+          .set('Content-Type', ContentType.FHIR_JSON)
+          .set('Authorization', 'Bearer ' + accessToken)
+          .send({ code: `export async function handler() { return null; }` });
+
+      expect(await deploy()).toHaveStatus(200);
+      expect(mockLambdaClient.commandCalls(CreateFunctionCommand)[0].args[0].input.Architectures).toEqual(['arm64']);
+
+      // Redeploying switches an existing function
+      expect(await deploy()).toHaveStatus(200);
+      expect(mockLambdaClient.commandCalls(UpdateFunctionCodeCommand)[0].args[0].input.Architectures).toEqual([
+        'arm64',
+      ]);
+    } finally {
+      config.botLambdaArchitecture = originalArchitecture;
+    }
   });
 
   test('DELETE_AWS_ENV_CODE removes AWS_ environment variables', () => {

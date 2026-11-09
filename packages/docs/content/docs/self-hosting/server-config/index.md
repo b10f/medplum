@@ -170,6 +170,12 @@ If using Medplum Bots, this is the name of the [Lambda layer](https://docs.aws.a
 
 **Default:** `medplum-bot-layer`
 
+### botLambdaArchitecture
+
+If using Medplum Bots, this is the [instruction set architecture](https://docs.aws.amazon.com/lambda/latest/dg/foundation-arch.html) of the bot Lambda functions, either `x86_64` or `arm64`. Functions on `arm64` run on AWS Graviton processors and have lower [duration pricing](https://aws.amazon.com/lambda/pricing/). Existing bots switch to the configured architecture the next time they are deployed. Before choosing `arm64`, make sure your bots don't bundle native binaries built only for `x86_64`.
+
+**Default:** `x86_64`
+
 ### database
 
 The database connection details as a JSON object. Only available when using JSON config file.
